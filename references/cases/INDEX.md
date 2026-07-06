@@ -11,6 +11,10 @@
 - **要挂 Juventude 回复批注** → `docx-execution.md:C-DOCX-1` (手工挂载法：只动 comments/commentsExtended/document 三文件，避免 comment.py 产生孤立部件)
 - **交付干净稿、需清除既有 tracked changes** → `docx-execution.md:C-DOCX-2` (清痕清单：接受/拒绝 del/ins/pPrChange/rPrChange，保留段落与 sectPr)
 - **留痕注入段落标记报 schema 错** → `docx-execution.md:C-DOCX-3` (pPr/rPr 内 ins 必须排第一个子元素)
+- **要整段留痕删除含公式的段落** → `docx-execution.md:C-DOCX-4` (OMML 不是 w:r，按 run 遍历会漏删，残留公式挤入下段)
+- **向用户改写过的 ins/del 混杂段插入内容** → `docx-execution.md:C-DOCX-5` (落点可能进 del 块随删除消失；插入后必做接受修订模拟)
+- **判断 run 是否在他人修订内 / rPr 加标记** → `docx-execution.md:C-DOCX-6` (自闭合 ins/del 误判；rPr 内 ins 先于 del)
+- **用户在 Word/WPS 里改过文件后继续注入、或用 pandoc 判断公式** → `docx-execution.md:C-DOCX-7` (保存漂移需重新解包重验锚点；pandoc 显示 OMML 空槽是假象)
 
 ## 完整案例（非触发式，供研读）
 

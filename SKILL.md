@@ -120,9 +120,9 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 `全文一稿`：
 
-1. 先按 `rules.md` 阶段读取表读取 `references/rules/full-draft.md`、`references/rules/figures.md` 和 `references/rules/docx-template.md`；**全文阶段不读 `references/rules/claims.md`**（权要已冻结，全文只补说明书，术语一致与权要对应已由 `global.md G4`、`full-draft.md L6` 覆盖；仅当返修批注涉及权要联动时才按需读 `claims.md`）。从最新已审权要 DOCX 开始，不从空白模板起稿；若候选不唯一，必须先请用户确认使用哪一份权要 DOCX。
+1. 先按 `rules.md` 阶段读取表读取 `references/rules/full-draft.md`、`references/rules/figures.md` 和 `references/rules/docx-template.md`；**全文阶段不读 `references/rules/claims.md`**（权要已冻结，全文只补说明书，术语一致与权要对应已由 `global.md G4`、`full-draft.md L6` 覆盖；仅当返修批注涉及权要联动时才按需读 `claims.md`）。从最新已审权要 DOCX 开始，不从空白模板起稿；若候选不唯一，必须先请用户确认使用哪一份权要 DOCX。并从该 DOCX 提取权利要求书全文作为全文稿唯一权要基准；若 `docs/全文稿.md` 已存在且其权要内容或撰写时间早于最新已审权要，必须先按 `full-draft.md` L8-0 对照新权要重构受影响章节，禁止直接复用旧稿注入。
 2. 除非用户要求改动，保留已审权要不变。
-3. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/full-draft.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文。
+3. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/full-draft.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文；具体实施方式框架按 `full-draft.md` L8-0 Sxx 框架同构规则执行。
 4. 在说明书中解释每一条权要步骤。
 5. 加入有益效果的技术原因。
 6. 在 `docs/全文稿.md` 末尾追加 `## 附图设计（供手画 Visio 用）` 一节，按 `rules.md` 中的附图设计规则执行（规则 A 主流程基于权要 1、规则 B 子流程基于展开的主步骤、规则 C 系统结构基于系统权要）。用户根据这一节在 Visio 中手画实际附图，本 skill 不输出图片文件。
