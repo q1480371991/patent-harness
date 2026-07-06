@@ -78,12 +78,12 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 `权要一稿`：
 
 1. 先按 `rules.md` 阶段读取表读取 `references/rules/claims.md` 和 `references/rules/docx-template.md`。确认案件文件夹下已有 `docs/` 子目录（无则创建），并把交底书 DOCX 放入 `docs/`。进入 DOCX 执行层时，必须先调用官方 `document-skills:docx`（即 docx）skill；用其读取交底书 DOCX 的正文、批注和高亮，再把交底书 DOCX 转为带批注的 Markdown，保存为 `docs/交底书.md`。可继续使用 `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`，但执行前必须已加载 `docx` skill。
-2. 深读 `交底书.md`，包括 `==高亮==` 内容和 `> 💡 [批注 ...]` 行。
-3. 提取核心技术问题、创新逻辑、关键步骤、特征命名、数据来源、数据用途、批注/高亮、预期效果。
+2. **调用 `disclosure-analyst` subagent 生成事实提纲**：按 `agents/disclosure-analyst.md` 的 Input Contract 拼装 prompt（`disclosure_md_path` + `global.md` 全文 + `stage=claims-draft`），拿到结构化事实提纲。主 agent 审核提纲一致性和完整性后，写入 `docs/facts.md`。**subagent 不直接写文件**；若提纲缺"潜在风险"段落或结构破坏，视为失败并重试 1 次，仍失败则跳过 subagent、主 agent 亲自完成事实抽取。
+3. **主 agent 亲自深读 `交底书.md`**（`disclosure-analyst` 是预提纲器，不替代 G2 深读义务）：带着 `docs/facts.md` 逐条核对 `==高亮==` 内容和 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、创新逻辑、关键步骤、特征命名、数据来源、数据用途、预期效果。若 `facts.md` 的"潜在风险"段落有需要回问用户的项，先解决再进入撰写。
 4. 先用 Markdown 把专利稿件写在 `docs/权要稿.md`。
 5. **权要一稿仅撰写并展示三部分，按此顺序排列**：权利要求书 → 技术领域 → 背景技术。其他章节（说明书摘要、摘要附图、发明内容、附图说明、具体实施方式、说明书附图）一律留到全文一稿撰写，权要一稿阶段不要写入 `权要稿.md`，也不要在 DOCX 正文或页眉中显示。
 6. 在 `权要稿.md` 中写完整的权要集、技术领域、背景技术。权要数量、保护主题组合（方法权/计算机设备式系统权/存储介质权）、权要 1 字数、分号断行、从权粒度和依附关系的唯一出处是 `references/rules/claims.md` 及其指向的 `references/cases/claims-format-standard.md`。
-7. 写入 DOCX 之前，对 `权要稿.md` 按 `claims.md` 各块自检清单自检，并确认未误写权要一稿以外的章节（摘要等属全文一稿，见 `full-draft.md` L4）。随后按 `references/rules/scoring.md` 运行 **md 审查评分卡**：先过完整性一票否决（缺块/漏项直接回修），再做符合度评分（1 级硬规则须 100% 通过、2 级质量分须 ≥90%）；未达通过标准不得进入 DOCX，按报告的最短回修清单改 `权要稿.md` 后重评。
+7. 写入 DOCX 之前，对 `权要稿.md` 按 `claims.md` 各块自检清单自检，并确认未误写权要一稿以外的章节（摘要等属全文一稿，见 `full-draft.md` L4）。**随后调用 `rule-auditor` subagent 做独立复核**：按 `agents/rule-auditor.md` 的 Input Contract 拼装 prompt（`stage=claims-draft` + `md_path` + `scoring.md` 全文 + `stage_rules_content=global.md + claims.md + docx-template.md 的 md 可判定条目摘录` + `external_rule_refs_content=claims-format-standard.md` + `triggered_rule_notes`），拿到审查报告。**通过判定**：完整性 PASS + 1 级 100% + 2 级 ≥90%；未达通过标准不得进入 DOCX，按最短回修清单改 `权要稿.md` 后重评。若 auditor 两次失败（无固定结构或报告"输入规则不完整"），回退到主 agent 自评并在完工报告中标注"auditor 未生效"。
 8. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
 9. 由 `docx` 执行层把内置模板 `assets/docx/专利撰写模板.docx` 拷贝到案件文件夹（用户明确指定其他模板时除外），重命名为 `案件号-权要1稿-作者-发明题目全称.docx`。
 10. 由 `docx` 执行层采用 unpack → edit XML → pack 流程填充当前稿次可见章节，就地替换、只控制最终可见文本和当前稿次页眉显示。模板骨架保护（sectPr/header/headerReference 全保留、不清空 body 重建）与各分节应填内容的唯一出处是 `references/rules/docx-template.md` G8-0、G8-0b、G8-1。
@@ -122,15 +122,16 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 1. 先按 `rules.md` 阶段读取表读取 `references/rules/full-draft.md`、`references/rules/figures.md` 和 `references/rules/docx-template.md`；**全文阶段不读 `references/rules/claims.md`**（权要已冻结，全文只补说明书，术语一致与权要对应已由 `global.md G4`、`full-draft.md L6` 覆盖；仅当返修批注涉及权要联动时才按需读 `claims.md`）。从最新已审权要 DOCX 开始，不从空白模板起稿；若候选不唯一，必须先请用户确认使用哪一份权要 DOCX。并从该 DOCX 提取权利要求书全文作为全文稿唯一权要基准；若 `docs/全文稿.md` 已存在且其权要内容或撰写时间早于最新已审权要，必须先按 `full-draft.md` L8-0 对照新权要重构受影响章节，禁止直接复用旧稿注入。
 2. 除非用户要求改动，保留已审权要不变。
-3. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/full-draft.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文；具体实施方式框架按 `full-draft.md` L8-0 Sxx 框架同构规则执行。
-4. 在说明书中解释每一条权要步骤。
-5. 加入有益效果的技术原因。
-6. 在 `docs/全文稿.md` 末尾追加 `## 附图设计（供手画 Visio 用）` 一节，按 `rules.md` 中的附图设计规则执行（规则 A 主流程基于权要 1、规则 B 子流程基于展开的主步骤、规则 C 系统结构基于系统权要）。用户根据这一节在 Visio 中手画实际附图，本 skill 不输出图片文件。
-7. 写入 DOCX 之前，对 `docs/全文稿.md` 做跨块总检：各块自检已在分块撰写时逐块完成，此处只查跨块项——权要保留、全文术语一致性、模板案例性术语、禁用措辞、公式、模型/阈值细节、可实施性，并核对附图设计节的附图清单和节点数与权要 1、子步骤编号、系统权要相吻合。随后按 `references/rules/scoring.md` 运行 **md 审查评分卡**：先过完整性一票否决（重点查发明内容对每条权要、具体实施方式对每条权要步骤是否一一对应，缺任一即回修），再做符合度评分（1 级硬规则须 100% 通过、2 级质量分须 ≥90%）；未达通过标准不得进入 DOCX，按报告的最短回修清单改 `全文稿.md` 后重评。
-8. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
-9. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文1稿-作者-发明题目全称.docx`。
-10. 由 `docx` 执行层采用 unpack → edit XML → pack，在权要一稿留空的槽位**就地填入**内容。骨架保护与分节落位的唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；分块注入（一次一块、注一块验一块）按 `full-draft.md`「全文稿分块撰写法」DOCX 注入层执行。
-11. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收。
+3. **在开始补写说明书前，调用 `disclosure-analyst` subagent 获取或复用 `docs/facts.md`**：若 `docs/facts.md` 已在权要一稿阶段生成且交底书未变更，可直接复用；否则按 `agents/disclosure-analyst.md` 的 Input Contract 传入（`disclosure_md_path=docs/交底书.md` + `global.md` 全文 + `stage=full-draft`），拿到结构化事实提纲，由主 agent 审核后写入 `docs/facts.md`。主 agent **仍必须亲自深读 `docs/交底书.md`** 并核对高亮、批注、技术链和潜在风险，`facts.md` 不替代 `global.md` G2 的主写作者深读义务。
+4. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/full-draft.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文；具体实施方式框架按 `full-draft.md` L8-0 Sxx 框架同构规则执行。
+5. 在说明书中解释每一条权要步骤。
+6. 加入有益效果的技术原因。
+7. 在 `docs/全文稿.md` 末尾追加 `## 附图设计（供手画 Visio 用）` 一节，按 `rules.md` 中的附图设计规则执行（规则 A 主流程基于权要 1、规则 B 子流程基于展开的主步骤、规则 C 系统结构基于系统权要）。用户根据这一节在 Visio 中手画实际附图，本 skill 不输出图片文件。
+8. 写入 DOCX 之前，对 `docs/全文稿.md` 做跨块总检：各块自检已在分块撰写时逐块完成，此处只查跨块项——权要保留、全文术语一致性、模板案例性术语、禁用措辞、公式、模型/阈值细节、可实施性，并核对附图设计节的附图清单和节点数与权要 1、子步骤编号、系统权要相吻合。先由主 agent 沿用现有跨块自检流程做一遍初检；随后**调用 `rule-auditor` subagent 做独立复核**（按 `agents/rule-auditor.md` 的 Input Contract 传入 `stage=full-draft` + `md_path=docs/全文稿.md` + `scoring.md` 全文 + `global.md + full-draft.md + figures.md` 全文 + `docx-template.md` 中 md 可判定条目 + 命中的触发式规则）；未达通过标准不得进入 DOCX，按 auditor 返回的最短回修清单改 `全文稿.md` 后重新调用 auditor。auditor 未生效时（重试 1 次仍不返回契约结构），回退到主 agent 自评并在完工报告中标注"auditor 未生效"。
+9. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
+10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文1稿-作者-发明题目全称.docx`。
+11. 由 `docx` 执行层采用 unpack → edit XML → pack，在权要一稿留空的槽位**就地填入**内容。骨架保护与分节落位的唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；分块注入（一次一块、注一块验一块）按 `full-draft.md`「全文稿分块撰写法」DOCX 注入层执行。
+12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收。
 
 ## DOCX 处理注意事项
 
