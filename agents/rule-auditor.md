@@ -20,9 +20,10 @@ tools: Read, Bash
 |---|---|
 | `stage` | 阶段字符串。MVP 阶段仅接受 `claims-draft` 或 `full-draft`。返修阶段（`claims-revision` / `full-revision`）不在本 subagent 当前范围。 |
 | `md_path` | 待审 md 草稿的绝对路径。 |
+| `mechanical_check_result` | 主 agent 已跑完 `scripts/check_hard_rules.py <md_path> --stage <stage>` 的 JSON 输出，直接嵌入 prompt。含每条第一类硬规则的 PASS/FAIL + 证据。 |
 | `scoring_rules_content` | `references/rules/scoring.md` 全文，直接嵌入 prompt。 |
 | `stage_rules_content` | 当前阶段主规则文件全文（不含已单独拼入的 `scoring.md` 与 `external_rule_refs_content`）。 |
-| `docx_template_md_layer_content` | `docx-template.md` 中 **md 阶段可判定条目**的摘录（章节标题格式、发明名称格式、红蓝字占位、案例性术语清理、权要 1 字数、分号断行等）。 |
+| `docx_template_md_layer_content` | `docx-template.md` 中 **md 阶段可判定条目**的摘录（章节标题格式、发明名称格式、案例性术语清理、权要 1 字数、分号断行等）。 |
 | `external_rule_refs_content` | 当前阶段评分卡显式依赖的外部规则全文（如 `claims-format-standard.md`）。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单（如 `revision.md` A4-0 的某个触发块），简短列出。 |
 
@@ -66,6 +67,21 @@ tools: Read, Bash
 - `docx-template.md` G8-0 分节落位、G8-1 中 `sectPr` / `header*.xml` / `headerReference` 骨架保护——这些需解包 DOCX XML 才能验证。
 - DOCX 通用验证（unpack/pack 完整性、schema）——由 `docx` skill 覆盖。
 - 修改 md、修改 DOCX、生成新文件——由主 `patent` agent 覆盖。
+
+---
+
+## 与 `scripts/check_hard_rules.py` 的协作（重要）
+
+本 subagent **不重复**脚本已经判定的第一类机械规则。工作分工：
+
+- **第一类（脚本先跑）**：字数、分号断行、编号连续、从权依附合法、禁用措辞、案例性术语、章节顺序、公式定界符等。主 agent 必须在调本 subagent 前先跑 `scripts/check_hard_rules.py <md_path> --stage <stage>`，把 JSON 结果作为 `mechanical_check_result` 传入。
+- **本 subagent 只判第三类语义项**：术语一致（同义变形）、链条闭合（G3）、从权只解决一个问题、权要 1 是否解决锁定的技术问题、背景技术是否与权 1 技术问题一致、创新处对应关系、有益效果技术原因、禁用措辞的近义变体等。
+
+**报告规则**：
+
+- `mechanical_check_result` 中已 PASS 的规则，本 subagent 直接沿用其 PASS 结论，不重跑、不复述；
+- `mechanical_check_result` 中已 FAIL 的规则，本 subagent 在"1 级硬规则"段中直接引用脚本给出的位置和证据；
+- 若 `mechanical_check_result` 未传入或 JSON 结构损坏，报告"输入不完整，机械项审计缺失"，不假装完成全量审计。
 
 ---
 

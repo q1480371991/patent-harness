@@ -36,7 +36,7 @@
 - `references/rules/claims.md` — 权要阶段规则：权利要求书、技术领域、背景技术、权要格式标准与权要阶段自检。
 - `references/rules/full-draft.md` — 全文稿规则：说明书摘要、摘要附图、发明内容、附图说明、具体实施方式和全文公开充分自检。
 - `references/rules/revision.md` — 统一返修规则：通用返修原则、权要返修、全文返修、老板批注、DOCX 留痕返修和学习闭环。
-- `references/rules/docx-template.md` — DOCX 模板和执行层规则：`docx` skill 边界、模板资产、分节↔页眉↔正文内容对照表（G8-0）、章节标题与正文格式（G8-0b）、`sectPr`、`header*.xml`、`headerReference`、红蓝字占位和 XML 骨架验收。
+- `references/rules/docx-template.md` — DOCX 模板和执行层规则：`docx` skill 边界、模板资产、分节↔页眉↔正文内容对照表（G8-0）、章节标题与正文格式（G8-0b）、`sectPr`、`header*.xml`、`headerReference`、案例性术语清理和 XML 骨架验收。
 - `references/rules/figures.md` — 附图设计规则：L9 图 1/子流程图/系统图/摘要附图与 Visio 手画提示；L10 给生图模型的「结构示意图提示词」生成规则（用户要 AI 出图提示词、需体现创新点的实物/场景图时读 L10）。
 - `references/rules/scoring.md` — md 审查评分卡：权要稿/全文稿写入 DOCX 前的"完整性一票否决 + 质量百分制"质量闸门；只规定评分机制，逐项引用 G/L 规则编号，不复述规则内容。
 
