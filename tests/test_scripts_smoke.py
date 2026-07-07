@@ -227,7 +227,9 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("权要返修", revision_text)
         self.assertIn("全文返修", revision_text)
         self.assertIn("留痕返修", revision_text)
-        self.assertIn("Juventude", revision_text)
+        # 署名不再默认 Juventude，改为每次由用户提供
+        self.assertIn("作者名不设默认值", revision_text)
+        self.assertNotIn("默认作者名为 `Juventude`", revision_text)
 
         self.assertIn("sectPr", docx_text)
         self.assertIn("header*.xml", docx_text)
@@ -506,6 +508,29 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("structure_check_result", auditor_text)
         self.assertIn("check_cross_block.py", auditor_text)
         self.assertIn("语义项必审清单", auditor_text)
+
+    def test_signature_not_defaulted_to_juventude(self):
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
+
+        # 署名不设默认值，每次由用户提供
+        self.assertIn("不设默认值", skill_text)
+        self.assertIn("<用户指定署名>", skill_text)
+        # 正文流程不再把 Juventude 作为默认署名硬写
+        self.assertNotIn("默认 `Juventude`", skill_text)
+        self.assertNotIn("署 Juventude", skill_text)
+        self.assertNotIn("默认作者名为 `Juventude`", revision_text)
+
+    def test_innovation_points_driven_by_disclosure_annotations(self):
+        global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        analyst_text = (SKILL_DIR / "agents" / "disclosure-analyst.md").read_text(encoding="utf-8")
+
+        # 创新点以批注圈定为准，不自行判断
+        self.assertIn("创新点以交底书批注为准", global_text)
+        self.assertIn("不自行另判", skill_text)
+        self.assertIn("批注圈定的创新点", analyst_text)
+        self.assertIn("优先审查要求（批注）", analyst_text)
 
 
 if __name__ == "__main__":

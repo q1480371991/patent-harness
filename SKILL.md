@@ -49,7 +49,7 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 - 若交底书逻辑不连贯、无法支持一个干净的权要集，停下来询问用户，不要凭空发明。
 - 用户没明确要求时，不另外输出独立的撰写检查报告。
 - 用户明确要求只读分析、规则检查、经验总结或修改建议时，不生成 DOCX，不改动案件文件。
-- 批注/修订的作者名默认 `Juventude`（覆盖 docx skill 默认的 "Claude"）；用户另行指定时用指定名。
+- 批注/修订的作者名**不设默认值**：每次返修任务开始时由用户提供署名；用户未提供时必须主动询问，不得擅自使用 `Juventude`、`Claude` 或任何其他名字。本文档下文出现的 `<用户指定署名>` 均指本条获取的名字。
 - 需要 pandoc 时用 `conda run -n base pandoc` 调用（默认 shell PATH 不含 pandoc；base 环境实测为 pandoc 3.9.0.2）。
 
 ## 阶段判断
@@ -79,7 +79,7 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 1. 先按 `rules.md` 阶段读取表读取 `references/rules/claims.md` 和 `references/rules/docx-template.md`。确认案件文件夹下已有 `docs/` 子目录（无则创建），并把交底书 DOCX 放入 `docs/`。进入 DOCX 执行层时，必须先调用官方 `document-skills:docx`（即 docx）skill；用其读取交底书 DOCX 的正文、批注和高亮，再把交底书 DOCX 转为带批注的 Markdown，保存为 `docs/交底书.md`。可继续使用 `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`，但执行前必须已加载 `docx` skill。
 2. **调用 `disclosure-analyst` subagent 生成事实提纲**：按 `agents/disclosure-analyst.md` 的 Input Contract 拼装 prompt（`disclosure_md_path` + `global.md` 全文 + `stage=claims-draft`），拿到结构化事实提纲。主 agent 审核提纲一致性和完整性后，写入 `docs/facts.md`。**subagent 不直接写文件**；若提纲缺"潜在风险"段落或结构破坏，视为失败并重试 1 次，仍失败则跳过 subagent、主 agent 亲自完成事实抽取。
-3. **主 agent 亲自深读 `交底书.md`**（`disclosure-analyst` 是预提纲器，不替代 G2 深读义务）：带着 `docs/facts.md` 逐条核对 `==高亮==` 内容和 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、创新逻辑、关键步骤、特征命名、数据来源、数据用途、预期效果。若 `facts.md` 的"潜在风险"段落有需要回问用户的项，先解决再进入撰写。
+3. **主 agent 亲自深读 `交底书.md`**（`disclosure-analyst` 是预提纲器，不替代 G2 深读义务）：带着 `docs/facts.md` 逐条核对 `==高亮==` 内容和 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、关键步骤、特征命名、数据来源、数据用途、预期效果。**创新点以批注圈定为准，不自行另判**（G2-1）：批注 `> 💡 [批注 ...]` 已直接写出权利要求书创新点，按其圈定的步骤/特征展开创新特征，批注未点名的步骤按支撑环节处理。若 `facts.md` 的"潜在风险"段落有需要回问用户的项，或批注圈定的创新点在交底书中找不到支撑，先解决再进入撰写。
 4. 先用 Markdown 把专利稿件写在 `docs/权要稿.md`。
 5. **权要一稿仅撰写并展示三部分，按此顺序排列**：权利要求书 → 技术领域 → 背景技术。其他章节（说明书摘要、摘要附图、发明内容、附图说明、具体实施方式、说明书附图）一律留到全文一稿撰写，权要一稿阶段不要写入 `权要稿.md`，也不要在 DOCX 正文或页眉中显示。
 6. 在 `权要稿.md` 中写完整的权要集、技术领域、背景技术。权要数量、保护主题组合（方法权/计算机设备式系统权/存储介质权）、权要 1 字数、分号断行、从权粒度和依附关系的唯一出处是 `references/rules/claims.md` 及其指向的 `references/cases/claims-format-standard.md`。
@@ -95,13 +95,13 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 ## Word 批注修订（留痕返修）
 
-`权要二稿/三稿` 或 `全文二稿/三稿`。**默认产物 = 留痕稿**：以 `Juventude` 名义的 track changes 修订痕迹，**保留老板原有的批注与修订不动**，供老板审阅"改了什么"，**默认不清除批注**；仅当用户明确要求定稿/归档的干净稿时，才另行由 `docx` 清除批注。
+`权要二稿/三稿` 或 `全文二稿/三稿`。**默认产物 = 留痕稿**：以 `<用户指定署名>` 名义的 track changes 修订痕迹，**保留老板原有的批注与修订不动**，供老板审阅"改了什么"，**默认不清除批注**；仅当用户明确要求定稿/归档的干净稿时，才另行由 `docx` 清除批注。开工前若用户尚未提供署名，先按"默认立场"该条询问，取得署名后再注入。
 
 **返修四步工作流：**
 
 1. **读返修意见**：先按 `rules.md` 阶段读取表读取 `references/rules/revision.md` 和 `references/rules/docx-template.md`，并根据批注涉及内容读取 `references/rules/claims.md`、`references/rules/full-draft.md` 或 `references/rules/figures.md`；再调用官方 `document-skills:docx`（即 docx）skill，由其提取批注稿 `word/comments.xml` 的批注 + `word/document.xml` 的 tracked changes，逐条列出老板要求。
 2. **交底书按需查阅**：交底书阅读按 `global.md` G2 唯一出处执行——返修默认不读，仅批注要求新增稿件中尚不存在的技术内容时按需查 `docs/交底书.md` 对应段落。
-3. **AI 返修（署 Juventude、留痕）**：`patent` 先逐条把批注翻译成具体修改方案，再按下方"留痕注入法"以 `Juventude` 名义注入 track changes。
+3. **AI 返修（署 `<用户指定署名>`、留痕）**：`patent` 先逐条把批注翻译成具体修改方案，再按下方"留痕注入法"以 `<用户指定署名>` 名义注入 track changes。
 4. **回填学习**：按下方"学习闭环"沉淀规律。
 
 **留痕注入法（本场景对 unpack/pack 的例外）：**
@@ -109,9 +109,9 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 - 仍先加载 `docx` skill，注入后用其 `validate` 校验、由 `patent` 终验收。
 - **写入不走 `docx` 的 unpack→pack**：实测其 `simplify` 会规整老板已有修订（本案插入标记 61→23），破坏"保留老板痕迹原样"。
 - **先归位再落笔**：插入/删除前先确认锚点属于哪个内容块（权要N / 技术领域 / 背景 / 发明内容 / 具体实施方式等）与哪一段，内容只补在其归属块内的正确位置；严禁跨块错位、严禁调换权要编号/段落/章节的既有顺序；已审块默认冻结，只改老板批注点名处；涉及多处或锚点不确定时，先把"改第几条/哪块哪句"报用户确认再落笔。
-- 改用**最小侵入直接注入**：读原始 `word/document.xml`，锚定要改的 run 做单点字符串替换为 `<w:ins>/<w:del w:author="Juventude" w:date="...">`；用 zip 逐条复制、仅替换 `document.xml`，其余字节及老板全部 `w:ins/w:del/批注` 原样保留。
+- 改用**最小侵入直接注入**：读原始 `word/document.xml`，锚定要改的 run 做单点字符串替换为 `<w:ins>/<w:del w:author="<用户指定署名>" w:date="...">`；用 zip 逐条复制、仅替换 `document.xml`，其余字节及老板全部 `w:ins/w:del/批注` 原样保留。
 - `w:ins` 内 run 复制原 run 的 `<w:rPr>`（保字体字号）；`w:date` 用真实当前时间（`date +%Y-%m-%dT%H:%M:%SZ`，本所查看器直接显示字符串时分，格式与老板修订一致）；`w:id` 取现有最大值以上的未占用值；整段删除时在 `<w:pPr><w:rPr>` 加 `<w:del/>`。
-- **校验项**：作者集合含 `Juventude`、老板批注条数不减、老板 `delText` 字数不变、`Juventude` 修订数符合预期、`docx validate` 无新增错误（原文件自带的 schema 小瑕疵不计）。
+- **校验项**：作者集合含 `<用户指定署名>`、老板批注条数不减、老板 `delText` 字数不变、`<用户指定署名>` 修订数符合预期、`docx validate` 无新增错误（原文件自带的 schema 小瑕疵不计）。
 - 不覆盖老板批注过的原文件；留痕稿存为新文件名。
 
 **学习闭环（每次返修收尾）：** 把本次批注体现的、可迁移的写作规律按主题补入对应阶段规则文件，例如返修纪律进 `references/rules/revision.md`，权要表达进 `references/rules/claims.md`，全文公开充分进 `references/rules/full-draft.md`，模板/XML 问题进 `references/rules/docx-template.md`，附图规则进 `references/rules/figures.md`；`rules.md` 仅在新增阶段索引或冲突原则时更新。具体案例只进入 `references/cases/`，并先给用户看 diff 再并入；本案技术对象名、参数值、附图名不进通用规则。
