@@ -4,10 +4,10 @@
 
 消费 `scripts/extract_structure.py` 的结构 JSON, 做机械化数量比对:
 
-- X1 (L8-0, 仅 full-draft): 权要 1 分号分句数 == 具体实施方式主步骤数.
+- X1 (L8-0, 仅 full-draft): 权要 1 分号分句数 == 具体实施方式主步骤覆盖数.
 - X2 (L8-0, 仅 full-draft): 主步骤编号为 S11..S1N 连续 (与权 1 分句一一对应).
-- X3 (L1-1, 两阶段): 从权依附合法 —— 被依附权要存在且在前位 (基于结构邻接表,
-  与 check_hard_rules.py 规则 5 互为双保险, 数据源不同).
+- X3 (L1-1, 两阶段): 从权依附/范围引用合法 —— 目标权要存在且在前位.
+- X4 (L8-0, 仅 full-draft): 主步骤不得用 `在步骤Sx至步骤Sy中` 合并展开.
 
 其余第二类项 (权要 1 步骤数/附图 1 节点数、发明内容对每条权要、附图说明数 vs
 附图设计节图数、反向特征校验、从权多元化依附) 为语义项, 归 `rule-auditor`
@@ -15,7 +15,10 @@ subagent 判定, 本脚本不越权.
 
 用法 (主 agent 常规入口, 内部自动跑抽取):
     python3 scripts/check_cross_block.py --md docs/权要稿.md --stage claims-draft
-    python3 scripts/check_cross_block.py --md docs/全文稿.md --stage full-draft
+    python3 scripts/check_cross_block.py --md docs/全文稿.md --stage full-draft --claims-md docs/权要稿.md
+
+分离式工作流的全文稿.md 不含权利要求书 (冻结在权要稿.md), full-draft 必须
+用 --claims-md 传入权要基准; 一体式 md (自含权要章节) 可省略.
 
 也可直接消费已有抽取 JSON:
     python3 scripts/check_cross_block.py --structure structure.json
@@ -48,31 +51,47 @@ def _claim1(structure: dict) -> dict | None:
     return None
 
 
+def _covered_step_nums(main: dict) -> set[int]:
+    """单步引导句 + 合并引导句展开后的全部已覆盖主步骤编号."""
+    nums = {int(sid[1:]) for sid in main["ids"]}
+    for m in main.get("merged", []):
+        nums.update(range(m["from_num"], m["to_num"] + 1))
+    return nums
+
+
 def check_x1_step_count(structure: dict, violations: list[dict]) -> None:
-    """X1: 权要 1 分句数 == 主步骤数 (L8-0 Sxx 框架同构)."""
+    """X1: 权要 1 分句数 == 主步骤覆盖数 (L8-0 Sxx 框架同构)."""
     claim1 = _claim1(structure)
     main = structure.get("main_steps")
     if claim1 is None or claim1.get("step_count") is None or main is None:
         return  # 抽取层已报错, 不重复
     n_claim = claim1["step_count"]
-    n_main = main["count"]
+    covered = _covered_step_nums(main)
+    n_main = len(covered)
     if n_claim != n_main:
+        merged_note = ""
+        if main.get("merged"):
+            spans = ", ".join(f"S{m['from_num']}至S{m['to_num']}" for m in main["merged"])
+            merged_note = f"; 含合并展开 {spans}"
         violations.append({
             "rule_id": "L8-0",
             "check": "X1",
             "location": "具体实施方式 vs 权利要求书",
-            "evidence": f"权要 1 分句数 = {n_claim}, 主步骤数 = {n_main} ({', '.join(main['ids'])})",
-            "message": f"主步骤数应等于权要 1 分句数 (期望 {n_claim}, 实际 {n_main}), "
+            "evidence": f"权要 1 分句数 = {n_claim}, 主步骤覆盖数 = {n_main} "
+                        f"({', '.join('S%d' % n for n in sorted(covered))}{merged_note})",
+            "message": f"主步骤覆盖数应等于权要 1 分句数 (期望 {n_claim}, 实际 {n_main}), "
                        "不得增删/合并/拆分步骤",
         })
 
 
 def check_x2_step_numbering(structure: dict, violations: list[dict]) -> None:
-    """X2: 主步骤编号 S11..S1N 连续 (L8-0)."""
+    """X2: 主步骤编号 S11..S1N 连续 (L8-0), 合并引导句展开后一并计入."""
     main = structure.get("main_steps")
-    if main is None or main["count"] == 0:
+    if main is None:
         return
-    nums = sorted(int(sid[1:]) for sid in main["ids"])
+    nums = sorted(_covered_step_nums(main))
+    if not nums:
+        return
     expected = list(range(11, 11 + len(nums)))
     if nums != expected:
         violations.append({
@@ -82,6 +101,23 @@ def check_x2_step_numbering(structure: dict, violations: list[dict]) -> None:
             "evidence": f"实际主步骤编号 = {['S%d' % n for n in nums]}",
             "message": f"主步骤编号应为 S11..S{10 + len(nums)} 连续 "
                        f"(期望 {['S%d' % n for n in expected]})",
+        })
+
+
+def check_x4_no_merged_steps(structure: dict, violations: list[dict]) -> None:
+    """X4: 主步骤不得合并展开 (L8-0: 不得增删/合并/拆分步骤)."""
+    main = structure.get("main_steps")
+    if main is None:
+        return
+    for m in main.get("merged", []):
+        violations.append({
+            "rule_id": "L8-0",
+            "check": "X4",
+            "location": f"具体实施方式 (md 第{m['line']}行)",
+            "evidence": m["text"],
+            "message": f"步骤S{m['from_num']}至S{m['to_num']}用了合并展开引导句; "
+                       "L8-0 要求每个主步骤单独按 L8-1 范式展开 "
+                       "(`在步骤SxN中，〔复述权1对应分句〕，包括：...`), 不得合并",
         })
 
 
@@ -137,6 +173,7 @@ def run_checks(structure: dict) -> dict:
     if structure["stage"] == "full-draft":
         check_x1_step_count(structure, violations)
         check_x2_step_numbering(structure, violations)
+        check_x4_no_merged_steps(structure, violations)
     check_x3_dependency(structure, violations)
 
     return {
@@ -175,6 +212,10 @@ def main() -> int:
         help="当前阶段 (与 --md 搭配必填)",
     )
     parser.add_argument("--structure", help="已有 extract_structure JSON 文件路径")
+    parser.add_argument(
+        "--claims-md",
+        help="权要基准 md 路径 (分离式工作流: 全文稿不含权要时传 docs/权要稿.md)",
+    )
     args = parser.parse_args()
 
     if args.structure:
@@ -189,7 +230,12 @@ def main() -> int:
         if not md_path.exists():
             print(f"[check_cross_block] ERROR md not found: {md_path}", file=sys.stderr)
             return 2
-        structure = extract_structure(md_path, args.stage)
+        claims_md_path = Path(args.claims_md) if args.claims_md else None
+        if claims_md_path is not None and not claims_md_path.exists():
+            print(f"[check_cross_block] ERROR claims md not found: {claims_md_path}",
+                  file=sys.stderr)
+            return 2
+        structure = extract_structure(md_path, args.stage, claims_md_path)
     else:
         parser.error("需要 --md + --stage, 或 --structure")
         return 2

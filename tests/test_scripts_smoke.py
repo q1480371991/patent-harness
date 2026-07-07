@@ -438,6 +438,65 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertFalse(data["extraction_ok"])
             self.assertTrue(any("其特征在于" in e for e in data["extraction_errors"]))
 
+    def test_split_workflow_full_draft_uses_claims_md(self):
+        import json
+
+        # 真实工作流: 全文稿.md 不含权利要求书 (冻结在权要稿.md)
+        idx = GOOD_FULL_DRAFT_MD.index("## 技术领域")
+        claims_part = GOOD_FULL_DRAFT_MD[:idx]
+        full_part = GOOD_FULL_DRAFT_MD[idx:]
+        with tempfile.TemporaryDirectory() as tmp:
+            claims_path = Path(tmp) / "权要稿.md"
+            full_path = Path(tmp) / "全文稿.md"
+            claims_path.write_text(claims_part, encoding="utf-8")
+            full_path.write_text(full_part, encoding="utf-8")
+
+            # 不传 --claims-md: 报结构错误并提示传入
+            result = run_script_allow_fail(
+                "check_cross_block.py", "--md", full_path, "--stage", "full-draft"
+            )
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertTrue(any("--claims-md" in e for e in data["extraction_errors"]))
+
+            # 传 --claims-md: 全部通过
+            result = run_script(
+                "check_cross_block.py", "--md", full_path, "--stage", "full-draft",
+                "--claims-md", claims_path,
+            )
+            data = json.loads(result.stdout)
+            self.assertEqual(data["violation_count"], 0)
+            self.assertEqual(data["structure"]["claims_source"], "claims_md")
+
+            # 分离式全文稿跑第一类脚本: 不误报权要缺失/章节缺失
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", full_path, "--stage", "full-draft", "--json"
+            )
+            hard = json.loads(result.stdout)
+            msgs = " ".join(v["message"] for v in hard["violations"])
+            self.assertNotIn("未找到权要 1", msgs)
+            self.assertNotIn("缺少章节: 权利要求书", msgs)
+
+    def test_check_cross_block_flags_merged_step_lead(self):
+        import json
+
+        merged_md = GOOD_FULL_DRAFT_MD.replace(
+            "在步骤S12中，根据输入数据确定中间结果。\n\n在步骤S13中，根据中间结果生成控制信号。\n",
+            "在步骤S12至步骤S13中，根据输入数据确定中间结果，再根据中间结果生成控制信号。\n",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(merged_md, encoding="utf-8")
+
+            result = run_script_allow_fail(
+                "check_cross_block.py", "--md", md_path, "--stage", "full-draft"
+            )
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            checks = {v["check"] for v in data["violations"]}
+            self.assertIn("X4", checks)   # 合并展开被点名
+            self.assertNotIn("X1", checks)  # 覆盖数 3 == 分句数 3, 不误报数量
+
     def test_skill_wires_cross_block_check_into_gates(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")

@@ -48,10 +48,9 @@ CLAIMS_DRAFT_FORBIDDEN_SECTIONS = [
     "具体实施方式", "说明书附图",
 ]
 
-# 全文稿正文章节顺序 (L1-L8)
+# 全文稿正文章节顺序 (full-draft.md L4-L8; 权利要求书/技术领域/背景技术冻结在权要稿.md, 不在全文稿)
 FULL_DRAFT_REQUIRED_SECTIONS_ORDER = [
-    "权利要求书", "技术领域", "背景技术", "发明内容",
-    "附图说明", "具体实施方式",
+    "说明书摘要", "摘要附图", "发明内容", "附图说明", "具体实施方式",
 ]
 
 # 说明书禁用数量词 (G6-1)
@@ -123,7 +122,7 @@ def get_section_lines(lines: list[str], sections: dict, key_substr: str) -> tupl
 
 
 def extract_claim_blocks(lines: list[str], sections: dict) -> dict[int, tuple[int, int]]:
-    """
+    r"""
     从权利要求书 section 里抽出每条权要的行区间.
     权要开头段格式: `^\d+\.` (行首编号后接点号).
     返回 {claim_number: (start_line_absolute, end_line_absolute)}.
@@ -425,13 +424,16 @@ def check_claims_draft_forbidden_sections(lines: list[str], sections: dict, repo
 
 
 def check_noun_colon_definition(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 10: 名词冒号定义句式 (G5-1)."""
+    """规则 10: 名词冒号定义句式 (G5-1). L8-1 子步骤引导句 `步骤SxN：...` 是合法范式, 排除."""
     scan = _get_scan_ranges(lines, sections, stage)
     # 匹配: 行首 (可能有缩进) 短名词 + 中文冒号 + 内容 (不是子列表说明)
     pattern = re.compile(r"^\s*[一-龥A-Za-z0-9]{2,10}：[一-龥]{2,}")
+    sub_step_lead = re.compile(r"^\s*步骤S\d+[：:]")
     for (label, start, end) in scan:
         for i in range(start, end):
             line = lines[i]
+            if sub_step_lead.match(line):
+                continue
             if pattern.match(line):
                 report.add(
                     "G5-1", f"{label} 第{i + 1}行",
@@ -540,15 +542,21 @@ def run_checks(md_path: Path, stage: str) -> Report:
     sections = split_sections(lines)
     report = Report(stage=stage, md_path=str(md_path))
 
-    # Phase 1a: 字符/正则/字数类
-    check_claim1_length(lines, sections, report)
-    check_each_claim_one_period(lines, sections, report)
-    check_semicolon_line_ending(lines, sections, report)
-    check_claim_numbering(lines, sections, report)
-    check_total_claim_count(lines, sections, report)
-    check_dependent_claim_no_yizhong(lines, sections, report)
-    check_dependent_claim_reference(lines, sections, report)
-    check_no_formula_in_claims(lines, sections, report)
+    # 权要类检查仅在权利要求书章节存在时执行.
+    # 分离式工作流的全文稿.md 不含权要 (冻结在权要稿.md, 已在 claims-draft 阶段过闸),
+    # 此时跳过而非误报; 权要稿 (claims-draft) 必含该章节, 缺失照常报错.
+    has_claims_section = any("权利要求书" in t for t in sections)
+    if stage == "claims-draft" or has_claims_section:
+        # Phase 1a: 字符/正则/字数类 (权要部分)
+        check_claim1_length(lines, sections, report)
+        check_each_claim_one_period(lines, sections, report)
+        check_semicolon_line_ending(lines, sections, report)
+        check_claim_numbering(lines, sections, report)
+        check_total_claim_count(lines, sections, report)
+        check_dependent_claim_no_yizhong(lines, sections, report)
+        check_dependent_claim_reference(lines, sections, report)
+        check_no_formula_in_claims(lines, sections, report)
+
     check_forbidden_words(lines, sections, report, stage)
     check_case_terms(lines, sections, report)
     check_background_length_and_paragraphs(lines, sections, report, stage)

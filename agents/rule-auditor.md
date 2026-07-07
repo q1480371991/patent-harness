@@ -21,7 +21,7 @@ tools: Read, Bash
 | `stage` | 阶段字符串。MVP 阶段仅接受 `claims-draft` 或 `full-draft`。返修阶段（`claims-revision` / `full-revision`）不在本 subagent 当前范围。 |
 | `md_path` | 待审 md 草稿的绝对路径。 |
 | `mechanical_check_result` | 主 agent 已跑完 `scripts/check_hard_rules.py <md_path> --stage <stage>` 的 JSON 输出，直接嵌入 prompt。含每条第一类硬规则的 PASS/FAIL + 证据。 |
-| `structure_check_result` | 主 agent 已跑完 `scripts/check_cross_block.py --md <md_path> --stage <stage>` 的 JSON 输出，直接嵌入 prompt。含结构抽取结果（权要分句、主/子步骤、附图清单、依附邻接表）与第二类跨块规则（X1 步骤数同构 / X2 步骤编号连续 / X3 依附合法）的 PASS/FAIL + 证据。 |
+| `structure_check_result` | 主 agent 已跑完 `scripts/check_cross_block.py --md <md_path> --stage <stage>`（full-draft 时另加 `--claims-md <权要稿.md>` 传权要基准）的 JSON 输出，直接嵌入 prompt。含结构抽取结果（权要分句、主/子步骤、附图清单、依附邻接表）与第二类跨块规则（X1 步骤数同构 / X2 步骤编号连续 / X3 依附合法 / X4 禁止合并展开）的 PASS/FAIL + 证据。 |
 | `scoring_rules_content` | `references/rules/scoring.md` 全文，直接嵌入 prompt。 |
 | `stage_rules_content` | 当前阶段主规则文件全文（不含已单独拼入的 `scoring.md` 与 `external_rule_refs_content`）。 |
 | `docx_template_md_layer_content` | `docx-template.md` 中 **md 阶段可判定条目**的摘录（章节标题格式、发明名称格式、案例性术语清理、权要 1 字数、分号断行等）。 |
@@ -76,7 +76,7 @@ tools: Read, Bash
 本 subagent **不重复**脚本已经判定的机械规则。工作分工：
 
 - **第一类（`scripts/check_hard_rules.py` 先跑）**：字数、分号断行、编号连续、从权依附合法、禁用措辞、案例性术语、章节顺序、公式定界符等。
-- **第二类（`scripts/check_cross_block.py` 先跑）**：结构抽取（按 A/B 标准写法）+ 跨块数量比对——权要 1 分句数 == 具体实施方式主步骤数（L8-0）、主步骤编号 S11..S1N 连续、单点依附与范围引用合法。
+- **第二类（`scripts/check_cross_block.py` 先跑)**：结构抽取（按 A/B 标准写法）+ 跨块数量比对——权要 1 分句数 == 具体实施方式主步骤覆盖数（L8-0）、主步骤编号 S11..S1N 连续、单点依附与范围引用合法、主步骤禁止合并展开。
 - 主 agent 必须在调本 subagent 前先跑完两个脚本，把 JSON 结果分别作为 `mechanical_check_result` 和 `structure_check_result` 传入。
 - **本 subagent 只判第三类语义项**：术语一致（同义变形）、链条闭合（G3）、从权只解决一个问题、权要 1 是否解决锁定的技术问题、背景技术是否与权 1 技术问题一致、创新处对应关系、有益效果技术原因、禁用措辞的近义变体等，以及下方"语义项必审清单"。
 

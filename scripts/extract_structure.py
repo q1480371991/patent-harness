@@ -44,6 +44,8 @@ from check_hard_rules import (  # noqa: E402
 
 # 主步骤: `在步骤S11中，...` (中文/半角逗号)
 MAIN_STEP_RE = re.compile(r"^\s*在步骤S(\d+)中[，,]")
+# 合并主步骤: `在步骤S17至步骤S19中，...` (L8-0 禁止合并展开, 抽出来供校验定位)
+MERGED_STEP_RE = re.compile(r"^\s*在步骤S(\d+)至步骤S(\d+)中[，,]")
 # 子步骤: `步骤S151：...` (中文/半角冒号)
 SUB_STEP_RE = re.compile(r"^\s*步骤S(\d+)[：:]")
 # 附图说明: `图1为...` / `图1是...`
@@ -157,10 +159,21 @@ def extract_steps(lines: list[str], sections: dict, errors: list[str]) -> tuple[
     main_items = _scan_pattern(body, offset, MAIN_STEP_RE)
     sub_items = _scan_pattern(body, offset, SUB_STEP_RE)
 
+    merged_items = []
+    for i, line in enumerate(body):
+        m = MERGED_STEP_RE.match(line)
+        if m:
+            merged_items.append({
+                "from_num": int(m.group(1)),
+                "to_num": int(m.group(2)),
+                "line": offset + i + 1,
+                "text": line.strip()[:120],
+            })
+
     main_ids = sorted({it["num"] for it in main_items})
     sub_ids = sorted({it["num"] for it in sub_items})
 
-    if not main_items:
+    if not main_items and not merged_items:
         errors.append(
             "主步骤抽取失败: 具体实施方式内无 `在步骤SxN中，` 行, "
             "写法不合 A/B 标准 (L8-1 主步骤展开范式)"
@@ -170,6 +183,7 @@ def extract_steps(lines: list[str], sections: dict, errors: list[str]) -> tuple[
         "count": len(main_ids),
         "ids": [f"S{n}" for n in main_ids],
         "occurrences": main_items,
+        "merged": merged_items,
     }
     sub = {
         "count": len(sub_ids),
@@ -207,12 +221,30 @@ def extract_figures(lines: list[str], sections: dict, errors: list[str]) -> dict
 # -----------------------------------------------------------------------------
 
 
-def extract_structure(md_path: Path, stage: str) -> dict:
+def extract_structure(md_path: Path, stage: str, claims_md_path: Path | None = None) -> dict:
     lines = load_md(md_path)
     sections = split_sections(lines)
     errors: list[str] = []
 
-    claims = extract_claims(lines, sections, errors)
+    # 权要来源: 主 md 自含权利要求书章节时用主 md;
+    # 分离式工作流 (全文稿.md 不含权要, 冻结在权要稿.md) 用 --claims-md 传入权要稿.
+    claims_source = "self"
+    claims_lines, claims_sections = lines, sections
+    if not any("权利要求书" in t for t in sections):
+        if claims_md_path is not None:
+            claims_lines = load_md(claims_md_path)
+            claims_sections = split_sections(claims_lines)
+            claims_source = "claims_md"
+        elif stage == "full-draft":
+            errors.append(
+                "主 md 不含 `## 权利要求书` 章节 (分离式工作流权要冻结在权要稿.md): "
+                "请用 --claims-md <案件文件夹>/docs/权要稿.md 传入权要基准"
+            )
+            claims_source = None
+
+    claims = None
+    if claims_source is not None:
+        claims = extract_claims(claims_lines, claims_sections, errors)
 
     main_steps = sub_steps = figures = None
     figure_design_present = False
@@ -225,6 +257,8 @@ def extract_structure(md_path: Path, stage: str) -> dict:
     return {
         "stage": stage,
         "md_path": str(md_path),
+        "claims_md_path": str(claims_md_path) if claims_md_path else None,
+        "claims_source": claims_source,
         "extraction_ok": not errors,
         "extraction_errors": errors,
         "claims": claims,
@@ -243,14 +277,22 @@ def main() -> int:
         choices=["claims-draft", "full-draft"],
         help="当前阶段 (claims-draft 仅抽权要, full-draft 全量)",
     )
+    parser.add_argument(
+        "--claims-md",
+        help="权要基准 md 路径 (分离式工作流: 全文稿不含权要时传 docs/权要稿.md)",
+    )
     args = parser.parse_args()
 
     md_path = Path(args.md)
     if not md_path.exists():
         print(f"[extract_structure] ERROR md not found: {md_path}", file=sys.stderr)
         return 2
+    claims_md_path = Path(args.claims_md) if args.claims_md else None
+    if claims_md_path is not None and not claims_md_path.exists():
+        print(f"[extract_structure] ERROR claims md not found: {claims_md_path}", file=sys.stderr)
+        return 2
 
-    result = extract_structure(md_path, args.stage)
+    result = extract_structure(md_path, args.stage, claims_md_path)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
     if not result["extraction_ok"]:
