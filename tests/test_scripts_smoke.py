@@ -14,6 +14,12 @@ from docx.enum.text import WD_COLOR_INDEX
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 
+# 单内核 + 薄适配层: core 测试在两个适配分支都要能跑.
+# 入口文件是宿主专属的——claude 分支只有 SKILL.md, codex 分支只有 AGENTS.md.
+# 读某入口文件的断言, 在该文件缺失的分支上跳过(不是失败).
+SKILL_MD_PRESENT = (SKILL_DIR / "SKILL.md").exists()
+AGENTS_MD_PRESENT = (SKILL_DIR / "AGENTS.md").exists()
+
 
 def run_script(script_name, *args):
     return subprocess.run(
@@ -132,6 +138,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("highlights=1", result.stdout)
             self.assertIn("comments=1/1", result.stdout)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_skill_frontmatter_and_bundled_template_paths_are_stable(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 
@@ -141,6 +148,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("assets/docx/专利撰写模板.docx", skill_text)
         self.assertNotIn("assets/专利撰写模板.docx", skill_text)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_claims_format_guidance_is_bundled_not_external_path(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         claims_text = (SKILL_DIR / "references" / "rules" / "claims.md").read_text(encoding="utf-8")
@@ -161,6 +169,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("可用 zipfile + xml.etree 直接读写", docx_text)
         self.assertIn("已显式加载官方 `docx` skill", docx_text)
         self.assertIn("不得替代 `docx` skill 的执行层", docx_text)
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_progressive_rules_files_exist_and_are_referenced(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
@@ -190,6 +199,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("# 第二部分：局部规则", rules_text)
         self.assertNotIn("# 第三部分：最终交付前总自检", rules_text)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_skill_uses_progressive_rule_loading(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 
@@ -239,6 +249,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("说明书附图设计规则", figures_text)
         self.assertIn("图 1", figures_text)
         self.assertIn("Visio", figures_text)
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_audit_reinforcements_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
@@ -286,6 +297,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("原稿、返修稿和 `comments.xml`", revision_text)
         self.assertIn("对应阶段规则文件", skill_text)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_second_reaudit_alignment_fixes_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
@@ -345,6 +357,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("句末标点", figures_text)
         self.assertIn("分号/句号", figures_text)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_dedup_and_segmented_write_rules_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
@@ -499,6 +512,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("X4", checks)   # 合并展开被点名
             self.assertNotIn("X1", checks)  # 覆盖数 3 == 分句数 3, 不误报数量
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_skill_wires_cross_block_check_into_gates(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
@@ -509,6 +523,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("check_cross_block.py", auditor_text)
         self.assertIn("语义项必审清单", auditor_text)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_signature_not_defaulted_to_juventude(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
@@ -521,6 +536,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("署 Juventude", skill_text)
         self.assertNotIn("默认作者名为 `Juventude`", revision_text)
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_innovation_points_driven_by_disclosure_annotations(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
@@ -562,6 +578,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         pandoc_check = next(c for c in data["checks"] if c["name"] == "pandoc")
         self.assertFalse(pandoc_check["required"])  # pandoc 为可选
 
+    @unittest.skipUnless(SKILL_MD_PRESENT, "SKILL.md 不在本分支(适配分支专属), 跳过")
     def test_skill_wires_env_check_into_onboarding(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("接入前环境自检", skill_text)
@@ -587,15 +604,19 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertTrue(any(c["name"] == "python-docx" for c in d_codex["checks"]))
 
     def test_dual_host_adapter_layer_present(self):
-        # 单内核 + 薄适配层: 两个入口文件并存, 各写宿主编排
-        self.assertTrue((SKILL_DIR / "SKILL.md").exists())
-        self.assertTrue((SKILL_DIR / "AGENTS.md").exists())
+        # 单内核 + 薄适配层: porting 指南属 core 恒在; 入口文件宿主专属——
+        # core 分支两个都在, 适配分支只有一个. 至少一个入口必须在.
         self.assertTrue((SKILL_DIR / "docs" / "porting.md").exists())
-        agents_text = (SKILL_DIR / "AGENTS.md").read_text(encoding="utf-8")
-        # AGENTS.md 指向共享内核, 且声明 rule-auditor 降级为主 agent 自查
-        self.assertIn("references/", agents_text)
-        self.assertIn("scripts/", agents_text)
-        self.assertIn("自查", agents_text)
+        self.assertTrue(
+            SKILL_MD_PRESENT or AGENTS_MD_PRESENT,
+            msg="至少要有一个宿主入口 (SKILL.md 或 AGENTS.md)",
+        )
+        # 若 AGENTS.md 在场, 校验其指向共享内核并声明 rule-auditor 降级自查
+        if AGENTS_MD_PRESENT:
+            agents_text = (SKILL_DIR / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("references/", agents_text)
+            self.assertIn("scripts/", agents_text)
+            self.assertIn("自查", agents_text)
         self.assertIn("--host codex", agents_text)
         # rule-auditor 契约含跨宿主说明
         auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
