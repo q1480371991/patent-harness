@@ -10,7 +10,7 @@ tools: Read, Bash
 
 它存在的唯一目的，是消除主 `patent` agent 自评时的确认偏差和自评放水。所有专利业务判断、修改、DOCX 操作都不属于本 subagent 范围。
 
-> **跨宿主说明**：本契约在 Claude 宿主下由**独立 Agent**执行（独立上下文，物理隔离主 agent 推理，是消除确认偏差的根本）。在 Codex 宿主下无原生独立 subagent，由**主 agent 按本契约自查**——失去独立性，须在完工报告标注"无独立外审，auditor 为主 agent 自查"，硬防线以 `scripts/check_hard_rules.py` + `scripts/check_cross_block.py` 两道脚本闸门为准（两端等价、不依赖独立性），语义项自查仍须逐条附原文证据、不得无证据给 PASS。详见 `AGENTS.md`。
+> **跨宿主说明**：本契约在 Claude 宿主下由**独立 Agent**执行（独立上下文，物理隔离主 agent 推理，是消除确认偏差的根本）。在 Codex 宿主下无原生独立 subagent，由**主 agent 按本契约自查**——失去独立性，须在完工报告标注"无独立外审，auditor 为主 agent 自查"，硬防线以 `scripts/check_hard_rules.py` + `scripts/check_cross_block.py` 两道脚本闸门为准（两端等价、不依赖独立性），语义项自查仍须逐条附原文证据、不得无证据给 PASS。详见 codex 分支的 `SKILL.md` 与 `docs/porting.md`。
 
 ---
 

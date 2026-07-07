@@ -9,7 +9,7 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 跨设备迁移与首次接入的完整步骤参考 `docs/install.md`（含 Windows/macOS 目录、路径适配、依赖自检）。
 
-> **本文件是 Claude 宿主的入口。** 本 skill 采用单内核 + 薄适配层：规则、脚本、模板、subagent 契约（`references/`、`scripts/`、`assets/`、`agents/`）为两端共享的 core；Codex 宿主的入口为 `AGENTS.md`。规则改动只落 core，两端自动同步。架构与分支纪律见 `docs/porting.md`（维护者指南）。
+> **本文件是 Claude 宿主的入口（claude 分支的 `SKILL.md`）。** 本 skill 采用单内核 + 薄适配层：规则、脚本、模板、subagent 契约（`references/`、`scripts/`、`assets/`、`agents/`）为两端共享的 core。**两个宿主都以 `SKILL.md` 为 skill 入口**，区别在分支：claude 分支的 `SKILL.md` 为 Claude 范式（本文件），codex 分支的 `SKILL.md` 为 Codex 范式（+ `agents/openai.yaml` 界面清单）。规则改动只落 core，两端自动同步。架构与分支纪律见 `docs/porting.md`（维护者指南）。
 
 ## 接入前环境自检（首次接入必做）
 
