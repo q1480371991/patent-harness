@@ -25,6 +25,52 @@ def run_script(script_name, *args):
     )
 
 
+def run_script_allow_fail(script_name, *args):
+    return subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / script_name), *map(str, args)],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
+GOOD_FULL_DRAFT_MD = """## 权利要求书
+
+1.一种测试对象控制方法，其特征在于，包括：获取输入数据；根据输入数据确定中间结果；根据中间结果生成控制信号。
+
+2.根据权利要求1所述的测试对象控制方法，其特征在于，所述获取输入数据，包括：读取传感器数据；对传感器数据滤波。
+
+3.一种测试对象控制系统，包括存储器、处理器，其特征在于，所述处理器执行程序时实现权利要求1至2任一项所述的方法的步骤。
+
+## 技术领域
+
+本发明涉及测试领域。
+
+## 背景技术
+
+现有技术存在问题。
+
+## 发明内容
+
+本发明提供一种测试对象控制方法。
+
+## 附图说明
+
+图1为本发明实施例提供的测试对象控制方法流程示意图；
+
+图2为本发明实施例提供的测试对象控制系统结构示意图。
+
+## 具体实施方式
+
+在步骤S11中，获取输入数据，包括：读取传感器数据；对传感器数据滤波。
+
+在步骤S12中，根据输入数据确定中间结果。
+
+在步骤S13中，根据中间结果生成控制信号。
+"""
+
+
 def add_minimal_comment(docx_path: Path, comment_text: str):
     tmp_path = docx_path.with_suffix(".tmp.docx")
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
@@ -226,12 +272,12 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("后续阶段内容不得因权要一稿被全局清空", docx_text)
         self.assertIn("权要一稿/二稿/三稿最终 DOCX 可见页眉仅为", docx_text)
         self.assertIn("仍保留包内全部 `word/header*.xml`", docx_text)
-        self.assertIn("红蓝字与案例性术语清理", skill_text)
+        self.assertIn("案例性术语清理", skill_text)
         self.assertIn("后续阶段槽位保留不删", skill_text)
 
         self.assertIn("全文终稿目标约 1.5–2 万字", full_text)
         self.assertIn("存在方法独立权要时必备", figures_text)
-        self.assertIn("存在系统/装置独立权要时必备", figures_text)
+        self.assertIn("存在功能模块式系统/装置独权或系统侧独立结构创新时必备", figures_text)
         self.assertIn("从对应子步骤句末结果性表达中提取产物名", figures_text)
 
         self.assertIn("同类问题", revision_text)
@@ -334,6 +380,73 @@ class PatentScriptSmokeTests(unittest.TestCase):
         # 案件 docs/ 目录与 skill 自身 docs/ 消歧
         self.assertIn("docs/` 子目录", global_text)
         self.assertIn("技能文档目录", global_text)
+
+
+    def test_extract_structure_and_cross_block_pass_on_conforming_draft(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(GOOD_FULL_DRAFT_MD, encoding="utf-8")
+
+            result = run_script("extract_structure.py", "--md", md_path, "--stage", "full-draft")
+            data = json.loads(result.stdout)
+            self.assertTrue(data["extraction_ok"])
+            claim1 = next(i for i in data["claims"]["items"] if i["num"] == 1)
+            self.assertEqual(claim1["step_count"], 3)
+            self.assertEqual(data["main_steps"]["ids"], ["S11", "S12", "S13"])
+            self.assertEqual(data["figures"]["nums"], [1, 2])
+            claim3 = next(i for i in data["claims"]["items"] if i["num"] == 3)
+            self.assertEqual(claim3["range_refs"], [[1, 2]])
+
+            result = run_script("check_cross_block.py", "--md", md_path, "--stage", "full-draft")
+            data = json.loads(result.stdout)
+            self.assertEqual(data["violation_count"], 0)
+
+    def test_check_cross_block_catches_step_mismatch_and_bad_dependency(self):
+        import json
+
+        bad_md = GOOD_FULL_DRAFT_MD.replace(
+            "在步骤S13中，根据中间结果生成控制信号。\n", ""
+        ).replace("根据权利要求1所述", "根据权利要求9所述")
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(bad_md, encoding="utf-8")
+
+            result = run_script_allow_fail(
+                "check_cross_block.py", "--md", md_path, "--stage", "full-draft"
+            )
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            checks = {v["check"] for v in data["violations"]}
+            self.assertIn("X1", checks)  # 权 1 分句 3 vs 主步骤 2
+            self.assertIn("X3", checks)  # 依附了不存在的权要 9
+
+    def test_extract_structure_fails_hard_on_nonstandard_writing(self):
+        import json
+
+        bad_md = "## 权利要求书\n\n1.一种测试方法，包括：步骤甲；步骤乙。\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "权要稿.md"
+            md_path.write_text(bad_md, encoding="utf-8")
+
+            result = run_script_allow_fail(
+                "extract_structure.py", "--md", md_path, "--stage", "claims-draft"
+            )
+            self.assertEqual(result.returncode, 2)
+            data = json.loads(result.stdout)
+            self.assertFalse(data["extraction_ok"])
+            self.assertTrue(any("其特征在于" in e for e in data["extraction_errors"]))
+
+    def test_skill_wires_cross_block_check_into_gates(self):
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
+
+        self.assertIn("scripts/check_cross_block.py", skill_text)
+        self.assertIn("structure_check_result", skill_text)
+        self.assertIn("structure_check_result", auditor_text)
+        self.assertIn("check_cross_block.py", auditor_text)
+        self.assertIn("语义项必审清单", auditor_text)
 
 
 if __name__ == "__main__":

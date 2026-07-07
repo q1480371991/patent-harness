@@ -21,6 +21,7 @@ tools: Read, Bash
 | `stage` | 阶段字符串。MVP 阶段仅接受 `claims-draft` 或 `full-draft`。返修阶段（`claims-revision` / `full-revision`）不在本 subagent 当前范围。 |
 | `md_path` | 待审 md 草稿的绝对路径。 |
 | `mechanical_check_result` | 主 agent 已跑完 `scripts/check_hard_rules.py <md_path> --stage <stage>` 的 JSON 输出，直接嵌入 prompt。含每条第一类硬规则的 PASS/FAIL + 证据。 |
+| `structure_check_result` | 主 agent 已跑完 `scripts/check_cross_block.py --md <md_path> --stage <stage>` 的 JSON 输出，直接嵌入 prompt。含结构抽取结果（权要分句、主/子步骤、附图清单、依附邻接表）与第二类跨块规则（X1 步骤数同构 / X2 步骤编号连续 / X3 依附合法）的 PASS/FAIL + 证据。 |
 | `scoring_rules_content` | `references/rules/scoring.md` 全文，直接嵌入 prompt。 |
 | `stage_rules_content` | 当前阶段主规则文件全文（不含已单独拼入的 `scoring.md` 与 `external_rule_refs_content`）。 |
 | `docx_template_md_layer_content` | `docx-template.md` 中 **md 阶段可判定条目**的摘录（章节标题格式、发明名称格式、案例性术语清理、权要 1 字数、分号断行等）。 |
@@ -70,18 +71,31 @@ tools: Read, Bash
 
 ---
 
-## 与 `scripts/check_hard_rules.py` 的协作（重要）
+## 与硬规则脚本的协作（重要）
 
-本 subagent **不重复**脚本已经判定的第一类机械规则。工作分工：
+本 subagent **不重复**脚本已经判定的机械规则。工作分工：
 
-- **第一类（脚本先跑）**：字数、分号断行、编号连续、从权依附合法、禁用措辞、案例性术语、章节顺序、公式定界符等。主 agent 必须在调本 subagent 前先跑 `scripts/check_hard_rules.py <md_path> --stage <stage>`，把 JSON 结果作为 `mechanical_check_result` 传入。
-- **本 subagent 只判第三类语义项**：术语一致（同义变形）、链条闭合（G3）、从权只解决一个问题、权要 1 是否解决锁定的技术问题、背景技术是否与权 1 技术问题一致、创新处对应关系、有益效果技术原因、禁用措辞的近义变体等。
+- **第一类（`scripts/check_hard_rules.py` 先跑）**：字数、分号断行、编号连续、从权依附合法、禁用措辞、案例性术语、章节顺序、公式定界符等。
+- **第二类（`scripts/check_cross_block.py` 先跑）**：结构抽取（按 A/B 标准写法）+ 跨块数量比对——权要 1 分句数 == 具体实施方式主步骤数（L8-0）、主步骤编号 S11..S1N 连续、单点依附与范围引用合法。
+- 主 agent 必须在调本 subagent 前先跑完两个脚本，把 JSON 结果分别作为 `mechanical_check_result` 和 `structure_check_result` 传入。
+- **本 subagent 只判第三类语义项**：术语一致（同义变形）、链条闭合（G3）、从权只解决一个问题、权要 1 是否解决锁定的技术问题、背景技术是否与权 1 技术问题一致、创新处对应关系、有益效果技术原因、禁用措辞的近义变体等，以及下方"语义项必审清单"。
+
+### 语义项必审清单（机械脚本做不到、本 subagent 必须逐项判定）
+
+以下第二类规则因依赖语义理解无法纯结构抽取，**每次审计必须逐项给出结论**，可直接使用 `structure_check_result.structure` 中已抽好的结构数据（权要分句、主步骤清单、附图清单）作输入：
+
+1. **权要 1 步骤数 vs 附图 1 节点数**（`figures.md` L9-1，仅附图设计节存在时）：附图设计节图 1 的节点数与节点文字是否与权要 1 分句一一逐字对应。
+2. **发明内容对每条权要的语义引用**（`full-draft.md` L6）：发明内容是否语义覆盖每条权要（无编号直引时按语义复述判定），漏覆盖的权要要点名。
+3. **附图说明数 vs 附图设计节图数**（`figures.md` L9，仅附图设计节存在时）：附图说明列出的图 N 清单与附图设计节实际设计的图数量、标题是否一致。
+4. **反向特征校验**（`full-draft.md` L8-0 反向断言）：说明书步骤框架句（Sxx 句和分步骤复述句）中出现、而权利要求书中不存在的特征名、判断条件或步骤，逐字比对后列出。
+5. **从权多元化依附**（`claims.md`）：从权依附结构是否过度串行（全部逐条依附前一条）或过度集中（全部只依附权 1），依附选择是否与技术逻辑匹配；可用 `structure_check_result.structure.claims` 的依附邻接表作输入。
 
 **报告规则**：
 
-- `mechanical_check_result` 中已 PASS 的规则，本 subagent 直接沿用其 PASS 结论，不重跑、不复述；
-- `mechanical_check_result` 中已 FAIL 的规则，本 subagent 在"1 级硬规则"段中直接引用脚本给出的位置和证据；
-- 若 `mechanical_check_result` 未传入或 JSON 结构损坏，报告"输入不完整，机械项审计缺失"，不假装完成全量审计。
+- `mechanical_check_result` / `structure_check_result` 中已 PASS 的规则，本 subagent 直接沿用其 PASS 结论，不重跑、不复述；
+- 已 FAIL 的规则，本 subagent 在"1 级硬规则"段中直接引用脚本给出的位置和证据；
+- `structure_check_result.extraction_ok == false` 时，报告"结构抽取失败，跨块项审计缺失"，并把 `extraction_errors` 列入最短回修清单（要求主 agent 按 A/B 标准写法规范化后重跑）；
+- 若 `mechanical_check_result` 或 `structure_check_result` 未传入或 JSON 结构损坏，报告"输入不完整，机械项/跨块项审计缺失"，不假装完成全量审计。
 
 ---
 
