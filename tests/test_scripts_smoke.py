@@ -617,8 +617,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("references/", agents_text)
             self.assertIn("scripts/", agents_text)
             self.assertIn("自查", agents_text)
-        self.assertIn("--host codex", agents_text)
-        # rule-auditor 契约含跨宿主说明
+            self.assertIn("--host codex", agents_text)
+        # rule-auditor 契约含跨宿主说明 (属 core, 两分支恒在)
         auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
         self.assertIn("跨宿主说明", auditor_text)
 
