@@ -568,6 +568,39 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("scripts/check_env.py", skill_text)
         self.assertTrue((SKILL_DIR / "docs" / "install.md").exists())
 
+    def test_check_env_host_codex_skips_docx_plugin(self):
+        import json
+
+        # Claude 宿主: 含 docx 插件检测项
+        r_claude = run_script_allow_fail("check_env.py", "--host", "claude", "--json")
+        d_claude = json.loads(r_claude.stdout)
+        names_claude = {c["name"] for c in d_claude["checks"]}
+        self.assertTrue(any("document-skills:docx" in n for n in names_claude))
+
+        # Codex 宿主: 跳过 docx 插件 (由 python-docx 直连)
+        r_codex = run_script_allow_fail("check_env.py", "--host", "codex", "--json")
+        d_codex = json.loads(r_codex.stdout)
+        names_codex = {c["name"] for c in d_codex["checks"]}
+        self.assertFalse(any("document-skills:docx" in n for n in names_codex))
+        self.assertEqual(d_codex["host"], "codex")
+        # python-docx 两端都在 (Codex 的 DOCX 能力由它提供)
+        self.assertTrue(any(c["name"] == "python-docx" for c in d_codex["checks"]))
+
+    def test_dual_host_adapter_layer_present(self):
+        # 单内核 + 薄适配层: 两个入口文件并存, 各写宿主编排
+        self.assertTrue((SKILL_DIR / "SKILL.md").exists())
+        self.assertTrue((SKILL_DIR / "AGENTS.md").exists())
+        self.assertTrue((SKILL_DIR / "docs" / "porting.md").exists())
+        agents_text = (SKILL_DIR / "AGENTS.md").read_text(encoding="utf-8")
+        # AGENTS.md 指向共享内核, 且声明 rule-auditor 降级为主 agent 自查
+        self.assertIn("references/", agents_text)
+        self.assertIn("scripts/", agents_text)
+        self.assertIn("自查", agents_text)
+        self.assertIn("--host codex", agents_text)
+        # rule-auditor 契约含跨宿主说明
+        auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
+        self.assertIn("跨宿主说明", auditor_text)
+
 
 if __name__ == "__main__":
     unittest.main()
