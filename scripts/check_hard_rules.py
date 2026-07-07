@@ -8,7 +8,7 @@
 
 Exit code = 违反的硬规则数量; 0 = 全通过.
 
-输出 JSON 到 stdout (方便 rule-auditor / 主 agent 消费), 报告到 stderr.
+输出 JSON 到 stdout (方便各路 auditor / 主 agent 消费), 报告到 stderr.
 """
 
 from __future__ import annotations
@@ -597,7 +597,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--json", action="store_true",
-        help="stdout 输出 JSON (给 rule-auditor / 主 agent 消费)",
+        help="stdout 输出 JSON (给各路 auditor / 主 agent 消费)",
     )
     args = parser.parse_args()
 

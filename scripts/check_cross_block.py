@@ -10,7 +10,7 @@
 - X4 (L8-0, 仅 full-draft): 主步骤不得用 `在步骤Sx至步骤Sy中` 合并展开.
 
 其余第二类项 (权要 1 步骤数/附图 1 节点数、发明内容对每条权要、附图说明数 vs
-附图设计节图数、反向特征校验、从权多元化依附) 为语义项, 归 `rule-auditor`
+反向特征校验、从权多元化依附) 为语义项, 归各路 auditor (multi-auditor)
 subagent 判定, 本脚本不越权.
 
 用法 (主 agent 常规入口, 内部自动跑抽取):
@@ -23,7 +23,7 @@ subagent 判定, 本脚本不越权.
 也可直接消费已有抽取 JSON:
     python3 scripts/check_cross_block.py --structure structure.json
 
-输出 JSON 到 stdout (作为 `structure_check_result` 传给 rule-auditor),
+输出 JSON 到 stdout (作为 `structure_check_result` 传给各路 auditor),
 报告到 stderr. Exit code = 抽取错误数 + 违规数; 0 = 全通过.
 """
 

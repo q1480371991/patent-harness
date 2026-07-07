@@ -26,7 +26,7 @@ Claude Code skill 目录：
 patent/
   SKILL.md
   rules.md
-  agents/            （disclosure-analyst / rule-auditor）
+  agents/            （disclosure-analyst / 多路 auditor 契约：global/claims/content/impl-auditor）
   assets/docx/专利撰写模板.docx
   docs/
   references/

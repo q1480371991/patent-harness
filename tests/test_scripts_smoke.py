@@ -521,13 +521,21 @@ class PatentScriptSmokeTests(unittest.TestCase):
     @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_skill_wires_cross_block_check_into_gates(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-        auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
 
         self.assertIn("scripts/check_cross_block.py", skill_text)
         self.assertIn("structure_check_result", skill_text)
-        self.assertIn("structure_check_result", auditor_text)
-        self.assertIn("check_cross_block.py", auditor_text)
-        self.assertIn("语义项必审清单", auditor_text)
+        # 多路审查: SKILL.md 编排四个 auditor 契约
+        for name in ("claims-auditor", "content-auditor", "impl-auditor", "global-auditor"):
+            self.assertIn(name, skill_text)
+        # 各契约消费 structure_check_result 且引用脚本
+        for fname in ("claims-auditor.md", "content-auditor.md", "impl-auditor.md", "global-auditor.md"):
+            text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
+            self.assertIn("structure_check_result", text)
+            self.assertIn("check_hard_rules", text)
+        # 专审契约有必审语义项清单
+        for fname in ("claims-auditor.md", "content-auditor.md", "impl-auditor.md"):
+            text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
+            self.assertIn("必审语义项", text)
 
     @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_signature_not_defaulted_to_juventude(self):
@@ -617,16 +625,17 @@ class PatentScriptSmokeTests(unittest.TestCase):
             CLAUDE_SKILL or CODEX_SKILL,
             msg="SKILL.md 必须是 Claude 范式或 Codex 范式之一",
         )
-        # Codex 范式 SKILL.md: 校验其指向共享内核并声明 rule-auditor 降级自查
+        # Codex 范式 SKILL.md: 校验其指向共享内核并声明 auditor 降级自查
         if CODEX_SKILL:
             self.assertIn("references/", _skill_text)
             self.assertIn("scripts/", _skill_text)
             self.assertIn("自查", _skill_text)
             self.assertIn("--host codex", _skill_text)
             self.assertTrue((SKILL_DIR / "agents" / "openai.yaml").exists())
-        # rule-auditor 契约含跨宿主说明 (属 core, 两分支恒在)
-        auditor_text = (SKILL_DIR / "agents" / "rule-auditor.md").read_text(encoding="utf-8")
-        self.assertIn("跨宿主说明", auditor_text)
+        # 多路 auditor 契约含跨宿主说明 (属 core, 两分支恒在)
+        for fname in ("global-auditor.md", "claims-auditor.md", "content-auditor.md", "impl-auditor.md"):
+            auditor_text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
+            self.assertIn("跨宿主说明", auditor_text)
 
 
 if __name__ == "__main__":
