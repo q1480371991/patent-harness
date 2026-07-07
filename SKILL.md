@@ -5,9 +5,25 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 # 专利撰写工作流
 
-本 skill 用于用户在 `/Users/example/Desktop/Patent/` 下的专利撰写工作流。
+本 skill 用于用户在专利案件目录（macOS 默认 `~/Desktop/Patent/`、Windows 默认 `C:\Users\<用户名>\Desktop\Patent\`）下的专利撰写工作流。
 
-跨设备迁移到 Windows 时，参考 `docs/windows-setup.md`。
+跨设备迁移与首次接入的完整步骤参考 `docs/install.md`（含 Windows/macOS 目录、路径适配、依赖自检）。
+
+## 接入前环境自检（首次接入必做）
+
+本 skill 首次被接入一台新机器（Windows/macOS/Linux），或用户要求"检查/配置环境""能不能直接用"时，**在开始任何专利撰写工作前先跑一次环境自检**：
+
+```bash
+python3 scripts/check_env.py --json
+```
+
+按返回的 JSON 分类处理缺失项（力度已定：pip 库自动补，系统级/插件只引导）：
+
+- **`category=pip` 且 `ok=false`（如 python-docx）**：AI 直接执行 `python3 scripts/check_env.py --fix` 自动 `pip install` 补齐，无需逐次征询。
+- **`category=system` 且 `ok=false`**：`python`（运行时）用报告里的 `install_hint` 引导用户安装，不擅自静默改环境；`pandoc` 为**可选项**（脚本不直接调用，仅偶尔转格式用到），缺失不阻断工作，需要时再按提示装。
+- **`category=plugin`（document-skills:docx）**：脚本检测不到,由 AI 在会话中确认能否调用 `document-skills:docx` skill；不能调用则按报告提示让用户重启 Claude Code 或重新加载插件。
+
+`missing_required=0` 即必需项就绪，可进入撰写；仍缺必需项时先补齐再开工。Windows 上 `python3` 不通时改用 `py`。
 
 ## 资源目录约定
 
@@ -50,7 +66,7 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 - 用户没明确要求时，不另外输出独立的撰写检查报告。
 - 用户明确要求只读分析、规则检查、经验总结或修改建议时，不生成 DOCX，不改动案件文件。
 - 批注/修订的作者名**不设默认值**：每次返修任务开始时由用户提供署名；用户未提供时必须主动询问，不得擅自使用 `Juventude`、`Claude` 或任何其他名字。本文档下文出现的 `<用户指定署名>` 均指本条获取的名字。
-- 需要 pandoc 时用 `conda run -n base pandoc` 调用（默认 shell PATH 不含 pandoc；base 环境实测为 pandoc 3.9.0.2）。
+- 需要 pandoc 时，先探测可用路径再调用：优先直接 `pandoc`（在 PATH 中即可用）；若不在 PATH，macOS 上可尝试 `conda run -n base pandoc`（本机 base 环境实测为 pandoc 3.9.0.2），或按 `scripts/check_env.py` 报告的 `install_hint` 安装。pandoc 为可选依赖，仅在格式转换时用到，缺失不阻断主流程。
 
 ## 阶段判断
 

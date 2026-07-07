@@ -533,5 +533,41 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("优先审查要求（批注）", analyst_text)
 
 
+    def test_check_env_runs_stdlib_only_and_reports_deps(self):
+        import json
+
+        # 自检器必须只用标准库 (否则"检查依赖的工具自己缺依赖"会死锁):
+        # 用空 site (-S) + 清空 PYTHONPATH 剥离第三方包路径来近似"纯净解释器".
+        import os
+
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+        proc = subprocess.run(
+            [sys.executable, "-S", str(SCRIPTS_DIR / "check_env.py"), "--json"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=env, check=False,
+        )
+        # 脚本本身不能因为 import 第三方失败而崩溃: returncode 只应是
+        # 0 (必需项齐) 或 缺失必需项数; -S 剥离 site 会让 python-docx 不可见,
+        # 故这里只断言"未异常崩溃"(<2 且能产出合法 JSON), 不锁具体值.
+        self.assertLess(proc.returncode, 2, msg=f"check_env 异常崩溃: {proc.stderr[-300:]}")
+        data = json.loads(proc.stdout)  # 崩溃则这里抛 JSONDecodeError
+        names = {c["name"] for c in data["checks"]}
+        self.assertIn("python-docx", names)
+        self.assertIn("pandoc", names)
+        # 分类正确: python-docx 属可自动装的 pip 类, pandoc 属可选
+        docx_check = next(c for c in data["checks"] if c["name"] == "python-docx")
+        self.assertEqual(docx_check["category"], "pip")
+        self.assertTrue(docx_check["auto_installable"])
+        pandoc_check = next(c for c in data["checks"] if c["name"] == "pandoc")
+        self.assertFalse(pandoc_check["required"])  # pandoc 为可选
+
+    def test_skill_wires_env_check_into_onboarding(self):
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("接入前环境自检", skill_text)
+        self.assertIn("scripts/check_env.py", skill_text)
+        self.assertTrue((SKILL_DIR / "docs" / "install.md").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

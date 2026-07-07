@@ -42,7 +42,7 @@
 - 全文阶段 Markdown 草稿统一命名为：`docs/全文稿.md`。
 - 第一次提交后的权要批注稿，用户通常命名为：`权要1稿-修注.docx`。
 - 旧的 `disclosure_annotated.md`、`case_draft.md` 命名不再作为标准；遇到旧案时应规范化改名，避免同一案件中多个草稿名并存。遇到工作文件还散在案件根目录的旧案，应把它们移入 `docs/` 后再继续。
-- 本节所称 `docs/` 均指**案件文件夹内**的 `docs/` 子目录；`patent` skill 自身的 `docs/` 目录（如 `docs/archive/`、`docs/windows-setup.md`）是技能文档目录，与案件文件无关，不得混用。
+- 本节所称 `docs/` 均指**案件文件夹内**的 `docs/` 子目录；`patent` skill 自身的 `docs/` 目录（如 `docs/archive/`、`docs/install.md`）是技能文档目录，与案件文件无关，不得混用。
 
 ### G1-2 全局 2级规则（质量优化）
 
