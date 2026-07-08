@@ -56,9 +56,7 @@
 - **骨架全套验证是收尾一次性动作，不在分块注入过程中重复执行**：就地替换段落文本不会改变 `sectPr`/`header*.xml` 数量与 `headerReference`，分块注入时无需每块复验这些项（每块只做文本落位与注入锚点的轻量确认，见 `full-draft.md` 分块撰写法第 6 条）；整套骨架机械项（分节数、header 数、headerReference、可见页眉、残留修订痕迹）在全部注入完成后用 `scripts/verify_docx_skeleton.py <docx>` 一次性跑完，看 PASS/FAIL 报告即可，不必 AI 手动逐项 grep。脚本只覆盖机械项；G8-0b 的标题加粗/顶格/字号等格式项与 G8-0 的正文内容落位仍由 `patent` 收尾核对一次。
 - 权要一稿/二稿/三稿最终 DOCX 可见页眉仅为“权利要求书”“说明书”；正文仅显示权利要求书、发明名称、技术领域、背景技术；说明书摘要、摘要附图、发明内容、附图说明、具体实施方式、说明书附图、图1 等不得作为当前稿次的可见页眉、标题或正文残留；同时仍保留包内全部 `word/header*.xml`、原模板 `sectPr`、`headerReference` 和非当前阶段模板槽位。
 - “保留后续槽位但控制最终可见”指：保留 XML 锚点，使未来槽位锚点仍可定位；不得删除整节、不得删除 `headerReference`、不得删除 header 文件、不得全局清空 body。执行层可通过保留空段落、不可见占位锚点或其他不暴露普通打印视图文本的方式隐藏非当前阶段槽位，但不能破坏全文一稿继续填充的定位基础。
-- 权要稿正文不得出现“说明书摘要”“摘要附图”“发明内容”“附图说明”“具体实施方式”“说明书附图”“图1”等。
-- 权要 1 字数 ≤400 字。
-- 所有含分号的段落均以分号结尾。
+- 权要稿禁显章节按 G8-0 对照表“权要稿”列执行；权要 1 字数与分号断行按唯一出处 `claims.md` L1-1 执行，本节不复列。
 - `docs/archive/inject_md_to_template.deprecated.py` 是旧版清空 body 重建脚本，仅作历史备查，不得用于权要一稿/全文一稿；如需自动写入模板，必须先实现就地替换版脚本，确保保留 `sectPr`、`header*.xml` 和 `headerReference`。
 - 留痕返修注入新段落（带跟踪修订）时，若需把段末段落标记 `¶` 也标记为插入态，`<w:pPr>/<w:rPr>` 内的 `<w:ins .../>` 必须**作为第一个子元素**，置于 `<w:rFonts>`、`<w:sz>` 等格式元素之前；否则严格 schema 会拒绝（CT_ParaRPr 的子元素顺序：`ins | del | moveFrom | moveTo` 必须最先）。**Why:** 本次审核v2 → 全文3稿返修首次注入时把 `<w:ins>` 排在 `<w:rPr>` 末尾，触发 docx 通用校验报 "ins 不被允许，期望 rPrChange"。**How to apply:** 任何 Juventude 留痕注入脚本中拼装 `<w:pPr>/<w:rPr>` 时，先吐出 `<w:ins .../>`，再吐出格式子元素；`docx` skill 校验若仅余原文件自带的 schema 小瑕疵（如 m:plcHide、styles uiPriority）即视为通过。
 - 留痕注入的其他四类执行陷阱——整段删除遗漏段内 OMML 公式对象、向 ins/del 混杂段插入时落点进入 del 块、自闭合修订标记被误判为未闭合、段落标记 rPr 内 ins 与 del 共存时的先后顺序——规避方法见 `references/cases/docx-execution.md` C-DOCX-4 至 C-DOCX-7（按需读取）。

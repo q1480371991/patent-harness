@@ -1,5 +1,7 @@
 # 多路审查(multi-auditor)设计 — 按重灾区拆分 rule-auditor
 
+> **沿革注记（2026-07）**：本文档为设计稿；运行口径以 `SKILL.md`「审查闸门通用规则」与 `agents/*-auditor.md` 契约为准。scoring 已改为静态摘录文件按路径传入、所有 FAIL 路重审均走增量复核。
+
 日期:2026-07-08。本设计取代单一 `rule-auditor` 的审查架构,是 `docs/design-subagent-split.md` 的后续演进。
 
 ---
@@ -45,7 +47,7 @@
 
 ## 4. 契约共性(每个 `agents/*-auditor.md` 三段式)
 
-- **输入**:`stage` + 稿件 `md_path`(传全文路径不切片——切片省的 token 不值切错的风险,契约限定"只审 X 章节") + 两脚本完整 JSON(契约限定只沿用本范围条目) + `scoring.md` 全文(限定只对本路评分项打分) + 本路规则包 + `triggered_rule_notes`;full-draft 专审另传 `claims_md_path` 冻结基准。
+- **输入**:`stage` + 稿件 `md_path`(传全文路径不切片——切片省的 token 不值切错的风险,契约限定"只审 X 章节") + 两脚本完整 JSON(契约限定只沿用本范围条目) + `scoring_excerpt_path`(本路静态摘录 `scoring-<路名>.md`,规则一律传路径不传内容) + 本路规则包 + `triggered_rule_notes`;full-draft 专审另传 `claims_md_path` 冻结基准。
 - **输出**:统一结构——范围声明 → 完整性(仅 global)→ 1 级硬规则 N/M → 2 级质量分 N/M → 最短回修清单;每个 FAIL 带规则编号+位置+原文证据+应改为;无证据的 PASS 视为未检查。
 - **失败契约**:重试 1 次,仍失败该路降级为主 agent 自查并在完工报告标注"<路名> 未生效";脚本闸门不受影响必须过。
 - **白名单**:只读(`Read` 仅限传入路径,`Bash` 仅限 wc/grep/awk/sed -n/head/tail/diff),禁止写文件/DOCX/联网/越权读规则。
@@ -54,7 +56,7 @@
 
 - **通过判定**:global 完整性 PASS **且** 各路 1 级全部 100% **且** 合并 2 级分 = Σ各路通过 ÷ Σ各路适用 ≥ 90%(口径见 `scoring.md` 计分方法)。
 - **合并落盘**:一份 `docs/审查报告-<稿次>.md`,合并结论在前、各路原始报告附后;同位置同规则去重,跨路冲突按 `rules.md` 冲突处理原则裁决。保持"无落盘报告 = 未过闸"。
-- **回修后重审**:必重跑两脚本;重调**上轮有 FAIL 的专审路**;**global-auditor 恒重调**(任何改动都可能碰术语一致/完整性);上轮全 PASS 的专审路不重调。
+- **回修后重审**:必重跑两脚本;重调**上轮有 FAIL 的专审路**;**FAIL 路(含 global-auditor 与专审路)以 `reaudit_context` 增量复核模式重调**(完整性级/恒复核项仍全量,其余沿用上轮);上轮全 PASS 的专审路不重调。
 
 ## 6. Token 成本(诚实账)
 

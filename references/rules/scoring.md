@@ -50,6 +50,8 @@
 
 **多路归属**：本闸门由多路审查（multi-auditor）并行执行，每个评分项由行末【】标注的审查路判定——【global】= `global-auditor`、【claims】= `claims-auditor`、【content】= `content-auditor`、【impl】= `impl-auditor`。完整性一票否决由 `global-auditor` 判定（其中 L6 权要覆盖、L8 反向特征/漏解释两类完整性级缺陷由 content / impl 专审发现后回传）。各路契约见 `agents/*-auditor.md`。
 
+**auditor 摘录范围（唯一出处）**：本文件**不整篇传入任何 auditor**。按路摘录已**实体化为静态文件** `references/rules/scoring-{claims,content,impl,global}.md`，主 agent 只把对应文件的**路径**（`scoring_excerpt_path`）传给各路 auditor，由其自行 Read；每份摘录含：评分前置纪律 + 本路评分项 + 判定要求，`scoring-global.md` 额外含第一闸完整性清单。"计分方法"与多路合并口径只归主 agent 使用，不进入任何摘录文件。**维护纪律**：修改本文件的评分项、完整性清单或前置纪律时，必须同步更新对应摘录文件。
+
 **A. 1 级硬规则（零容忍，任一 FAIL → 整体不通过）**
 
 权要稿：
@@ -61,7 +63,7 @@
 全文稿：
 - G3、G4、G5、G6（`global.md`）【global】
 - L6-1 发明内容与权要一一对应、有益效果给技术原因【content】
-- L8-1 全部：解释每条权要步骤、阈值给确定依据、算法点名方法族并给关键超参与示例值、判断步骤用规定句式、公式规范、Sxx 展开范式（见 `revision.md` A4-1-核心 Sxx 范式条）、可实施（专利法 26.3）【impl】
+- L8-1 全部：解释每条权要步骤、阈值给确定依据、算法点名方法族并给关键超参与示例值、判断步骤用规定句式、公式规范、Sxx 展开范式（唯一出处 `full-draft.md` L8-1）、可实施（专利法 26.3）【impl】
 - L4-1 摘要（≤300 字、术语一致）、L5-1 摘要附图、L7-1 附图说明自身格式（编号连续、每图一句功能描述；与 L9 附图设计的一致性深审不在闸门范围）【global】
 
 **B. 2 级质量规则（加权扣分，算百分比）**

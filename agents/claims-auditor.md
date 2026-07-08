@@ -8,7 +8,7 @@ tools: Read, Bash
 
 本 subagent 是 `patent` skill 多路审查(multi-auditor)中的**权利要求书专审路**,只负责一件事:**对权要稿的 L1 权利要求书块做深审**。技术领域、背景技术、全局项由并行的 `global-auditor` 负责;全文阶段权要已冻结,本路不被调用。
 
-> **跨宿主说明**:本契约在 Claude 宿主下由**独立 Agent**执行(独立上下文,物理隔离主 agent 推理)。在 Codex 宿主下由**主 agent 按本契约分轮自查**(本轮只带 L1 规则包)——失去独立性,须在完工报告标注,硬防线以两道脚本闸门为准。详见 codex 分支的 `SKILL.md` 与 `docs/porting.md`。
+> **跨宿主**:Claude 宿主 = 独立 Agent 执行(物理隔离);Codex 宿主 = 主 agent 按本契约分轮自查(无独立性,硬防线以两道脚本闸门为准)。详见 `docs/porting.md`。
 
 ---
 
@@ -22,10 +22,11 @@ tools: Read, Bash
 | `md_path` | 权要稿.md 的绝对路径。 |
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出(含权要分句、依附邻接表等结构数据),直接嵌入 prompt。 |
-| `scoring_rules_content` | `references/rules/scoring.md` 全文。本路只执行其中 L1 相关评分项。 |
-| `claims_rules_content` | `claims.md` 的 **L1 节全部内容**(L1-1 / L1-2 / L1-3)。 |
-| `claims_format_standard_content` | `references/cases/claims-format-standard.md` 全文。 |
+| `scoring_excerpt_path` | `references/rules/scoring-claims.md` 的绝对路径（`scoring.md` 的本路静态摘录：评分前置纪律 + 本路评分项 + 判定要求）。自行 Read。 |
+| `claims_rules_path` | `references/rules/claims.md` 的绝对路径。自行 Read,**只执行其中 L1 节**(L1-1 / L1-2 / L1-3),其余节不在本路范围。 |
+| `claims_format_standard_path` | `references/cases/claims-format-standard.md` 的绝对路径。自行 Read。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单;无则写"无"。 |
+| `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单。传入即进入增量复核模式:上轮失败项与改动块所涉条目定点复核,其余上轮 PASS 且不涉改动块的条目沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |
 
 ## 本路审查范围
 
@@ -86,10 +87,10 @@ tools: Read, Bash
 ## 工具白名单(严格)
 
 **允许**:
-- `Read`:仅限 Input Contract 传入的 `md_path`。
+- `Read`:仅限 Input Contract 传入的 `md_path` 与各 `*_path` 规则文件(`scoring_excerpt_path`、`claims_rules_path`、`claims_format_standard_path`)。
 - `Bash`:仅限确定性只读统计命令——`wc`、`grep`、`awk`、`sed -n`、`head`、`tail`、`diff`。
 
 **禁止**:
-- `Write`、`Edit`、`NotebookEdit`;任何 DOCX 相关工具或脚本;任何联网工具;任何 `Read` Input Contract 之外的路径(规则内容只能从 prompt 里获得,不允许自行去 `references/rules/` 或 `references/cases/` 读取);任何写文件、修改环境或调用外部 skill 的操作。
+- `Write`、`Edit`、`NotebookEdit`;任何 DOCX 相关工具或脚本;任何联网工具;任何 `Read` Input Contract 未点名的路径(不得自行读取契约之外的 `references/rules/`、`references/cases/` 文件);任何写文件、修改环境或调用外部 skill 的操作。
 
 违反白名单等同于越权,主 agent 会拒绝报告并要求重跑。

@@ -91,28 +91,37 @@ python3 scripts/check_env.py --json
 
 自动识别明显文件。如果有多个可能候选，请用户选择。
 
+## 审查闸门通用规则（两阶段共用）
+
+权要一稿 step 7 与全文一稿 step 8 的闸门都按本节执行，各 step 只写差异（脚本参数、auditor 路名、传入字段）：
+
+- **通过判定**（合并口径唯一出处 `scoring.md` 计分方法）：global-auditor 完整性 PASS + 各路 1 级均 100% + 合并 2 级分（Σ各路通过 ÷ Σ各路适用）≥90%。
+- **合并落盘**：主 agent 合并各路报告落盘一份 `docs/审查报告-<稿次>.md`（合并结论在前、各路原始报告附后；同位置同规则去重，跨路冲突按 `rules.md` 冲突处理原则裁决）。未达标不得进入 DOCX。
+- **回修重审**：按合并后的最短回修清单改 md 后重审——两脚本必重跑；上轮有 FAIL 的路（专审路与 global-auditor 均适用）**以增量复核模式重调**：额外传 `reaudit_context`（上轮该路报告的失败项 + 主 agent 列出的本轮改动块清单），各路契约中标注"完整性级"或"恒全文复核"的项仍全量复核，其余上轮 PASS 且不涉改动块的项沿用上轮结论并标注"沿用"；上轮全 PASS 的专审路不重调。
+- **降级兜底**：任一路两次失败（无契约结构或报告"输入不完整"）时，仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效，但脚本闸门必须通过。
+
 ## 权要一稿
 
 `权要一稿`：
 
-1. 先按 `rules.md` 阶段读取表读取 `references/rules/claims.md` 和 `references/rules/docx-template.md`。确认案件文件夹下已有 `docs/` 子目录（无则创建），并把交底书 DOCX 放入 `docs/`。进入 DOCX 执行层时，必须先调用官方 `document-skills:docx`（即 docx）skill；用其读取交底书 DOCX 的正文、批注和高亮，再把交底书 DOCX 转为带批注的 Markdown，保存为 `docs/交底书.md`。可继续使用 `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`，但执行前必须已加载 `docx` skill。
-2. **调用 `disclosure-analyst` subagent 生成事实提纲**：按 `agents/disclosure-analyst.md` 的 Input Contract 拼装 prompt（`disclosure_md_path` + `global.md` 全文 + `stage=claims-draft`），拿到结构化事实提纲。主 agent 审核提纲一致性和完整性后，写入 `docs/facts.md`。**subagent 不直接写文件**；若提纲缺"潜在风险"段落或结构破坏，视为失败并重试 1 次，仍失败则跳过 subagent、主 agent 亲自完成事实抽取。
-3. **主 agent 亲自深读 `交底书.md`**（`disclosure-analyst` 是预提纲器，不替代 G2 深读义务）：带着 `docs/facts.md` 逐条核对 `==高亮==` 内容和 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、关键步骤、特征命名、数据来源、数据用途、预期效果。**创新点以批注圈定为准，不自行另判**（G2-1）：批注 `> 💡 [批注 ...]` 已直接写出权利要求书创新点，按其圈定的步骤/特征展开创新特征，批注未点名的步骤按支撑环节处理。若 `facts.md` 的"潜在风险"段落有需要回问用户的项，或批注圈定的创新点在交底书中找不到支撑，先解决再进入撰写。
+1. 先按 `rules.md` 阶段读取表读取 `references/rules/claims.md` 和 `references/rules/docx-template.md`（此阶段只读其 G8-0/G8-0b 及 md 层可判定条目；G8-1 XML 骨架细节留到 DOCX 执行层 step 8-12 再读）。确认案件文件夹下已有 `docs/` 子目录（无则创建），并把交底书 DOCX 放入 `docs/`。先调用官方 `document-skills:docx`（即 docx）skill 满足执行层门槛（**不用其向上下文回读交底书正文**），随后直接执行 `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md` 完成确定性转换；仅当脚本转换失败或批注锚点异常时，才用 `docx` skill 读原 DOCX 定点排查。交底书全文只在 step 2 深读 `交底书.md` 时进入上下文一次。
+2. **主 agent 亲自深读 `交底书.md` 并产出事实提纲**（G2 深读义务）：逐条核对 `==高亮==` 内容和 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、关键步骤、特征命名、数据来源、数据用途、预期效果，并在深读的同时把结构化事实提纲写入 `docs/facts.md`，固定结构为：技术问题、术语表、主流程、批注圈定的创新点、优先审查要求（批注）、数据来源/用途、潜在风险。**创新点以批注圈定为准，不自行另判**（G2-1）：批注 `> 💡 [批注 ...]` 已直接写出权利要求书创新点，按其圈定的步骤/特征展开创新特征，批注未点名的步骤按支撑环节处理；批注锚点丢失（只剩批注文字、不知选中哪段）时不猜测指向，回查 DOCX 选区或记入潜在风险。优先审查案件的关键词表缺失时记入潜在风险，向用户索取。
+3. 若 `facts.md` 的"潜在风险"段落有需要回问用户的项，或批注圈定的创新点在交底书中找不到支撑，先解决再进入撰写。
 4. 先用 Markdown 把专利稿件写在 `docs/权要稿.md`。
 5. **权要一稿仅撰写并展示三部分，按此顺序排列**：权利要求书 → 技术领域 → 背景技术。其他章节（说明书摘要、摘要附图、发明内容、附图说明、具体实施方式、说明书附图）一律留到全文一稿撰写，权要一稿阶段不要写入 `权要稿.md`，也不要在 DOCX 正文或页眉中显示。
 6. 在 `权要稿.md` 中写完整的权要集、技术领域、背景技术。权要数量、保护主题组合（方法权/计算机设备式系统权/存储介质权）、权要 1 字数、分号断行、从权粒度和依附关系的唯一出处是 `references/rules/claims.md` 及其指向的 `references/cases/claims-format-standard.md`。
-7. 写入 DOCX 之前，先对 `权要稿.md` 按 `claims.md` 各块自检清单自检，并确认未误写权要一稿以外的章节（摘要等属全文一稿，见 `full-draft.md` L4）。**随后按两阶段闸门流程审查**：
-   - **阶段 A：机械化硬规则脚本前置**：由主 agent 依次执行两个脚本——先 `python3 scripts/check_hard_rules.py <权要稿.md 绝对路径> --stage claims-draft --json`（第一类硬规则），再 `python3 scripts/check_cross_block.py --md <权要稿.md 绝对路径> --stage claims-draft`（第二类：结构抽取 + 依附合法校验）。**任一 FAIL 直接回修**，不进入阶段 B；结构抽取失败（`extraction_ok=false`）说明写法不合 A/B 标准，按 `extraction_errors` 规范化写法后重跑。主 agent 按报告的 `location` 和 `evidence` 定点修改 `权要稿.md` 后重跑脚本，直到全部 PASS。两个脚本的 JSON 分别作为 `mechanical_check_result` 和 `structure_check_result` 传给下一阶段。
-   - **阶段 B：单条消息并行调用两路 auditor 做语义复核**（多路审查，每路独立 Agent、只带本路规则包）：
-     - `claims-auditor`（契约 `agents/claims-auditor.md`）：传 `stage=claims-draft` + `md_path` + `mechanical_check_result` + `structure_check_result` + `scoring.md` 全文 + `claims_rules_content=claims.md 的 L1 节全部` + `claims_format_standard_content=claims-format-standard.md` + `triggered_rule_notes`。专审 L1 权利要求书（从权依附多元化、权 1 解决技术问题、一条从权一个问题等语义项）。
-     - `global-auditor`（契约 `agents/global-auditor.md`）：传 `stage=claims-draft` + `md_path` + 两脚本 JSON + `scoring.md` 全文 + `global_rules_content=global.md 全文` + `short_block_rules_content=claims.md 的 L2+L3 节` + `docx_template_md_layer_content=docx-template.md 的 md 可判定条目摘录` + `triggered_rule_notes`。负责完整性一票否决 + G3-G6 全局项 + 技术领域/背景技术短块。
-     **通过判定**（合并口径唯一出处 `scoring.md` 计分方法）：global-auditor 完整性 PASS + 各路 1 级均 100% + 合并 2 级分（Σ各路通过 ÷ Σ各路适用）≥90%。主 agent 合并各路报告落盘一份 `docs/审查报告-权要N稿.md`（合并结论在前、各路原始报告附后；同位置同规则去重，跨路冲突按 `rules.md` 冲突处理原则裁决）。未达标不得进入 DOCX，按合并后的最短回修清单改 `权要稿.md` 后重审：阶段 A 两脚本必重跑；上轮有 FAIL 的专审路重调；`global-auditor` 恒重调（任何改动都可能影响术语一致与完整性）；上轮全 PASS 的专审路不重调。任一路两次失败（无契约结构或报告"输入不完整"）时，仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效。
+7. 写入 DOCX 之前，主 agent 只自查**脚本与 auditor 均不覆盖的项**：未误写权要一稿以外的章节（摘要等属全文一稿，见 `full-draft.md` L4）。机械项交阶段 A 脚本终判、语义项交阶段 B auditor 专审，主 agent 不预演 `claims.md` 自检清单。**随后按两阶段闸门流程审查**：
+   - **阶段 A：机械化硬规则脚本前置**：由主 agent 依次执行两个脚本——先 `python3 scripts/check_hard_rules.py --md <权要稿.md 绝对路径> --stage claims-draft --json`（第一类硬规则），再 `python3 scripts/check_cross_block.py --md <权要稿.md 绝对路径> --stage claims-draft`（第二类：结构抽取 + 依附合法校验）。**任一 FAIL 直接回修**，不进入阶段 B；结构抽取失败（`extraction_ok=false`）说明写法不合 A/B 标准，按 `extraction_errors` 规范化写法后重跑。主 agent 按报告的 `location` 和 `evidence` 定点修改 `权要稿.md` 后重跑脚本，直到全部 PASS。两个脚本的 JSON 分别作为 `mechanical_check_result` 和 `structure_check_result` 传给下一阶段。
+   - **阶段 B：单条消息并行调用两路 auditor 做语义复核**（多路审查，每路独立 Agent、只带本路规则包；**规则一律传文件路径，不把规则内容抄进 prompt**——auditor 按契约自行 Read，主 agent 只传路径与两脚本 JSON；`scoring.md` 的按路摘录已实体化为 `references/rules/scoring-<路名>.md` 静态文件，合并计分方法留在主 agent）：
+     - `claims-auditor`（契约 `agents/claims-auditor.md`）：传 `stage=claims-draft` + `md_path` + `mechanical_check_result` + `structure_check_result` + `scoring_excerpt_path=references/rules/scoring-claims.md` + `claims_rules_path=references/rules/claims.md`（只执行 L1 节）+ `claims_format_standard_path=references/cases/claims-format-standard.md` + `triggered_rule_notes`。专审 L1 权利要求书（从权依附多元化、权 1 解决技术问题、一条从权一个问题等语义项）。
+     - `global-auditor`（契约 `agents/global-auditor.md`）：传 `stage=claims-draft` + `md_path` + 两脚本 JSON + `scoring_excerpt_path=references/rules/scoring-global.md` + `global_rules_path=references/rules/global.md`（只执行 G3-G6）+ `short_block_rules_path=references/rules/claims.md`（只执行 L2+L3 节）+ `docx_template_rules_path=references/rules/docx-template.md`（只执行 md 层可判定条目）+ `triggered_rule_notes`。负责完整性一票否决 + G3-G6 全局项 + 技术领域/背景技术短块。
+     **通过判定、合并落盘（`docs/审查报告-权要N稿.md`）、回修重审与降级兜底一律按「审查闸门通用规则」节执行。**
 8. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
 9. 由 `docx` 执行层把内置模板 `assets/docx/专利撰写模板.docx` 拷贝到案件文件夹（用户明确指定其他模板时除外），重命名为 `案件号-权要1稿-作者-发明题目全称.docx`。
 10. 由 `docx` 执行层采用 unpack → edit XML → pack 流程填充当前稿次可见章节，就地替换、只控制最终可见文本和当前稿次页眉显示。模板骨架保护（sectPr/header/headerReference 全保留、不清空 body 重建）与各分节应填内容的唯一出处是 `references/rules/docx-template.md` G8-0、G8-0b、G8-1。
-11. 权要一稿的可见范围按 G8-0 对照表"权要稿"列与 G8-1 可见性规则执行：只显示"权利要求书""说明书"页眉，正文只显示权利要求书、发明名称、技术领域、背景技术；后续阶段槽位保留不删。
+11. 权要一稿的可见范围按 G8-0 对照表"权要稿"列与 G8-1 可见性规则执行（章节清单唯一出处为 G8-0 表，本步不复列）；后续阶段槽位保留不删。
 12. 完成后由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（分节3、分节4 内容落位）、G8-0b（发明名称与章节标题格式）、G8-1（骨架、可见性、案例性术语清理、权要1字数、分号断行）逐项验收。
-13. 仅报告：输出 DOCX 路径、`docs/交底书.md` 路径、`docs/权要稿.md` 路径，以及任何需要用户关注的问题。不出独立的撰写检查报告。
+13. 仅报告：输出 DOCX 路径、`docs/交底书.md` 路径、`docs/权要稿.md` 路径、按"完工报告"的**校验清单**格式逐规则打 ✅/❌/➖，以及任何需要用户关注的问题。不出独立的撰写检查报告。
 
 ## Word 批注修订（留痕返修）
 
@@ -134,6 +143,7 @@ python3 scripts/check_env.py --json
 - `w:ins` 内 run 复制原 run 的 `<w:rPr>`（保字体字号）；`w:date` 用真实当前时间（`date +%Y-%m-%dT%H:%M:%SZ`，本所查看器直接显示字符串时分，格式与老板修订一致）；`w:id` 取现有最大值以上的未占用值；整段删除时在 `<w:pPr><w:rPr>` 加 `<w:del/>`。
 - **校验项**：作者集合含 `<用户指定署名>`、老板批注条数不减、老板 `delText` 字数不变、`<用户指定署名>` 修订数符合预期、`docx validate` 无新增错误（原文件自带的 schema 小瑕疵不计）。
 - 不覆盖老板批注过的原文件；留痕稿存为新文件名。
+- **权要联动回写**：若本次返修改动了权利要求书内容（无论留痕或干净稿），注入并校验完成后，把最新权要全文同步回写 `docs/权要稿.md`，保证后续全文阶段的 md 基准不陈旧。
 
 **学习闭环（每次返修收尾）：** 把本次批注体现的、可迁移的写作规律按主题补入对应阶段规则文件，例如返修纪律进 `references/rules/revision.md`，权要表达进 `references/rules/claims.md`，全文公开充分进 `references/rules/full-draft.md`，模板/XML 问题进 `references/rules/docx-template.md`，附图规则进 `references/rules/figures.md`；`rules.md` 仅在新增阶段索引或冲突原则时更新。具体案例只进入 `references/cases/`，并先给用户看 diff 再并入；本案技术对象名、参数值、附图名不进通用规则。
 
@@ -143,22 +153,22 @@ python3 scripts/check_env.py --json
 
 `全文一稿`：
 
-1. 先按 `rules.md` 阶段读取表读取 `references/rules/full-draft.md`、`references/rules/figures.md` 和 `references/rules/docx-template.md`；**全文阶段不读 `references/rules/claims.md`**（权要已冻结，全文只补说明书，术语一致与权要对应已由 `global.md G4`、`full-draft.md L6` 覆盖；仅当返修批注涉及权要联动时才按需读 `claims.md`）。从最新已审权要 DOCX 开始，不从空白模板起稿；若候选不唯一，必须先请用户确认使用哪一份权要 DOCX。并从该 DOCX 提取权利要求书全文作为全文稿唯一权要基准；若 `docs/全文稿.md` 已存在且其权要内容或撰写时间早于最新已审权要，必须先按 `full-draft.md` L8-0 对照新权要重构受影响章节，禁止直接复用旧稿注入。
+1. 先按 `rules.md` 阶段读取表读取 `references/rules/full-draft.md`、`references/rules/figures.md` 和 `references/rules/docx-template.md`；**全文阶段不读 `references/rules/claims.md`**（权要已冻结，全文只补说明书，术语一致与权要对应已由 `global.md G4`、`full-draft.md L6` 覆盖；仅当返修批注涉及权要联动时才按需读 `claims.md`）。从最新已审权要 DOCX 开始，不从空白模板起稿；若候选不唯一，必须先请用户确认使用哪一份权要 DOCX。并从该 DOCX 提取权利要求书全文作为全文稿唯一权要基准（**DOCX 为权威源**）：提取后与 `docs/权要稿.md` 的权利要求书比对，不一致时以 DOCX 为准**回写更新 `docs/权要稿.md`**，使后续闸门与三路 auditor 使用的 `claims_md_path` 基准与 DOCX 保证一致；一致则直接使用。若 `docs/全文稿.md` 已存在且其权要内容或撰写时间早于最新已审权要，必须先按 `full-draft.md` L8-0 对照新权要重构受影响章节，禁止直接复用旧稿注入。
 2. 除非用户要求改动，保留已审权要不变。
-3. **在开始补写说明书前，调用 `disclosure-analyst` subagent 获取或复用 `docs/facts.md`**：若 `docs/facts.md` 已在权要一稿阶段生成且交底书未变更，可直接复用；否则按 `agents/disclosure-analyst.md` 的 Input Contract 传入（`disclosure_md_path=docs/交底书.md` + `global.md` 全文 + `stage=full-draft`），拿到结构化事实提纲，由主 agent 审核后写入 `docs/facts.md`。主 agent **仍必须亲自深读 `docs/交底书.md`** 并核对高亮、批注、技术链和潜在风险，`facts.md` 不替代 `global.md` G2 的主写作者深读义务。
+3. **在开始补写说明书前，获取或复用 `docs/facts.md`**：若 `docs/facts.md` 已在权要一稿阶段生成且交底书未变更，直接复用；否则由主 agent 在下述深读时亲自生成（结构同权要一稿 step 2 的事实提纲）。主 agent **必须亲自深读 `docs/交底书.md`**（G2 深读义务）并核对高亮、批注、技术链和潜在风险，`facts.md` 只是深读的落盘产物，不替代深读本身。
 4. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/full-draft.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文；具体实施方式框架按 `full-draft.md` L8-0 Sxx 框架同构规则执行。
 5. 在说明书中解释每一条权要步骤。
 6. 加入有益效果的技术原因。
-7. 在 `docs/全文稿.md` 末尾追加 `## 附图设计（供手画 Visio 用）` 一节，按 `rules.md` 中的附图设计规则执行（规则 A 主流程基于权要 1、规则 B 子流程基于展开的主步骤、规则 C 系统结构基于系统权要）。用户根据这一节在 Visio 中手画实际附图，本 skill 不输出图片文件。
-8. 写入 DOCX 之前，对 `docs/全文稿.md` 做跨块总检：各块自检已在分块撰写时逐块完成，此处只查跨块项——权要保留、全文术语一致性、模板案例性术语、禁用措辞、公式、模型/阈值细节、可实施性，并核对附图设计节的附图清单和节点数与权要 1、子步骤编号、系统权要相吻合。先由主 agent 沿用现有跨块自检流程做一遍初检；**再依次跑两个机械化脚本**：先 `python3 scripts/check_hard_rules.py <案件文件夹>/docs/全文稿.md --stage full-draft --json`（第一类硬规则），再 `python3 scripts/check_cross_block.py --md <案件文件夹>/docs/全文稿.md --stage full-draft --claims-md <案件文件夹>/docs/权要稿.md`（第二类：结构抽取 + L8-0 步骤数同构 + 主步骤编号连续 + 依附合法 + 禁止合并展开；`--claims-md` 传入权要基准，因全文稿.md 不含冻结的权利要求书）。任一脚本不通过时按输出定点回修再重跑，不得跳过；结构抽取失败（`extraction_ok=false`）说明 Sx 步骤或权要写法不合 A/B 标准（L8-1 主步骤展开范式），按 `extraction_errors` 规范化后重跑。两个脚本都通过后**单条消息并行调用三路 auditor 做独立复核**（多路审查，每路独立 Agent、只带本路规则包；权要冻结基准 `claims_md_path=docs/权要稿.md` 传给三路）：
-   - `content-auditor`（契约 `agents/content-auditor.md`）：传 `stage=full-draft` + `md_path=docs/全文稿.md` + `claims_md_path` + `mechanical_check_result` + `structure_check_result` + `scoring.md` 全文 + `content_rules_content=full-draft.md 的 L6 节全部` + `triggered_rule_notes`。专审发明内容（逐条权要语义覆盖【完整性级】、创新处对应技术问题、有益效果技术原因、不反向改权要）。
-   - `impl-auditor`（契约 `agents/impl-auditor.md`）：传同上公共项 + `impl_rules_content=full-draft.md 的 L8 节全部` + `external_rule_refs_content=revision.md A4-1 核心 Sxx 范式条摘录`。专审具体实施方式（反向特征校验【完整性级】、Sxx 框架句逐字比对、每条权要步骤有解释、阈值/算法/超参/句式/零重复等）。
-   - `global-auditor`（契约 `agents/global-auditor.md`）：传 `stage=full-draft` + `md_path` + `claims_md_path` + 两脚本 JSON + `scoring.md` 全文 + `global_rules_content=global.md 全文` + `short_block_rules_content=full-draft.md 的 L4+L5+L7 节` + `docx_template_md_layer_content=docx-template.md 的 md 可判定条目摘录` + `triggered_rule_notes`。负责完整性一票否决 + G3-G6 全局项（术语一致以权要为基准）+ 摘要/摘要附图/附图说明短块（L7 只判自身格式；附图设计内容深审不在闸门范围，由用户人工把关）。
-   **通过判定与合并落盘**（合并口径唯一出处 `scoring.md` 计分方法）：global-auditor 完整性 PASS + 各路 1 级均 100% + 合并 2 级分 ≥90%；主 agent 合并三路报告落盘一份 `docs/审查报告-全文N稿.md`。未达标不得进入 DOCX，按合并后的最短回修清单改 `全文稿.md` 后重审：两脚本必重跑，上轮有 FAIL 的专审路重调，`global-auditor` 恒重调，上轮全 PASS 的专审路不重调。任一路两次失败时仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效，但脚本必须通过。
+7. 在 `docs/全文稿.md` 末尾追加 `## 附图设计（供手画 Visio 用）` 一节，按 `references/rules/figures.md` L9 执行（唯一出处：图 1 方法主流程必备且基于权要 1、子流程图默认不画、系统结构图按系统权要类型判定）。用户根据这一节在 Visio 中手画实际附图，本 skill 不输出图片文件。
+8. 写入 DOCX 之前，主 agent 只自查**任何闸门都不覆盖的项**：附图设计节的附图清单和节点数与权要 1、子步骤编号、系统权要相吻合（附图深审不在多路审查范围）。其余跨块项（权要保留、术语一致、案例性术语、禁用措辞、公式、模型/阈值细节、可实施性）一律交脚本与三路 auditor 终判，主 agent 不做全量初检；**直接依次跑两个机械化脚本**：先 `python3 scripts/check_hard_rules.py --md <案件文件夹>/docs/全文稿.md --stage full-draft --json`（第一类硬规则），再 `python3 scripts/check_cross_block.py --md <案件文件夹>/docs/全文稿.md --stage full-draft --claims-md <案件文件夹>/docs/权要稿.md`（第二类：结构抽取 + L8-0 步骤数同构 + 主步骤编号连续 + 依附合法 + 禁止合并展开；`--claims-md` 传入权要基准，因全文稿.md 不含冻结的权利要求书）。任一脚本不通过时按输出定点回修再重跑，不得跳过；结构抽取失败（`extraction_ok=false`）说明 Sx 步骤或权要写法不合 A/B 标准（L8-1 主步骤展开范式），按 `extraction_errors` 规范化后重跑。两个脚本都通过后**单条消息并行调用三路 auditor 做独立复核**（多路审查，每路独立 Agent、只带本路规则包；**规则一律传文件路径，不把规则内容抄进 prompt**——auditor 按契约自行 Read；`scoring.md` 的按路摘录已实体化为 `references/rules/scoring-<路名>.md` 静态文件，合并计分方法留在主 agent；权要冻结基准 `claims_md_path=docs/权要稿.md` 传给三路）：
+   - `content-auditor`（契约 `agents/content-auditor.md`）：传 `stage=full-draft` + `md_path=docs/全文稿.md` + `claims_md_path` + `mechanical_check_result` + `structure_check_result` + `scoring_excerpt_path=references/rules/scoring-content.md` + `content_rules_path=references/rules/full-draft.md`（只执行 L6 节）+ `triggered_rule_notes`。专审发明内容（逐条权要语义覆盖【完整性级】、创新处对应技术问题、有益效果技术原因、不反向改权要）。
+   - `impl-auditor`（契约 `agents/impl-auditor.md`）：传同上公共项 + `scoring_excerpt_path=references/rules/scoring-impl.md` + `impl_rules_path=references/rules/full-draft.md`（只执行 L8 节；Sxx 展开范式唯一出处即 L8-1）。专审具体实施方式（反向特征校验【完整性级】、Sxx 框架句逐字比对、每条权要步骤有解释、阈值/算法/超参/句式/零重复等）。
+   - `global-auditor`（契约 `agents/global-auditor.md`）：传 `stage=full-draft` + `md_path` + `claims_md_path` + 两脚本 JSON + `scoring_excerpt_path=references/rules/scoring-global.md` + `global_rules_path=references/rules/global.md`（只执行 G3-G6）+ `short_block_rules_path=references/rules/full-draft.md`（只执行 L4+L5+L7 节）+ `docx_template_rules_path=references/rules/docx-template.md`（只执行 md 层可判定条目）+ `triggered_rule_notes`。负责完整性一票否决 + G3-G6 全局项（术语一致以权要为基准）+ 摘要/摘要附图/附图说明短块（L7 只判自身格式；附图设计内容深审不在闸门范围，由用户人工把关）。
+   **通过判定、合并落盘（`docs/审查报告-全文N稿.md`）、回修重审与降级兜底一律按「审查闸门通用规则」节执行。**
 9. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
 10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文1稿-作者-发明题目全称.docx`。
 11. 由 `docx` 执行层采用 unpack → edit XML → pack，在权要一稿留空的槽位**就地填入**内容。骨架保护与分节落位的唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；分块注入（一次一块、注一块验一块）按 `full-draft.md`「全文稿分块撰写法」DOCX 注入层执行。
-12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收。
+12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收；完工报告按"完工报告"的**校验清单**格式逐规则打 ✅/❌/➖。
 
 ## DOCX 处理注意事项
 
@@ -192,7 +202,34 @@ python3 scripts/check_env.py --json
 
 - 输出文件路径
 - 完成阶段
+- **校验清单**（权要一稿/全文一稿交付时必附）：**直接从合并落盘的 `docs/审查报告-*.md` 与验收结论转录，逐规则编号打勾，不重新校验**。用 emoji 标记：✅ 通过、❌ 失败（注明原因）、➖ 不适用（注明理由）。按块分组列出，格式如下：
+
+  ```
+  校验清单：
+
+  【脚本闸门】
+  ✅ check_hard_rules.py 硬规则脚本 PASS
+  ✅ check_cross_block.py 结构/跨块校验 PASS
+
+  【权利要求书 L1】（权要稿）/【发明内容 L6】【具体实施方式 L8】（全文稿）
+  ✅ L1-1 权 1 ≤400 字
+  ✅ L1-1 从权依附多元化
+  ✅ L6-1 发明内容逐条权要覆盖
+  ➖ L6-2 系统从权效果对应（本案无系统从权）
+  …（本块每条 1 级 / 2 级规则逐条列出）
+
+  【全局与短块 G3-G6 / L2-L5 / L7】
+  ✅ G4 全文术语一致
+  …
+
+  【DOCX 验收】
+  ✅ docx 通用验证无错误
+  ✅ 模板骨架（sectPr / header / headerReference 完整）
+  ✅ 页眉与正文可见性符合当前稿次（G8-0 / G8-1）
+  ```
+
+  多轮回修的案子以**最终通过轮**的结论为准；auditor 增量复核中"沿用上轮"的项照常打 ✅ 并可标注"(沿用)"。返修交付时清单换为返修校验项（署名正确、老板批注条数不减、老板 delText 字数不变、修订数符合预期、docx validate 无新增错误）。
 - 修订模式下的交付类型：留痕稿/干净稿；若为干净稿，说明是否已清除批注；若为留痕稿，说明老板批注与修订已保留
 - 是否有未解决的需要用户澄清的事项
 
-默认不输出冗长的撰写检查报告。
+默认不输出冗长的撰写检查报告；校验清单逐规则只列"emoji + 规则编号 + 一句话"结论行，不展开证据（证据已在 `docs/审查报告-*.md` 落盘）。

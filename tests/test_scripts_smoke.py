@@ -554,13 +554,49 @@ class PatentScriptSmokeTests(unittest.TestCase):
     def test_innovation_points_driven_by_disclosure_annotations(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-        analyst_text = (SKILL_DIR / "agents" / "disclosure-analyst.md").read_text(encoding="utf-8")
 
         # 创新点以批注圈定为准，不自行判断
         self.assertIn("创新点以交底书批注为准", global_text)
         self.assertIn("不自行另判", skill_text)
-        self.assertIn("批注圈定的创新点", analyst_text)
-        self.assertIn("优先审查要求（批注）", analyst_text)
+        # disclosure-analyst 已废弃：事实提纲由主 agent 深读时亲自产出，批注驱动条款落在 SKILL.md 主流程
+        self.assertFalse((SKILL_DIR / "agents" / "disclosure-analyst.md").exists())
+        self.assertIn("批注圈定的创新点", skill_text)
+        self.assertIn("优先审查要求（批注）", skill_text)
+
+    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
+    def test_slimming_regression_guards(self):
+        """三项瘦身 + 增量复核的回归保护：防止改动回退成整篇传规则/全量重审。"""
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        scoring_text = (SKILL_DIR / "references" / "rules" / "scoring.md").read_text(encoding="utf-8")
+
+        # 1) scoring 摘录已实体化为静态文件并按路径传入，不整篇传卡
+        self.assertIn("不整篇传入任何 auditor", scoring_text)
+        for route in ("claims", "content", "impl", "global"):
+            self.assertTrue(
+                (SKILL_DIR / "references" / "rules" / f"scoring-{route}.md").exists(),
+                f"scoring-{route}.md 静态摘录缺失",
+            )
+        self.assertIn("scoring_excerpt_path", skill_text)
+        self.assertNotIn("scoring_rules_content", skill_text)
+        self.assertNotIn("scoring_excerpt_content", skill_text)
+
+        # 2) 规则一律传路径：四路契约用 *_path 字段且白名单放行契约点名路径
+        for name in ("claims-auditor", "content-auditor", "impl-auditor", "global-auditor"):
+            contract = (SKILL_DIR / "agents" / f"{name}.md").read_text(encoding="utf-8")
+            self.assertIn("scoring_excerpt_path", contract, name)
+            self.assertNotIn("_content` |", contract, f"{name} 仍有内容内联字段")
+            # 3) 增量复核：四路契约均支持 reaudit_context
+            self.assertIn("reaudit_context", contract, name)
+        self.assertIn("增量复核模式", skill_text)
+        self.assertNotIn("恒重调", skill_text)
+
+        # 4) facts.md 由主 agent 深读时亲自产出
+        self.assertIn("docs/facts.md", skill_text)
+
+        # 5) 闸门命令带 --md；权要基准回写条款存在
+        self.assertNotIn("check_hard_rules.py <", skill_text)
+        self.assertIn("回写更新 `docs/权要稿.md`", skill_text)
+        self.assertIn("权要联动回写", skill_text)
 
 
     def test_check_env_runs_stdlib_only_and_reports_deps(self):
@@ -635,7 +671,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         # 多路 auditor 契约含跨宿主说明 (属 core, 两分支恒在)
         for fname in ("global-auditor.md", "claims-auditor.md", "content-auditor.md", "impl-auditor.md"):
             auditor_text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
-            self.assertIn("跨宿主说明", auditor_text)
+            self.assertIn("跨宿主", auditor_text)
 
 
 if __name__ == "__main__":

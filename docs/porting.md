@@ -51,7 +51,7 @@ claude        权威分支 = core 开发主线（references/ scripts/ assets/ ag
 | 能力 | Claude（claude 分支 `SKILL.md`） | Codex（codex 分支 `SKILL.md`） |
 |---|---|---|
 | 环境自检 | `check_env.py --json`（检测 docx 插件） | `check_env.py --host codex --json`（跳过插件） |
-| 事实提纲 | 独立 Agent `disclosure-analyst` | 主 agent 按契约自查 |
+| 事实提纲 | 主 agent 深读交底书时亲自产出 `docs/facts.md`（`disclosure-analyst` 已废弃，契约备查 `docs/archive/disclosure-analyst.deprecated.md`） | 同左 |
 | 规则外审 | **多路并行独立 Agent**：权要稿 = `claims-auditor` + `global-auditor`；全文稿 = `content-auditor` + `impl-auditor` + `global-auditor`（物理隔离，每路只带本路规则包） | 主 agent 按同一组契约**分轮自查**（每轮只带一路规则包，获得同等注意力集中收益；无独立性，标注 + 依赖脚本闸门） |
 | DOCX 执行 | `document-skills:docx` 插件 | `python-docx` / XML 直接编辑 |
 

@@ -1,3 +1,5 @@
+> **已被取代（历史设计，2026-07 归档）**：disclosure-analyst 已废弃，`scoring_rules_content` 等字段名已改为 `*_path` 路径传递；现行方案见 `docs/design-multi-auditor.md` 与 `agents/*-auditor.md`。本文仅作历史备查。
+
 # patent skill subagent 拆分方案 — 修正稿
 
 本稿基于原方案 `patent-skill-subagent-拆分方案.md`，结合现有 `patent` skill 实际结构（`SKILL.md` 18KB / `rules.md` 阶段读取表 / `references/rules/*` 单一出处 / `references/cases/*` 案例层 / `docx` 执行层已分离）做增删。凡是原方案已经写对且落地无风险的部分，本稿只保留结论、不再重复论证；重点写"哪里要改"和"改成什么"。
