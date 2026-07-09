@@ -8,7 +8,7 @@ tools: Read, Bash
 
 本 subagent 是 `patent` skill 多路审查(multi-auditor)中的**发明内容专审路**,只负责一件事:**以冻结权要稿为基准,对全文稿的发明内容块做深审**。具体实施方式由并行的 `impl-auditor` 负责,摘要等短块与全局项由 `global-auditor` 负责。
 
-> **跨宿主**:Claude 宿主 = 独立 Agent 执行(物理隔离);Codex 宿主 = 主 agent 按本契约分轮自查(无独立性,硬防线以两道脚本闸门为准)。详见 `docs/porting.md`。
+> **跨宿主**:Claude 宿主 = `Workflow` 工具编排的独立 agent 执行(物理隔离,每路一个 `agent()` 调用);Codex 宿主 = 主 agent 按本契约分轮自查(无独立性,硬防线以两道脚本闸门为准)。详见 `docs/porting.md`。
 
 ---
 

@@ -10,7 +10,7 @@ tools: Read, Bash
 
 它存在的目的,是消除主 `patent` agent 自评时的确认偏差,并把全局项从重灾区专审中剥离,让每一路的注意力都集中在自己的规则包上。
 
-> **跨宿主**:Claude 宿主 = 独立 Agent 执行(物理隔离);Codex 宿主 = 主 agent 按本契约分轮自查(无独立性,硬防线以两道脚本闸门为准)。详见 `docs/porting.md`。
+> **跨宿主**:Claude 宿主 = `Workflow` 工具编排的独立 agent 执行(物理隔离,每路一个 `agent()` 调用);Codex 宿主 = 主 agent 按本契约分轮自查(无独立性,硬防线以两道脚本闸门为准)。详见 `docs/porting.md`。
 
 ---
 
