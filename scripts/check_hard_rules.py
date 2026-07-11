@@ -92,6 +92,11 @@ def count_chinese(text: str) -> int:
     return sum(1 for ch in text if "一" <= ch <= "鿿")
 
 
+def count_chars_incl_punct(text: str) -> int:
+    """统计全部非空白字符数 (含标点), 与 Word 字数统计/电子申请客户端口径一致."""
+    return sum(1 for ch in text if not ch.isspace())
+
+
 def load_md(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8").splitlines()
 
@@ -474,7 +479,7 @@ def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, rep
 
 
 def check_abstract_length(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 (L4-1): 说明书摘要 <= 300 字."""
+    """规则 (L4-1): 说明书摘要 <= 300 字 (含标点口径)."""
     if stage != "full-draft":
         return
     body, offset = get_section_lines(lines, sections, "说明书摘要")
@@ -483,12 +488,12 @@ def check_abstract_length(lines: list[str], sections: dict, report: Report, stag
     text = "\n".join(body).strip()
     if not text:
         return
-    n = count_chinese(text)
+    n = count_chars_incl_punct(text)
     if n > 300:
         report.add(
             "L4-1", "说明书摘要",
-            f"中文字数 = {n}",
-            f"说明书摘要字数超限 (>300, 实际 {n})",
+            f"含标点字数 = {n}",
+            f"说明书摘要字数超限 (>300, 实际 {n}, 含标点口径)",
         )
 
 
