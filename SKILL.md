@@ -5,7 +5,7 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 # 专利撰写工作流
 
-本 skill 用于用户在专利案件目录（macOS 默认 `~/Desktop/Patent/`、Windows 默认 `C:\Users\<用户名>\Desktop\Patent\`）下的专利撰写工作流。
+本 skill 用于用户在专利案件目录（macOS 默认 `~/Desktop/Patent/<撰写者>/`、Windows 默认 `C:\Users\<用户名>\Desktop\Patent\<撰写者>\`）下的专利撰写工作流。
 
 跨设备迁移与首次接入的完整步骤参考 `docs/install.md`（含 Windows/macOS 目录、路径适配、依赖自检）。
 
@@ -78,16 +78,16 @@ python3 scripts/check_env.py --json
 
 | 用户意图 | 阶段 | 输出版本 |
 |---|---|---|
-| 第一次撰写权要，权要一稿 | claims draft | `案件号-权要1稿-作者-发明题目全称.docx` |
+| 第一次撰写权要，权要一稿 | claims draft | `<撰写者>-权要1稿.docx` |
 | 老板对权要稿给批注 | claims revision | 下一稿 `权要2稿` 或 `权要3稿` |
-| 权要已定，写全文 | full draft | `案件号-全文1稿-作者-发明题目全称.docx` |
+| 权要已定，写全文 | full draft | `<撰写者>-全文1稿.docx` |
 | 老板对全文稿给批注 | full revision | 下一稿 `全文2稿` 或 `全文3稿` |
 
-如果缺以下任一元数据，应主动询问用户：案件号、作者名、发明题目、案件文件夹、当前阶段。不要在缺信息时凭猜测填。
+如果缺以下任一元数据，应主动询问用户：案件号、发明题目、案件文件夹、当前阶段。撰写者从案件路径中的 `夏晓贝/` 或 `王培元/` 一级目录自动识别；路径不在这两个目录下或无法唯一判断时再询问用户，不要凭猜测填。
 
 ## 案件文件夹约定
 
-用户在 `/Users/example/Desktop/Patent/` 下新建与发明题目对应的案件文件夹。目录布局的唯一出处是 `references/rules/global.md` G1：根目录只放对外交付 DOCX 和老板批注稿，工作文件（`交底书.docx`、`交底书.md`、`权要稿.md`、`全文稿.md`）统一放 `docs/` 子目录，旧案散落文件先迁入 `docs/` 再继续。
+用户在 `~/Desktop/Patent/夏晓贝/` 或 `~/Desktop/Patent/王培元/` 下新建与发明题目对应的案件文件夹。目录布局与交付命名的唯一出处是 `references/rules/global.md` G1：一级目录名即撰写者；案件根目录只放对外交付 DOCX 和老板批注稿，工作文件（`交底书.docx`、`交底书.md`、`权要稿.md`、`全文稿.md`）统一放 `docs/` 子目录，旧案散落文件先迁入 `docs/` 再继续。
 
 自动识别明显文件。如果有多个可能候选，请用户选择。
 
@@ -106,7 +106,7 @@ python3 scripts/check_env.py --json
 `权要一稿`：
 
 1. 先按 `rules.md` 阶段读取表读取 `references/rules/claims.md` 和 `references/rules/docx-template.md`（此阶段只读其 G8-0/G8-0b 及 md 层可判定条目；G8-1 XML 骨架细节留到 DOCX 执行层 step 8-12 再读）。确认案件文件夹下已有 `docs/` 子目录（无则创建），并把交底书 DOCX 放入 `docs/`。先调用官方 `document-skills:docx`（即 docx）skill 满足执行层门槛（**不用其向上下文回读交底书正文**），随后直接执行 `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md` 完成确定性转换；仅当脚本转换失败或批注锚点异常时，才用 `docx` skill 读原 DOCX 定点排查。交底书全文只在 step 2 深读 `交底书.md` 时进入上下文一次。
-2. **主 agent 亲自深读 `交底书.md` 并产出事实提纲**（G2 深读义务）：逐条核对 `==高亮==` 内容和 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、关键步骤、特征命名、数据来源、数据用途、预期效果，并在深读的同时把结构化事实提纲写入 `docs/facts.md`，固定结构为：技术问题、术语表、主流程、批注圈定的创新点、优先审查要求（批注）、数据来源/用途、潜在风险。**创新点以批注圈定为准，不自行另判**（G2-1）：批注 `> 💡 [批注 ...]` 已直接写出权利要求书创新点，按其圈定的步骤/特征展开创新特征，批注未点名的步骤按支撑环节处理；批注锚点丢失（只剩批注文字、不知选中哪段）时不猜测指向，回查 DOCX 选区或记入潜在风险。优先审查案件的关键词表缺失时记入潜在风险，向用户索取。
+2. **主 agent 亲自深读 `交底书.md` 并产出事实提纲**（G2 深读义务）：逐条核对 `> 💡 [批注 ...]` 行，确认技术问题—技术方案—技术效果链条闭合，提取核心技术问题、关键步骤、特征命名、数据来源、数据用途、预期效果，并在深读的同时把结构化事实提纲写入 `docs/facts.md`，固定结构为：技术问题、术语表、主流程、批注圈定的创新点、优先审查要求（批注）、数据来源/用途、潜在风险。**创新点以批注圈定为准，不自行另判**（G2-1）：批注 `> 💡 [批注 ...]` 已直接写出权利要求书创新点，按其圈定的步骤/特征展开创新特征，批注未点名的步骤按支撑环节处理；批注锚点丢失（只剩批注文字、不知选中哪段）时不猜测指向，回查 DOCX 选区或记入潜在风险。优先审查案件的关键词表缺失时记入潜在风险，向用户索取。
 3. 若 `facts.md` 的"潜在风险"段落有需要回问用户的项，或批注圈定的创新点在交底书中找不到支撑，先解决再进入撰写。
 4. 先用 Markdown 把专利稿件写在 `docs/权要稿.md`。
 5. **权要一稿仅撰写并展示三部分，按此顺序排列**：权利要求书 → 技术领域 → 背景技术。其他章节（说明书摘要、摘要附图、发明内容、附图说明、具体实施方式、说明书附图）一律留到全文一稿撰写，权要一稿阶段不要写入 `权要稿.md`，也不要在 DOCX 正文或页眉中显示。
@@ -118,7 +118,7 @@ python3 scripts/check_env.py --json
      - `global-auditor`（契约 `agents/global-auditor.md`）：传 `stage=claims-draft` + `md_path` + 两脚本 JSON + `scoring_excerpt_path=references/rules/scoring-global.md` + `global_rules_path=references/rules/global.md`（只执行 G3-G6）+ `short_block_rules_path=references/rules/claims.md`（只执行 L2+L3 节）+ `docx_template_rules_path=references/rules/docx-template.md`（只执行 md 层可判定条目）+ `triggered_rule_notes`。负责完整性一票否决 + G3-G6 全局项 + 技术领域/背景技术短块。
      **通过判定、合并落盘（`docs/审查报告-权要N稿.md`）、回修重审与降级兜底一律按「审查闸门通用规则」节执行。**
 8. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
-9. 由 `docx` 执行层把内置模板 `assets/docx/专利撰写模板.docx` 拷贝到案件文件夹（用户明确指定其他模板时除外），重命名为 `案件号-权要1稿-作者-发明题目全称.docx`。
+9. 由 `docx` 执行层把内置模板 `assets/docx/专利撰写模板.docx` 拷贝到案件文件夹（用户明确指定其他模板时除外），按 G1 从案件路径识别撰写者，并重命名为 `<撰写者>-权要1稿.docx`。
 10. 由 `docx` 执行层采用 unpack → edit XML → pack 流程填充当前稿次可见章节，就地替换、只控制最终可见文本和当前稿次页眉显示。模板骨架保护（sectPr/header/headerReference 全保留、不清空 body 重建）与各分节应填内容的唯一出处是 `references/rules/docx-template.md` G8-0、G8-0b、G8-1。
 11. 权要一稿的可见范围按 G8-0 对照表"权要稿"列与 G8-1 可见性规则执行（章节清单唯一出处为 G8-0 表，本步不复列）；后续阶段槽位保留不删。
 12. 完成后由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（分节3、分节4 内容落位）、G8-0b（发明名称与章节标题格式）、G8-1（骨架、可见性、案例性术语清理、权要1字数、分号断行）逐项验收。
@@ -156,7 +156,7 @@ python3 scripts/check_env.py --json
 
 1. 先按 `rules.md` 阶段读取表读取 `references/rules/full-draft.md`、`references/rules/figures.md` 和 `references/rules/docx-template.md`；**全文阶段不读 `references/rules/claims.md`**（权要已冻结，全文只补说明书，术语一致与权要对应已由 `global.md G4`、`full-draft.md L6` 覆盖；仅当返修批注涉及权要联动时才按需读 `claims.md`）。从最新已审权要 DOCX 开始，不从空白模板起稿；若候选不唯一，必须先请用户确认使用哪一份权要 DOCX。并从该 DOCX 提取权利要求书全文作为全文稿唯一权要基准（**DOCX 为权威源**）：提取后与 `docs/权要稿.md` 的权利要求书比对，不一致时以 DOCX 为准**回写更新 `docs/权要稿.md`**，使后续闸门与三路 auditor 使用的 `claims_md_path` 基准与 DOCX 保证一致；一致则直接使用。若 `docs/全文稿.md` 已存在且其权要内容或撰写时间早于最新已审权要，必须先按 `full-draft.md` L8-0 对照新权要重构受影响章节，禁止直接复用旧稿注入。
 2. 除非用户要求改动，保留已审权要不变。
-3. **在开始补写说明书前，获取或复用 `docs/facts.md`**：若 `docs/facts.md` 已在权要一稿阶段生成且交底书未变更，直接复用；否则由主 agent 在下述深读时亲自生成（结构同权要一稿 step 2 的事实提纲）。主 agent **必须亲自深读 `docs/交底书.md`**（G2 深读义务）并核对高亮、批注、技术链和潜在风险，`facts.md` 只是深读的落盘产物，不替代深读本身。
+3. **在开始补写说明书前，获取或复用 `docs/facts.md`**：若 `docs/facts.md` 已在权要一稿阶段生成且交底书未变更，直接复用；否则由主 agent 在下述深读时亲自生成（结构同权要一稿 step 2 的事实提纲）。主 agent **必须亲自深读 `docs/交底书.md`**（G2 深读义务）并核对批注、技术链和潜在风险，`facts.md` 只是深读的落盘产物，不替代深读本身。
 4. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/full-draft.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文；具体实施方式框架按 `full-draft.md` L8-0 Sxx 框架同构规则执行。
 5. 在说明书中解释每一条权要步骤。
 6. 加入有益效果的技术原因。
@@ -167,7 +167,7 @@ python3 scripts/check_env.py --json
    - `global-auditor`（契约 `agents/global-auditor.md`）：传 `stage=full-draft` + `md_path` + `claims_md_path` + 两脚本 JSON + `scoring_excerpt_path=references/rules/scoring-global.md` + `global_rules_path=references/rules/global.md`（只执行 G3-G6）+ `short_block_rules_path=references/rules/full-draft.md`（只执行 L4+L5+L7 节）+ `docx_template_rules_path=references/rules/docx-template.md`（只执行 md 层可判定条目）+ `triggered_rule_notes`。负责完整性一票否决 + G3-G6 全局项（术语一致以权要为基准）+ 摘要/摘要附图/附图说明短块（L7 只判自身格式；附图设计内容深审不在闸门范围，由用户人工把关）。
    **通过判定、合并落盘（`docs/审查报告-全文N稿.md`）、回修重审与降级兜底一律按「审查闸门通用规则」节执行。**
 9. 进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx`（即 docx）skill；若尚未调用，必须先调用 `docx` skill 后再继续。
-10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文1稿-作者-发明题目全称.docx`。
+10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `<撰写者>-全文1稿.docx`，撰写者按 G1 从案件路径识别。
 11. 由 `docx` 执行层采用 unpack → edit XML → pack，在权要一稿留空的槽位**就地填入**内容。骨架保护与分节落位的唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；分块注入（一次一块、注一块验一块）按 `full-draft.md`「全文稿分块撰写法」DOCX 注入层执行。
 12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收；完工报告按"完工报告"的**校验清单**格式逐规则打 ✅/❌/➖。
 

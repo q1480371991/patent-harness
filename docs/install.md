@@ -71,7 +71,7 @@ skill 内部与规则文件不硬编码个人绝对路径。使用时，把案�
 
 | macOS/Linux | Windows |
 |---|---|
-| `~/Desktop/Patent/<案件名>/` | `C:\Users\<用户名>\Desktop\Patent\<案件名>\` |
+| `~/Desktop/Patent/<撰写者>/<案件名>/` | `C:\Users\<用户名>\Desktop\Patent\<撰写者>\<案件名>\` |
 
 不要在新机器上沿用他人 `/Users/xxx/...` 的路径。
 

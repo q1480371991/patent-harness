@@ -563,6 +563,25 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("批注圈定的创新点", skill_text)
         self.assertIn("优先审查要求（批注）", skill_text)
 
+    def test_highlight_is_not_a_workflow_rule(self):
+        global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("高亮", global_text)
+        if CLAUDE_SKILL:
+            skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+            self.assertNotIn("高亮", skill_text)
+
+    def test_delivery_filename_uses_writer_directory(self):
+        global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
+
+        self.assertIn("`夏晓贝/` 和 `王培元/`", global_text)
+        self.assertIn("`<撰写者>-<稿次>.docx`", global_text)
+        self.assertIn("`王培元-权要1稿.docx`", global_text)
+        self.assertNotIn("`案件号-稿次-作者-发明题目全称.docx`", global_text)
+        if CLAUDE_SKILL:
+            skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("`<撰写者>-权要1稿.docx`", skill_text)
+
     @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_slimming_regression_guards(self):
         """三项瘦身 + 增量复核的回归保护：防止改动回退成整篇传规则/全量重审。"""
