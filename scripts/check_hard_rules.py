@@ -483,8 +483,12 @@ def check_latex_no_delimiter(lines: list[str], sections: dict, report: Report, s
             )
 
 
-def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 12: 全文稿 (说明书部分) 禁用'若干个'/'多个' (G6-1)."""
+def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, report: Report, stage: str, claims_text: str = "") -> None:
+    """规则 12: 全文稿 (说明书部分) 禁用'若干个'/'多个' (G6-1).
+
+    豁免: 权要分句原文复述 (L8-0 同构优先) —— 若量词及其后续短语 (量词+6字窗口)
+    同样出现在 --claims-md 传入的权要文本中, 视为权要原文复述, 不报violation.
+    """
     if stage != "full-draft":
         return
     # 说明书范围 = 除权利要求书外的章节
@@ -493,12 +497,18 @@ def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, rep
             continue
         for i in range(start, end):
             for w in FULL_DRAFT_FORBIDDEN_QUANTIFIERS:
-                if w in lines[i]:
-                    report.add(
-                        "G6-1", f"{title} 第{i + 1}行",
-                        lines[i].strip()[:80],
-                        f"说明书内禁用数量词: {w}",
-                    )
+                pos = lines[i].find(w)
+                if pos < 0:
+                    continue
+                if claims_text:
+                    phrase = lines[i][pos:pos + len(w) + 6]
+                    if phrase and phrase in claims_text:
+                        continue  # 权要原文复述, 同构优先豁免
+                report.add(
+                    "G6-1", f"{title} 第{i + 1}行",
+                    lines[i].strip()[:80],
+                    f"说明书内禁用数量词: {w}",
+                )
 
 
 def check_abstract_length(lines: list[str], sections: dict, report: Report, stage: str) -> None:
@@ -565,9 +575,10 @@ def _get_scan_ranges(lines: list[str], sections: dict, stage: str) -> list[tuple
 # -----------------------------------------------------------------------------
 
 
-def run_checks(md_path: Path, stage: str) -> Report:
+def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Report:
     lines = load_md(md_path)
     sections = split_sections(lines)
+    claims_text = claims_md.read_text(encoding="utf-8") if claims_md else ""
     report = Report(stage=stage, md_path=str(md_path))
 
     # 权要类检查仅在权利要求书章节存在时执行.
@@ -598,7 +609,7 @@ def run_checks(md_path: Path, stage: str) -> Report:
     # Phase 1c: 高误报风险
     check_noun_colon_definition(lines, sections, report, stage)
     check_latex_no_delimiter(lines, sections, report, stage)
-    check_full_draft_forbidden_quantifiers(lines, sections, report, stage)
+    check_full_draft_forbidden_quantifiers(lines, sections, report, stage, claims_text)
     check_abstract_length(lines, sections, report, stage)
     check_figure_numbering(lines, sections, report, stage)
 
@@ -628,6 +639,10 @@ def main() -> int:
         "--json", action="store_true",
         help="stdout 输出 JSON (给各路 auditor / 主 agent 消费)",
     )
+    parser.add_argument(
+        "--claims-md", default=None,
+        help="权要基准 md (full-draft 阶段可选; 用于量词检查的权要原文复述豁免)",
+    )
     args = parser.parse_args()
 
     md_path = Path(args.md)
@@ -635,7 +650,12 @@ def main() -> int:
         print(f"[check_hard_rules] ERROR md not found: {md_path}", file=sys.stderr)
         return 2
 
-    report = run_checks(md_path, args.stage)
+    claims_path = Path(args.claims_md) if args.claims_md else None
+    if claims_path and not claims_path.exists():
+        print(f"[check_hard_rules] ERROR claims-md not found: {claims_path}", file=sys.stderr)
+        return 2
+
+    report = run_checks(md_path, args.stage, claims_path)
 
     if args.json:
         print(json.dumps({
