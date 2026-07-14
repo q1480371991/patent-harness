@@ -171,6 +171,29 @@ def check_claim1_length(lines: list[str], sections: dict, report: Report) -> Non
         )
 
 
+def check_claim1_step_count(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 1b: 权要 1 主步骤最多不超过 6 个 (L1-1 硬上限; 3-5 个为宜属建议口径不在此报).
+
+    主步骤数 = 权要 1 块内非空行数 - 1 (扣除编号头行"1.一种...包括:");
+    与 claims-format-standard 的"每个分号步骤独立成段"口径一致,
+    步骤行内续写的"; 所述xx包括..."限定短句不另计步骤.
+    """
+    blocks = extract_claim_blocks(lines, sections)
+    if 1 not in blocks:
+        return  # 缺权要 1 已由 check_claim1_length 报
+    start, end = blocks[1]
+    body_lines = [ln for ln in lines[start:end] if ln.strip()]
+    if len(body_lines) < 2:
+        return  # 未按分段格式撰写, 由断行检查项报
+    n_steps = len(body_lines) - 1
+    if n_steps > 6:
+        report.add(
+            "L1-1", f"权利要求书 第{start + 1}行起",
+            f"权要 1 主步骤数 = {n_steps}",
+            f"权要 1 主步骤超过硬上限 6 个 (实际 {n_steps}), 应合并同一技术链上的连续动作或将细节下沉从属权要",
+        )
+
+
 def check_each_claim_one_period(lines: list[str], sections: dict, report: Report) -> None:
     """规则 2: 每条权要只用一个句号 (L1-1)."""
     blocks = extract_claim_blocks(lines, sections)
@@ -554,6 +577,7 @@ def run_checks(md_path: Path, stage: str) -> Report:
     if stage == "claims-draft" or has_claims_section:
         # Phase 1a: 字符/正则/字数类 (权要部分)
         check_claim1_length(lines, sections, report)
+        check_claim1_step_count(lines, sections, report)
         check_each_claim_one_period(lines, sections, report)
         check_semicolon_line_ending(lines, sections, report)
         check_claim_numbering(lines, sections, report)
