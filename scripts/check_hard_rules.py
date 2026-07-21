@@ -563,7 +563,8 @@ def check_figure_numbering(lines: list[str], sections: dict, report: Report, sta
 def _get_scan_ranges(lines: list[str], sections: dict, stage: str) -> list[tuple[str, int, int]]:
     ranges: list[tuple[str, int, int]] = []
     for title, (start, end) in sections.items():
-        # 跳过评分报告、审查报告等非正文; "附图设计"节只留 md 供手画 Visio、不进交付 DOCX (figures.md L9-1), 不按交付正文扫描
+        # 跳过评分报告、审查报告等非正文; "附图设计"节为旧版手画流程遗留(现行附图由
+        # render_patent_figure.py 从权要稿生成, figures.md L9), 旧案 md 中若存在仍跳过、不按交付正文扫描
         if any(x in title for x in ["评分报告", "审查报告", "元数据", "TODO", "附图设计", "供手画"]):
             continue
         ranges.append((title, start, end))
