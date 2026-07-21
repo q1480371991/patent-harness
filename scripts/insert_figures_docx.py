@@ -169,6 +169,15 @@ def main() -> int:
                                            args.max_height_cm)
     spec_cx, spec_cy = display_emu(args.png, args.spec_width_cm, args.max_height_cm)
 
+    registered: dict[str, tuple[str, str]] = {}
+
+    def shared_rid() -> tuple[str, str]:
+        """同一 PNG 只注册一份 media/relationship，两处 drawing 复用。"""
+        key = str(args.png.resolve())
+        if key not in registered:
+            registered[key] = register_media(args.unpacked, args.png)
+        return registered[key]
+
     # ---- 分节5（先处理文末，避免位置偏移影响分节2） ----
     sect4_p_start, sect4_p_end = find_paragraph_span(doc, sect_positions[3])
     final_sect_start = doc.rfind("<w:sectPr>")
@@ -199,7 +208,7 @@ def main() -> int:
             f"分节5：替换既有图1（{target.name}），尺寸 {spec_cx}x{spec_cy} EMU"
         )
     else:
-        rid, media_name = register_media(args.unpacked, args.png)
+        rid, media_name = shared_rid()
         doc_pr = next_doc_pr_id(doc)
         new_content = (
             image_paragraph(rid, doc_pr, spec_cx, spec_cy, "图1")
@@ -230,7 +239,7 @@ def main() -> int:
             f"分节2：替换既有摘要附图（{target.name}），尺寸 {abstract_cx}x{abstract_cy} EMU"
         )
     else:
-        rid, media_name = register_media(args.unpacked, args.png)
+        rid, media_name = shared_rid()
         # 清掉占位文本 run（如"图1。"），保留 pPr
         cleaned, removed = re.subn(
             r"<w:r(?:\s[^>]*)?>(?:(?!</w:r>).)*?<w:t(?:(?!</w:r>).)*?</w:r>",

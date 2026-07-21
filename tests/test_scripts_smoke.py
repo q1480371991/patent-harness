@@ -575,12 +575,20 @@ class PatentScriptSmokeTests(unittest.TestCase):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
 
         self.assertIn("`夏晓贝/` 和 `王培元/`", global_text)
-        self.assertIn("`<撰写者>-<稿次>.docx`", global_text)
-        self.assertIn("`王培元-权要1稿.docx`", global_text)
-        self.assertNotIn("`案件号-稿次-作者-发明题目全称.docx`", global_text)
+        # 现行 G1-1: 对外交付用全称命名, 禁止简写与状态后缀
+        self.assertIn("`案件号-稿次-作者-发明题目全称.docx`", global_text)
+        self.assertIn("不得使用 `<撰写者>-<稿次>.docx` 简写", global_text)
+        self.assertIn("不得加 `-留痕` 等状态后缀", global_text)
         if CLAUDE_SKILL:
             skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("`<撰写者>-权要1稿.docx`", skill_text)
+            self.assertIn("案件号-权要1稿-作者-发明题目全称.docx", skill_text)
+
+    def test_a_paradigm_anchor_matches_extractor(self):
+        """L8-0 展开段入口句锚点与 extract_structure.py 的主步骤正则互相匹配(防规则句面与脚本漂移)。"""
+        full_draft_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
+        self.assertIn("在步骤Sxx中，〔复述权1第xx分句原文〕，包括：", full_draft_text)
+        extractor_src = (SKILL_DIR / "scripts" / "extract_structure.py").read_text(encoding="utf-8")
+        self.assertIn("在步骤S", extractor_src)
 
     @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_slimming_regression_guards(self):

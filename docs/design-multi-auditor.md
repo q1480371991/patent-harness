@@ -2,7 +2,7 @@
 
 > **沿革注记（2026-07）**：本文档为设计稿；运行口径以 `SKILL.md`「审查闸门通用规则」与 `agents/*-auditor.md` 契约为准。scoring 已改为静态摘录文件按路径传入、所有 FAIL 路重审均走增量复核。
 
-日期:2026-07-08。本设计取代单一 `rule-auditor` 的审查架构,是 `docs/design-subagent-split.md` 的后续演进。
+日期:2026-07-08。本设计取代单一 `rule-auditor` 的审查架构,是 `docs/archive/design-subagent-split.deprecated.md`(已归档)的后续演进。
 
 ---
 
@@ -10,7 +10,7 @@
 
 单 `rule-auditor` 一次要装下全部规则(全文一稿 ≈30k tokens 规则 + 全文稿本体,单次 ~37k tokens),长清单逐项判定时注意力被稀释——这是"自评说 PASS、写入 DOCX 后仍有硬规则违反"的一类根因。
 
-`design-subagent-split.md` §1.1 否定过"每章节一个 agent",但那是针对**写作类** subagent(边写边回查权要的联动会丢失)。**审查是无状态只读任务、输入输出契约固定**,那些反对理由不适用;规则文件本身天然按内容块组织(L1/L6/L8/…),拆分边界现成。
+`design-subagent-split.deprecated.md`(现存于 `docs/archive/`)§1.1 否定过"每章节一个 agent",但那是针对**写作类** subagent(边写边回查权要的联动会丢失)。**审查是无状态只读任务、输入输出契约固定**,那些反对理由不适用;规则文件本身天然按内容块组织(L1/L6/L8/…),拆分边界现成。
 
 ## 2. 架构:4 个契约,按阶段路由 2-3 路
 
@@ -64,7 +64,7 @@
 
 ## 7. 宿主适配
 
-- **Claude(claude 分支 SKILL.md)**:单消息并行调起本阶段全部 auditor(独立 Agent,物理隔离)。
+- **Claude(claude 分支 SKILL.md)**:`Workflow` 工具一次编排本阶段全部 auditor(每路一个 `agent()`,物理隔离;降级顺序 Workflow → Agent 逐路派发 → 分轮自查,唯一出处 `SKILL.md`「审查闸门通用规则」降级兜底条,本行为设计稿沿革记录)。
 - **Codex(codex 分支 SKILL.md)**:无原生 subagent,按同一组契约**分轮自查**——每轮只带一路规则包,获得同等注意力集中收益;仍无独立性,完工报告标注,硬防线以脚本闸门为准。
 
 ## 8. 分支纪律变更(随本设计一并生效)

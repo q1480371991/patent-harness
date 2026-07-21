@@ -21,10 +21,10 @@
 | 全文一稿 | `global.md`、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md`、`cases/reviewer-preferences.md`（审批人偏好档案） | `claims.md` L1/L2/L3 一级规则（冻结块只读体检用，唯一出处 `full-draft.md`「权要冻结」节） | `claims.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动 |
 | 全文二稿/三稿 | `global.md`、`full-draft.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims.md` L1/L2/L3 一级规则（冻结块体检） | `claims.md` 其余内容，除非批注涉及权要联动 |
 | Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`，并按批注内容读 `claims.md`/`full-draft.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims.md` L1/L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
-
-> **docx-template.md 分层读取**：md 撰写阶段只读 G8-0 / G8-0b 及 md 层可判定条目；G8-1 XML 骨架与注入细节延后到进入 DOCX 执行层（SKILL.md step 8-12）时再读，避免前置占用撰写上下文。
 | DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
 | 附图设计 | `global.md`、`figures.md`，如需全文一致性再读 `claims.md` 和 `full-draft.md` | — | `revision.md`，除非存在批注返修 |
+
+> **docx-template.md 分层读取**：md 撰写阶段只读 G8-0 / G8-0b 及 md 层可判定条目；G8-1 XML 骨架与注入细节延后到进入 DOCX 执行层（权要一稿 step 8-12 / 全文一稿 step 9-12）时再读，避免前置占用撰写上下文。
 
 **加载顺序**：先读必读核心 → 判断当前批注/操作命中哪些触发条件 → 只加载命中的触发式块或 cases 详情。不得为省事一次性全量加载，也不得跳过命中的触发块导致漏规则。
 
