@@ -58,7 +58,7 @@
 - “保留后续槽位但控制最终可见”指：保留 XML 锚点，使未来槽位锚点仍可定位；不得删除整节、不得删除 `headerReference`、不得删除 header 文件、不得全局清空 body。执行层可通过保留空段落、不可见占位锚点或其他不暴露普通打印视图文本的方式隐藏非当前阶段槽位，但不能破坏全文一稿继续填充的定位基础。
 - 权要稿禁显章节按 G8-0 对照表“权要稿”列执行；权要 1 字数与分号断行按唯一出处 `claims.md` L1-1 执行，本节不复列。
 - `docs/archive/inject_md_to_template.deprecated.py` 是旧版清空 body 重建脚本，仅作历史备查，不得用于权要一稿/全文一稿；如需自动写入模板，必须先实现就地替换版脚本，确保保留 `sectPr`、`header*.xml` 和 `headerReference`。
-- 留痕返修注入新段落（带跟踪修订）时，若需把段末段落标记 `¶` 也标记为插入态，`<w:pPr>/<w:rPr>` 内的 `<w:ins .../>` 必须**作为第一个子元素**，置于 `<w:rFonts>`、`<w:sz>` 等格式元素之前；否则严格 schema 会拒绝（CT_ParaRPr 的子元素顺序：`ins | del | moveFrom | moveTo` 必须最先）。**Why:** 本次审核v2 → 全文3稿返修首次注入时把 `<w:ins>` 排在 `<w:rPr>` 末尾，触发 docx 通用校验报 "ins 不被允许，期望 rPrChange"。**How to apply:** 任何 Juventude 留痕注入脚本中拼装 `<w:pPr>/<w:rPr>` 时，先吐出 `<w:ins .../>`，再吐出格式子元素；`docx` skill 校验若仅余原文件自带的 schema 小瑕疵（如 m:plcHide、styles uiPriority）即视为通过。
+- 留痕返修注入新段落（带跟踪修订）时，若需把段末段落标记 `¶` 也标记为插入态，`<w:pPr>/<w:rPr>` 内的 `<w:ins .../>` 必须**作为第一个子元素**，置于 `<w:rFonts>`、`<w:sz>` 等格式元素之前；否则严格 schema 会拒绝（CT_ParaRPr 的子元素顺序：`ins | del | moveFrom | moveTo` 必须最先）。**Why:** 本次审核v2 → 全文3稿返修首次注入时把 `<w:ins>` 排在 `<w:rPr>` 末尾，触发 docx 通用校验报 "ins 不被允许，期望 rPrChange"。**How to apply:** 任何留痕注入脚本（署名为 `<用户指定署名>`，取值唯一出处 `SKILL.md`「默认立场」）中拼装 `<w:pPr>/<w:rPr>` 时，先吐出 `<w:ins .../>`，再吐出格式子元素；`docx` skill 校验若仅余原文件自带的 schema 小瑕疵（如 m:plcHide、styles uiPriority）即视为通过。
 - 留痕注入的其他四类执行陷阱——整段删除遗漏段内 OMML 公式对象、向 ins/del 混杂段插入时落点进入 del 块、自闭合修订标记被误判为未闭合、段落标记 rPr 内 ins 与 del 共存时的先后顺序——规避方法见 `references/cases/docx-execution.md` C-DOCX-4 至 C-DOCX-7（按需读取）。
 
 ### G8-2 全局 2级规则（质量优化）

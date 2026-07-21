@@ -348,7 +348,7 @@ def check_case_terms(lines: list[str], sections: dict, report: Report) -> None:
 
 
 def check_background_length_and_paragraphs(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 18/19: 背景技术字数 270-350 / 段落数 2-3 (L3-1)."""
+    """规则 18/19: 背景技术字数 250-350 / 段落数 2-3 (L3-1)."""
     if stage not in {"claims-draft", "full-draft"}:
         return
     body, offset = get_section_lines(lines, sections, "背景技术")
@@ -358,11 +358,11 @@ def check_background_length_and_paragraphs(lines: list[str], sections: dict, rep
     if not text:
         return
     n = count_chinese(text)
-    if not (270 <= n <= 350):
+    if not (250 <= n <= 350):
         report.add(
             "L3-1", "背景技术",
             f"中文字数 = {n}",
-            f"背景技术字数应在 270-350 之间 (实际 {n})",
+            f"背景技术字数应在 250-350 之间 (实际 {n})",
         )
     # 段落数: 以空行分段
     paragraphs = [p for p in re.split(r"\n\s*\n", text) if p.strip()]

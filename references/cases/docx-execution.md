@@ -6,22 +6,22 @@
 
 ---
 
-## C-DOCX-1 给老板批注挂 Juventude 回复批注（手工挂载法）
+## C-DOCX-1 给老板批注挂 AI 署名回复批注（手工挂载法）
 
-**触发**：返修时要逐条回复老板批注、挂 AI 署名的 reply。
+**触发**：返修时要逐条回复老板批注、挂 AI 署名的 reply。回复批注作者署名一律用 `<用户指定署名>`（取值唯一出处 `SKILL.md`「默认立场」：不设默认值，未提供时先询问用户），下文以 `<署名>` 指代。
 
 **为什么不用 `comment.py`**：`docx` skill 的 `comment.py` 会无条件新建 `commentsIds.xml`、`commentsExtensible.xml` 部件并注册关系。若原文件只含 `comments.xml`+`commentsExtended.xml`（很多 WPS/Word 导出的批注稿就是这样），新建的部件不会被正确注册到 `[Content_Types].xml` 与 `document.xml.rels`，产生未注册孤立部件，Word 打开可能报错。
 
 **最小侵入挂载步骤**（只动三个文件，不新建部件、不新增关系）：
 
-1. `word/comments.xml`：在 `</w:comments>` 前追加回复评论块，作者署名 `Juventude`，每条给唯一 `w:id`（取现有最大 id 之上）和唯一 8 位十六进制 `w14:paraId`；评论段格式（`pStyle`、`rPr`）复制原有评论块以保持一致。
+1. `word/comments.xml`：在 `</w:comments>` 前追加回复评论块，作者署名 `<署名>`，每条给唯一 `w:id`（取现有最大 id 之上）和唯一 8 位十六进制 `w14:paraId`；评论段格式（`pStyle`、`rPr`）复制原有评论块以保持一致。
 2. `word/commentsExtended.xml`：在 `</w15:commentsEx>` 前为每条回复追加
    `<w15:commentEx w15:paraId="<回复paraId>" w15:paraIdParent="<父批注paraId>" w15:done="0"/>`，
    其中父批注 paraId 取自 `comments.xml` 中父评论 `<w:p w14:paraId="...">`（这是回复嵌套显示的关键）。
 3. `word/document.xml`：在父批注的 `commentReference` run 之后插入回复的
    `<w:r><w:commentReference w:id="<回复id>"/></w:r>`。点锚点批注（只有 `commentReference`、无 `commentRangeStart/End`）也按此处理。
 
-**校验**：作者集合含 `Juventude`；老板原批注条数与 `delText` 字数不减；`commentReference` 总数 = 原批注数 + 回复数；`docx` skill `validate` 无新增错误。
+**校验**：作者集合含 `<署名>`；老板原批注条数与 `delText` 字数不减；`commentReference` 总数 = 原批注数 + 回复数；`docx` skill `validate` 无新增错误。
 
 **注意**：老板原批注、原修订痕迹一律原样保留，不动。
 

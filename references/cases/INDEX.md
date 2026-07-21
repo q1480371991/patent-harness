@@ -8,7 +8,7 @@
 
 ## DOCX 执行层避坑
 
-- **要挂 Juventude 回复批注** → `docx-execution.md:C-DOCX-1` (手工挂载法：只动 comments/commentsExtended/document 三文件，避免 comment.py 产生孤立部件)
+- **要挂 AI 署名回复批注（署名 = `<用户指定署名>`，取值唯一出处 `SKILL.md`）** → `docx-execution.md:C-DOCX-1` (手工挂载法：只动 comments/commentsExtended/document 三文件，避免 comment.py 产生孤立部件)
 - **交付干净稿、需清除既有 tracked changes** → `docx-execution.md:C-DOCX-2` (清痕清单：接受/拒绝 del/ins/pPrChange/rPrChange，保留段落与 sectPr)
 - **留痕注入段落标记报 schema 错** → `docx-execution.md:C-DOCX-3` (pPr/rPr 内 ins 必须排第一个子元素)
 - **要整段留痕删除含公式的段落** → `docx-execution.md:C-DOCX-4` (OMML 不是 w:r，按 run 遍历会漏删，残留公式挤入下段)
