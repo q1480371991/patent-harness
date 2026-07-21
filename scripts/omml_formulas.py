@@ -130,9 +130,12 @@ def fix_settings(docx_path: Path, font: str) -> str:
         data = {n: z.read(n) for n in names}
     settings = data["word/settings.xml"].decode("utf-8")
     simplified = f'<m:mathPr><m:mathFont m:val="{font}"/></m:mathPr>'
-    if _MATHPR.search(settings):
-        settings = _MATHPR.sub(simplified, settings, count=1)
-        settings = _MATHPR.sub("", settings)  # 清掉可能的多余重复块
+    m = _MATHPR.search(settings)
+    if m:
+        # 先替换首个，再只对其后的余文清重复块（不能全局清，否则把刚替换的也删掉）
+        head = settings[: m.start()] + simplified
+        tail = _MATHPR.sub("", settings[m.end():])
+        settings = head + tail
     else:
         # 无 mathPr：补上（需保证 m 命名空间已声明）
         root_m = re.search(r"<w:settings\b[^>]*>", settings)
@@ -164,8 +167,19 @@ SAFE_FONTS = {
     "DengXian", "Calibri", "Cambria", "Cambria Math", "STIX Two Math",
     "DejaVu Math TeX Gyre", "Arial", "Courier New", "Symbol", "Wingdings",
     "Segoe UI", "Helvetica", "PingFang SC", "Songti SC", "STSong", "华文宋体",
+    "PMingLiU", "MingLiU", "新細明體", "MS Mincho", "ＭＳ 明朝",
 }
+# 只扫 <w:rFonts> 元素内的字体属性（不能全文扫属性名：<w:lang w:eastAsia="zh-CN"/>
+# 的语言代码会被误报成字体）
+_RFONTS_TAG = re.compile(r"<w:rFonts\b[^>]*>")
 _RFONT_ATTR = re.compile(r'w:(?:ascii|hAnsi|eastAsia|cs)="([^"]+)"')
+
+
+def _referenced_fonts(xml: str) -> set:
+    fonts = set()
+    for tag in _RFONTS_TAG.findall(xml):
+        fonts.update(_RFONT_ATTR.findall(tag))
+    return fonts
 _EMPTY_SHELL = re.compile(r"<m:(?:e|sub|sup|num|den)\s*/>")
 
 
@@ -188,7 +202,7 @@ def check_docx(docx_path: Path) -> dict:
     ) is not None
     font_m = re.search(r'<m:mathFont m:val="([^"]+)"', mathpr_xml)
 
-    referenced = set(_RFONT_ATTR.findall(styles)) | set(_RFONT_ATTR.findall(doc))
+    referenced = _referenced_fonts(styles) | _referenced_fonts(doc)
     unknown_fonts = sorted(f for f in referenced if f not in SAFE_FONTS)
 
     result = {

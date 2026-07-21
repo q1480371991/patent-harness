@@ -22,12 +22,12 @@
 | 分节 | 页眉（default header） | 正文应填内容 | 权要稿 | 全文稿 |
 |---|---|---|---|---|
 | 1 | 说明书摘要 | 摘要正文一段（≤300字） | 留空 | 必填 |
-| 2 | 摘要附图 | `图1。`（或按 L5 选定的代表图编号） | 留空 | 必填 |
+| 2 | 摘要附图 | 嵌入图 1 PNG（`scripts/insert_figures_docx.py` 注入；无方法独权时为用户自备代表图） | 留空 | 必填 |
 | 3 | 权利要求书 | 权要 1..N | 必填 | 保留已审权要 |
 | 4 | 说明书 | 按序：发明名称 → 技术领域 → 背景技术 → 发明内容 → 附图说明 → 具体实施方式 | 只填发明名称、技术领域、背景技术 | 全部章节 |
-| 5 | 说明书附图 | 留空段落（实际附图由用户按 L9 附图设计在 Word 中手工插入，AI 不填图号占位文本） | 留空 | 留空 |
+| 5 | 说明书附图 | 图 1 PNG + “图1”图题（`scripts/insert_figures_docx.py` 注入；审核人另要求的附图由用户自备图片后一并注入） | 留空 | 必填 |
 
-- 分节 1、2、5 的正文极短或留空是**设计如此**，不得把其他章节内容挤入这三个分节。
+- 分节 1 的正文极短是**设计如此**；分节 2、5 只承载附图（全文稿阶段由注入脚本写入），不得把其他章节内容挤入这三个分节。
 - 分节 4 内部章节顺序固定，不得调换、不得缺标题；权要稿阶段分节 4 中"发明内容/附图说明/具体实施方式"不可见。
 - 交付前必须逐分节核对本表：每个分节的正文与本表一致、章节标题齐全且顺序正确。
 
@@ -75,9 +75,22 @@
 - 全文一稿再按 L4–L9 对应阶段替换说明书摘要、摘要附图、发明内容、附图说明、具体实施方式、说明书附图等槽位；不要提前删除未来阶段需要的结构槽位。
 - 正文章节中当前稿次应交付的文本应已替换为当前案件文本，当前可见文本中的任何案例性术语（如另一案的对象名"特征 1"、"智慧农业"、"xx 模型"、示例参数值等）已清除。
 
+### G8-3 公式原生 OMML 注入（硬性约束）
+
+写入策略的唯一出处是 `references/rules/global.md` G6-1（默认原生公式、pandoc 缺失才回退纯文本）；本节管执行层怎么做：
+
+- 公式段一律用 `scripts/omml_formulas.py gen` 产出的整段 `<w:p>…<m:oMathPara>…</w:p>` XML：**整段插入** document.xml，不得拆开重组；不得给公式段添加段落级 `<w:jc w:val="center"/>`（居中由 oMathParaPr 自带，双重居中会让 WPS 把公式降级成线性文本）；不得把公式编号写成公式后的独立文本 run（编号用 gen 的 `--number` 内嵌为 `\qquad\text{(N)}`）。
+- 注入完成、pack 之后收尾两步必跑：
+  1. `omml_formulas.py fix-settings <docx>` — 把 settings.xml 的 mathPr 重建为仅 `m:mathFont`（按平台字体：macOS=STIX Two Math / Windows=Cambria Math / Linux=DejaVu Math TeX Gyre）；python-docx/WPS 模板默认 mathPr 携带的 `defJc`/`dispDef`/`intLim`/`naryLim` 是 WPS 降级源。
+  2. `omml_formulas.py check <docx>` — 空结构壳（`<m:e/>` 等）= FAIL 必修；`<m:d>` 定界符、mathPr 未简化、幽灵字体告警须逐条处置或在完工报告书面确认。
+- **样式链字体健康（幽灵字体防线）**：公式正体 run（函数名等）沿段落样式链解析西文字体；样式链引用系统不存在的字体时，WPS 数学环境不做字体回退、正体部分直接空白。默认模板已修复（Normal 样式的 `Dutch801 Rm BT` → `Times New Roman`）；更换或引入其他模板时，必须先跑 `check` 核对幽灵字体告警再注入公式。
+- LaTeX 源码中不使用 `\left(...\right)`（gen 默认自动归一为普通括号）：可伸缩定界符 `<m:d>` 在 WPS 深嵌套公式中渲染留白。
+- 症状排查口诀与实测案例见 `references/cases/docx-execution.md` C-DOCX-8（按需读取）。
+
 可用脚本：
 
 - `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`
+- `scripts/omml_formulas.py gen|fix-settings|check` — 公式 LaTeX → 原生 OMML 公式段生成、数学字体/mathPr 修正、公式健康体检（用法见 G8-3；pandoc 探测已内置）。
 - `scripts/verify_docx_skeleton.py <file.docx> [--stage 权要|全文] [--expect-sectpr N] [--expect-headers N]` — 收尾一次性校验骨架机械项（sectPr 数、header 数、headerReference、残留修订痕迹、可见页眉、comments 部件注册）。基准与模板不同时用 `--expect-*` 传实际值。只覆盖机械项；标题加粗/顶格/字号和正文内容落位仍需 `patent` 人工核对一次。
 
 历史脚本：

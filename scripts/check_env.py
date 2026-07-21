@@ -82,15 +82,46 @@ def check_python_docx() -> dict:
     }
 
 
+def check_pillow() -> dict:
+    ok = importlib.util.find_spec("PIL") is not None
+    return {
+        "name": "Pillow",
+        "category": "pip",
+        "required": True,
+        "ok": ok,
+        "detail": "import PIL" + (" 成功" if ok else " 失败 (未安装)") + " (附图渲染 render_patent_figure.py 用)",
+        "auto_installable": True,
+        "pip_name": "pillow",
+        "install_hint": f"{sys.executable} -m pip install pillow",
+    }
+
+
 def check_pandoc() -> dict:
     path = shutil.which("pandoc")
+    if not path:
+        # 与 scripts/omml_formulas.py 的探测清单保持一致
+        home = Path.home()
+        for cand in (
+            home / ".local/bin/pandoc",
+            home / "miniconda3/bin/pandoc",
+            Path("/opt/homebrew/bin/pandoc"),
+            Path("/usr/local/bin/pandoc"),
+            Path("C:/Program Files/Pandoc/pandoc.exe"),
+        ):
+            if cand.exists():
+                path = str(cand)
+                break
     ok = path is not None
     return {
         "name": "pandoc",
         "category": "system",
-        "required": False,  # 可选: 脚本不直接调用, 仅偶尔转格式时辅助
+        "required": False,  # 推荐: omml_formulas.py 用它把公式转原生 OMML; 缺失时公式回退纯 LaTeX 文本
         "ok": ok,
-        "detail": (f"已找到 {path}" if ok else "未找到 (可选, 仅在需要格式转换时用到)"),
+        "detail": (
+            f"已找到 {path}"
+            if ok
+            else "未找到 (推荐安装: 公式原生 OMML 转换需要; 缺失时公式回退纯 LaTeX 文本写入)"
+        ),
         "auto_installable": False,
         "install_hint": _install_hint({
             "Darwin": "brew install pandoc",
@@ -121,6 +152,7 @@ def run_checks(host: str = "claude") -> list[dict]:
     checks = [
         check_python_version(),
         check_python_docx(),
+        check_pillow(),
         check_pandoc(),
     ]
     # document-skills:docx 仅 Claude 宿主适用; Codex 用 python-docx 直连, 不检测插件.

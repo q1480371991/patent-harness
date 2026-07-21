@@ -120,7 +120,105 @@ def add_minimal_comment(docx_path: Path, comment_text: str):
     shutil.move(tmp_path, docx_path)
 
 
+def _find_pandoc():
+    found = shutil.which("pandoc")
+    if found:
+        return found
+    for cand in (
+        Path.home() / ".local/bin/pandoc",
+        Path.home() / "miniconda3/bin/pandoc",
+        Path("/opt/homebrew/bin/pandoc"),
+        Path("/usr/local/bin/pandoc"),
+    ):
+        if cand.exists():
+            return str(cand)
+    return None
+
+
+PANDOC_AVAILABLE = _find_pandoc() is not None
+
+
 class PatentScriptSmokeTests(unittest.TestCase):
+    @unittest.skipUnless(PANDOC_AVAILABLE, "pandoc 不可用, 跳过公式 OMML 生成测试")
+    def test_omml_formulas_gen_produces_block_omml(self):
+        import json
+
+        result = run_script(
+            "omml_formulas.py", "gen",
+            "--latex", r"Z_k=\mathrm{LN}(Z_{k-1}+\mathrm{ReLU}(x))",
+            "--number", "12",
+        )
+        data = json.loads(result.stdout)
+        self.assertEqual(len(data), 1)
+        xml = data[0]["xml"]
+        # 块级 oMathPara + 编号内嵌, WPS 才能渲染为可编辑二维公式 (G8-3)
+        self.assertIn("m:oMathPara", xml)
+        self.assertIn("(12)", xml)
+        # pStyle 已剥离 (不依赖目标文档样式表); 无段落级居中 (由 oMathParaPr 承担)
+        self.assertNotIn("pStyle", xml)
+        self.assertNotIn('w:jc w:val="center"', xml)
+        self.assertEqual(data[0]["m_d_count"], 0)
+
+    @unittest.skipUnless(PANDOC_AVAILABLE, "pandoc 不可用, 跳过公式 OMML 生成测试")
+    def test_omml_formulas_gen_normalizes_left_right(self):
+        import json
+
+        # \left( \right) 生成 <m:d> 可伸缩定界符, WPS 深嵌套渲染留白 (C-DOCX-8);
+        # gen 默认归一为普通括号
+        result = run_script(
+            "omml_formulas.py", "gen",
+            "--latex", r"y=\left(\frac{a}{b}\right)+\left|c\right|",
+        )
+        data = json.loads(result.stdout)
+        self.assertEqual(data[0]["m_d_count"], 0)
+        self.assertNotIn("<m:d>", data[0]["xml"])
+
+    def test_omml_formulas_fix_settings_and_check(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            docx_path = Path(tmp) / "math.docx"
+            doc = Document()
+            doc.add_paragraph("正文")
+            doc.save(docx_path)
+
+            # python-docx 默认模板 mathPr 带 Cambria Math + defJc/dispDef 等降级源
+            run_script("omml_formulas.py", "fix-settings", str(docx_path), "--font", "STIX Two Math")
+            result = run_script("omml_formulas.py", "check", str(docx_path))
+            data = json.loads(result.stdout)
+            self.assertTrue(data["mathpr_simplified"])
+            self.assertEqual(data["math_font"], "STIX Two Math")
+            self.assertEqual(data["empty_shell_count"], 0)
+            self.assertEqual(data["errors"], [])
+
+    def test_native_formula_workflow_is_wired(self):
+        global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
+        docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
+        case_text = (SKILL_DIR / "references" / "cases" / "docx-execution.md").read_text(encoding="utf-8")
+
+        # G6-1 落盘策略: md 层仍写 LaTeX 源码, DOCX 层转原生 OMML
+        self.assertIn("omml_formulas.py", global_text)
+        self.assertIn("原生可编辑二维公式", global_text)
+        # 执行层细则 G8-3 与案例 C-DOCX-8 存在且互相指向
+        self.assertIn("G8-3", docx_text)
+        self.assertIn("omml_formulas.py", docx_text)
+        self.assertIn("C-DOCX-8", docx_text)
+        self.assertIn("C-DOCX-8", case_text)
+        self.assertIn("幽灵字体", case_text)
+        self.assertTrue((SCRIPTS_DIR / "omml_formulas.py").exists())
+        if CLAUDE_SKILL:
+            skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("omml_formulas.py", skill_text)
+
+    def test_bundled_template_has_no_ghost_font(self):
+        # 模板样式链引用系统不存在的字体 (如 Dutch801 Rm BT) 会让 WPS 公式
+        # 正体部分空白 (C-DOCX-8 实测根因), 模板资产必须保持无幽灵字体
+        template = SKILL_DIR / "assets" / "docx" / "专利撰写模板.docx"
+        with zipfile.ZipFile(template) as z:
+            styles = z.read("word/styles.xml").decode("utf-8")
+        self.assertNotIn("Dutch801", styles)
+        self.assertIn("Times New Roman", styles)
+
     def test_disclosure_docx_to_md_preserves_highlights_and_comments(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -252,7 +350,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("headerReference", docx_text)
         self.assertIn("不得替代 `docx` skill 的执行层", docx_text)
 
-        self.assertIn("说明书附图设计规则", figures_text)
+        self.assertIn("附图自动生成规则", figures_text)
         self.assertIn("图 1", figures_text)
         self.assertIn("Visio", figures_text)
     @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
@@ -295,9 +393,9 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("后续阶段槽位保留不删", skill_text)
 
         self.assertIn("全文终稿目标约 1.5–2 万字", full_text)
-        self.assertIn("存在方法独立权要时必备", figures_text)
-        self.assertIn("存在功能模块式系统/装置独权或系统侧独立结构创新时必备", figures_text)
-        self.assertIn("从对应子步骤句末结果性表达中提取产物名", figures_text)
+        self.assertIn("render_patent_figure.py", figures_text)
+        self.assertIn("insert_figures_docx.py", figures_text)
+        self.assertIn("子流程图默认不画", figures_text)
 
         self.assertIn("同类问题", revision_text)
         self.assertIn("原稿、返修稿和 `comments.xml`", revision_text)
@@ -319,10 +417,10 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("权利要求中不写公式", global_text)
         self.assertIn("解释每个参数", global_text)
 
-        self.assertIn("计算机设备式系统/装置权", figures_text)
-        self.assertIn("功能模块式系统/装置独权", figures_text)
-        self.assertIn("不机械生成业务模块式系统图", figures_text)
-        self.assertIn("计算机设备结构示意图", figures_text)
+        self.assertIn("构造保证", figures_text)
+        self.assertIn("替换语义", figures_text)
+        self.assertIn("重新生成", figures_text)
+        self.assertIn("用户自备", figures_text)
 
         for row in [
             "| 全局 1级规则 | 所有块、所有阶段 |",
@@ -359,9 +457,9 @@ class PatentScriptSmokeTests(unittest.TestCase):
 
         self.assertIn("无方法独立权要", full_text)
         self.assertIn("主要保护主题", full_text)
-        self.assertIn("附图设计一致", full_text)
+        self.assertIn("附图说明一致", full_text)
         self.assertIn("句末标点", figures_text)
-        self.assertIn("分号/句号", figures_text)
+        self.assertIn("分号分句", figures_text)
 
     @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_dedup_and_segmented_write_rules_are_preserved(self):
@@ -641,10 +739,16 @@ class PatentScriptSmokeTests(unittest.TestCase):
             env=env, check=False,
         )
         # 脚本本身不能因为 import 第三方失败而崩溃: returncode 只应是
-        # 0 (必需项齐) 或 缺失必需项数; -S 剥离 site 会让 python-docx 不可见,
-        # 故这里只断言"未异常崩溃"(<2 且能产出合法 JSON), 不锁具体值.
-        self.assertLess(proc.returncode, 2, msg=f"check_env 异常崩溃: {proc.stderr[-300:]}")
-        data = json.loads(proc.stdout)  # 崩溃则这里抛 JSONDecodeError
+        # 0 (必需项齐) 或 缺失必需项数; -S 剥离 site 会让 pip 类必需项不可见.
+        # 不锁具体数值 (必需项清单会演进, 如新增 Pillow), 断言 rc == 报告的缺失数.
+        data = json.loads(proc.stdout)  # 崩溃则这里抛 JSONDecodeError / stdout 为空
+        missing_required = sum(
+            1 for c in data["checks"] if c["required"] and c["ok"] is False
+        )
+        self.assertEqual(
+            proc.returncode, missing_required,
+            msg=f"check_env 异常崩溃或退出码失真: {proc.stderr[-300:]}",
+        )
         names = {c["name"] for c in data["checks"]}
         self.assertIn("python-docx", names)
         self.assertIn("pandoc", names)
@@ -699,6 +803,104 @@ class PatentScriptSmokeTests(unittest.TestCase):
         for fname in ("global-auditor.md", "claims-auditor.md", "content-auditor.md", "impl-auditor.md"):
             auditor_text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
             self.assertIn("跨宿主", auditor_text)
+
+
+class FigureScriptsSmokeTest(unittest.TestCase):
+    """render_patent_figure.py + insert_figures_docx.py 冒烟：权要稿 → PNG → 注入 XML."""
+
+    CLAIMS_MD = (
+        "# 测试权要稿\n\n## 权利要求书\n\n"
+        "1.一种测试数据处理方法，其特征在于，包括：\n\n"
+        "采集测试输入数据，得到输入序列；\n\n"
+        "对所述输入序列进行特征提取，得到特征向量；\n\n"
+        "根据所述特征向量生成测试处理指令。\n\n"
+        "2.根据权利要求1所述的测试数据处理方法，其特征在于，包括：省略。\n"
+    )
+
+    MINIMAL_SECT = (
+        "    <w:p>\n      <w:pPr>\n        <w:sectPr>\n"
+        '          <w:pgSz w:w="11906" w:h="16838"/>\n'
+        "        </w:sectPr>\n      </w:pPr>\n    </w:p>\n"
+    )
+
+    MINIMAL_DOC = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">\n'
+        "  <w:body>\n"
+        + MINIMAL_SECT * 4
+        + "    <w:sectPr>\n"
+        '      <w:pgSz w:w="11906" w:h="16838"/>\n'
+        "    </w:sectPr>\n"
+        "  </w:body>\n"
+        "</w:document>\n"
+    )
+
+    MINIMAL_RELS = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
+        'Target="styles.xml"/></Relationships>\n'
+    )
+
+    MINIMAL_CT = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="xml" ContentType="application/xml"/></Types>\n'
+    )
+
+    def test_render_then_insert_roundtrip(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            claims = tmp / "权要稿.md"
+            claims.write_text(self.CLAIMS_MD, encoding="utf-8")
+            png = tmp / "figure-1.png"
+            result = run_script(
+                "render_patent_figure.py", "--claims-md", claims, "--output", png
+            )
+            self.assertTrue(png.exists())
+            self.assertEqual(png.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertIn("S11", result.stdout)
+
+            unpacked = tmp / "unpacked"
+            (unpacked / "word" / "_rels").mkdir(parents=True)
+            (unpacked / "word" / "document.xml").write_text(
+                self.MINIMAL_DOC, encoding="utf-8"
+            )
+            (unpacked / "word" / "_rels" / "document.xml.rels").write_text(
+                self.MINIMAL_RELS, encoding="utf-8"
+            )
+            (unpacked / "[Content_Types].xml").write_text(
+                self.MINIMAL_CT, encoding="utf-8"
+            )
+            run_script("insert_figures_docx.py", unpacked, "--png", png)
+
+            doc = (unpacked / "word" / "document.xml").read_text(encoding="utf-8")
+            self.assertEqual(doc.count("<w:drawing>"), 2)  # 分节2 + 分节5
+            self.assertIn(">图1</w:t>", doc)  # 分节5 图题
+            rels = (unpacked / "word" / "_rels" / "document.xml.rels").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("media/image1.png", rels)
+            self.assertTrue((unpacked / "word" / "media" / "image1.png").exists())
+            ct = (unpacked / "[Content_Types].xml").read_text(encoding="utf-8")
+            self.assertIn('Extension="png"', ct)
+
+    def test_render_rejects_single_clause_claim(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            claims = tmp / "权要稿.md"
+            claims.write_text(
+                "## 权利要求书\n\n1.一种测试系统，其特征在于，包括：处理器。\n",
+                encoding="utf-8",
+            )
+            result = run_script_allow_fail(
+                "render_patent_figure.py",
+                "--claims-md", claims, "--output", tmp / "figure-1.png",
+            )
+            self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

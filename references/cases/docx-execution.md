@@ -92,3 +92,22 @@
 **陷阱一（状态漂移）**：Word/WPS 保存会重排全部修订 id 和批注 id、重拆 run、重新序列化 XML（去 xml:space 等）——上一轮的解包结果、批注 id 对照表、文本锚点全部失效。规避：每轮注入前重新解包当前文件、重验全部锚点；批注改用“批注人＋批注开头文字”指认而非 id；先 diff 出用户已完成的修改，从注入清单剔除，避免重复注入或覆盖用户成果。
 
 **陷阱二（OMML 假象）**：pandoc 对 WPS 生成的 OMML 解析不全，`--track-changes` 输出中完好的公式也会显示成 `\frac{}{}{}_{}` 空槽——**不能以 pandoc 输出判断公式好坏**。规避：直接查 XML，以块内是否存在空结构元素（`<m:e/>`、`<m:sub/>`、`<m:sup/>`、`<m:num/>`、`<m:den/>`；`<m:deg/>` 配 degHide 除外）为壳判据。
+
+---
+
+## C-DOCX-8 WPS 公式渲染失败的四层根因与排查口诀
+
+**触发**：DOCX 中的 OMML 公式在 Word 正常、在 WPS 显示异常（压成一行 / 整条空白 / 仅正体空白 / 中段留白）。执行层入口见 `docx-template.md` G8-3（`scripts/omml_formulas.py` 已内置各修法）。
+
+**排查口诀（按症状定位层）**：
+
+| 症状 | 根因层 | 机理与修法 |
+|---|---|---|
+| 压成一行线性文本（如 `Zk=LN(...)`） | 结构层 | 行内 `m:oMath`+尾随编号 run 混排、公式段带段落级 `w:jc` 与 oMathParaPr 双重居中、或 settings mathPr 携带 `defJc`/`dispDef`/`intLim`/`naryLim`。修法：块级 oMathPara 整段注入 + 编号内嵌 `\qquad\text{(N)}` + mathPr 只留 mathFont（`gen`/`fix-settings` 已内置）。 |
+| 整条公式空白 | 数学字体层 | `m:mathFont` 指向系统不存在的字体（典型：无 Office 的机器上的 Cambria Math——它只在 Word 私有字体库）。修法：`fix-settings` 按平台选系统实际存在字体（macOS=STIX Two Math）。 |
+| 仅正体部分空白（斜体变量 `Z`、`k` 可见，`LN`/`ReLU` 等函数名消失） | 样式链幽灵字体 | 公式正体 run（`m:sty="p"`）沿**段落样式链**（剥掉 pStyle 后落 Normal 样式）解析西文字体；样式引用系统不存在的字体时，WPS 在数学环境**不做字体回退**、直接空白。实测元凶：模板 Normal 样式的 `Dutch801 Rm BT`（本机不存在），换成 `Times New Roman` 后 12 条公式全部完整。修法：清理样式链幽灵字体；`check` 的幽灵字体告警即为此设。 |
+| 深嵌套公式中段留白 | `<m:d>` 定界符 | `\left(...\right)` 生成可伸缩定界符对象 `<m:d>`，WPS 对深嵌套 `<m:d>` 渲染失败。修法：LaTeX 用普通括号（`gen` 默认把 `\left`/`\right` 归一）。 |
+
+**定位方法（实测有效）**：症状文件与已知正常文件做**单变量二分**——每轮只换一个包部件（settings 的 compat 块 / styles 的 docDefaults / 整个 styles.xml / theme1.xml），逐件在 WPS 打开验证；命中部件后再在部件内二分到具体元素（本案即由"整换 styles 好、只换 docDefaults 不好"收敛到 Normal 样式的 rFonts）。注意：WPS 打开后保存会重排 paraId、重拆 run（C-DOCX-7 陷阱一），比对基准必须用生成态文件，不能用被 WPS 重存过的。
+
+**教训**：纯 pandoc 生成的文档公式正常 ≠ 注入模板后正常——模板的样式链、compat 设置会反向作用于注入内容的渲染。更换或新接入模板时，先用十条以上真实复杂度的公式（含深嵌套、函数名、上下标、重音）做一次注入实测再投产。

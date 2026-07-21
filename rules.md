@@ -22,7 +22,7 @@
 | 全文二稿/三稿 | `global.md`、`full-draft.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims.md` L1/L2/L3 一级规则（冻结块体检） | `claims.md` 其余内容，除非批注涉及权要联动 |
 | Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`，并按批注内容读 `claims.md`/`full-draft.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims.md` L1/L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
 | DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
-| 附图设计 | `global.md`、`figures.md`，如需全文一致性再读 `claims.md` 和 `full-draft.md` | — | `revision.md`，除非存在批注返修 |
+| 附图生成/替换 | `global.md`、`figures.md`，如需全文一致性再读 `claims.md` 和 `full-draft.md` | — | `revision.md`，除非存在批注返修 |
 
 > **docx-template.md 分层读取**：md 撰写阶段只读 G8-0 / G8-0b 及 md 层可判定条目；G8-1 XML 骨架与注入细节延后到进入 DOCX 执行层（权要一稿 step 8-12 / 全文一稿 step 9-12）时再读，避免前置占用撰写上下文。
 
@@ -39,7 +39,7 @@
 - `references/rules/full-draft.md` — 全文稿规则：说明书摘要、摘要附图、发明内容、附图说明、具体实施方式和全文公开充分自检。
 - `references/rules/revision.md` — 统一返修规则：通用返修原则、权要返修、全文返修、老板批注、DOCX 留痕返修和学习闭环。
 - `references/rules/docx-template.md` — DOCX 模板和执行层规则：`docx` skill 边界、模板资产、分节↔页眉↔正文内容对照表（G8-0）、章节标题与正文格式（G8-0b）、`sectPr`、`header*.xml`、`headerReference`、案例性术语清理和 XML 骨架验收。
-- `references/rules/figures.md` — 附图设计规则：L9 图 1/子流程图/系统图/摘要附图与 Visio 手画提示；L10 给生图模型的「结构示意图提示词」生成规则（用户要 AI 出图提示词、需体现创新点的实物/场景图时读 L10）。
+- `references/rules/figures.md` — 附图规则：L9 图 1（摘要附图 = 方法主流程图）由 `scripts/render_patent_figure.py` 从权要 1 自动生成 PNG、由 `scripts/insert_figures_docx.py` 注入分节 2/5；遗留 OLE 附图返修边界。手画 Visio 指引与生图提示词规则已废止。
 - `references/rules/scoring.md` — md 审查评分卡：权要稿/全文稿写入 DOCX 前的"完整性一票否决 + 质量百分制"质量闸门；只规定评分机制，逐项引用 G/L 规则编号，不复述规则内容。
 
 ## 冲突处理
