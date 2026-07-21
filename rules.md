@@ -16,9 +16,9 @@
 
 | 阶段 | 必读核心 | 触发式按需（命中才读） | 禁止默认读取 |
 |---|---|---|---|
-| 权要一稿 | `global.md`、`claims.md`、`scoring.md`、`docx-template.md` | — | `full-draft.md`、`figures.md`、`revision.md` |
+| 权要一稿 | `global.md`、`claims.md`、`scoring.md`、`docx-template.md`、`cases/reviewer-preferences.md`（审批人偏好档案） | — | `full-draft.md`、`figures.md`、`revision.md` |
 | 权要二稿/三稿 | `global.md`、`claims.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md` | `revision.md` A4-0 触发块（删除类/算法类/序号类）；`cases/INDEX.md`（挂回复批注、清痕等） | 未被批注涉及的全文块规则 |
-| 全文一稿 | `global.md`、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims.md` L1/L2/L3 一级规则（冻结块只读体检用，唯一出处 `full-draft.md`「权要冻结」节） | `claims.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动 |
+| 全文一稿 | `global.md`、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md`、`cases/reviewer-preferences.md`（审批人偏好档案） | `claims.md` L1/L2/L3 一级规则（冻结块只读体检用，唯一出处 `full-draft.md`「权要冻结」节） | `claims.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动 |
 | 全文二稿/三稿 | `global.md`、`full-draft.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims.md` L1/L2/L3 一级规则（冻结块体检） | `claims.md` 其余内容，除非批注涉及权要联动 |
 | Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`，并按批注内容读 `claims.md`/`full-draft.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims.md` L1/L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
 
