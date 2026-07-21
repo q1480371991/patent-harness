@@ -24,7 +24,8 @@ tools: Read, Bash
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出(含权要分句结构数据),直接嵌入 prompt。 |
 | `scoring_excerpt_path` | `references/rules/scoring-content.md` 的绝对路径（`scoring.md` 的本路静态摘录：评分前置纪律 + 本路评分项 + 判定要求）。自行 Read。 |
-| `content_rules_path` | `references/rules/full-draft.md` 的绝对路径。自行 Read,**只执行其中 L6 节**(L6-1 / L6-2 / L6-3),其余节不在本路范围。 |
+| `content_rules_path` | `references/rules/full-draft.md` 的绝对路径。自行 Read,**只执行其中 L6 节(L6-1 / L6-2 / L6-3)与 L8-0 反向断言条**(发明内容/有益效果的反向实体名词差集判定依据),其余节不在本路范围。 |
+| `alignment_check_result` | **可选,仅 full-draft 传入**:`scripts/verify_claims_alignment.py` 的完整 JSON 输出,直接嵌入 prompt。传入时必须逐条处置其中涉及发明内容/有益效果的 `suspect` 项(确认为违规或给出豁免理由),未逐条处置视为未检查。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单;无则写"无"。 |
 | `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单。传入即进入增量复核模式:**第 1 项(发明内容逐条权要覆盖,完整性级)恒全量复核**;其余条目中,上轮失败项与改动块所涉条目定点复核,上轮 PASS 且不涉改动块的沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |
 
@@ -39,6 +40,7 @@ tools: Read, Bash
 5. **创新点数量按案件实际**(L6-1):不机械固定为两个创新点;若认为批注外另有更适合作为创新处的步骤,仅作"提示待确认"输出(G2-1 创新点以交底书批注为准,不得按 FAIL 要求替换)。
 6. **术语与权要一致**(L6-1,本块范围):发明内容内的特征名、对象名与权要逐字一致,同义变形即 FAIL(全文级术语漂移由 global-auditor 负责,本路只判发明内容块内)。
 7. **L6-2 质量项**:有益效果与技术特征逐项对应,避免"提高效率""提升准确性"式泛泛表述。
+8. **发明内容/有益效果反向实体名词差集**(L8-0 反向断言,完整性级):提取发明内容与有益效果对应句/框架句中的实体名词、判断条件与步骤集合,与 `claims_md_path` 权利要求书特征集合做差集;差集非空即 FAIL 并逐项列出(功能性换述与白名单豁免项不计入)——此项 FAIL 同时构成完整性缺陷,须显式标注"完整性级"。增量复核模式下此项**恒全量复核**。
 
 **不在本路范围(越权即无效)**:L8 具体实施方式(impl-auditor 负责);L4/L5/L7 短块与全局 G3-G6 全文级判定(global-auditor 负责);建议修改权利要求书;修改任何文件。
 

@@ -25,6 +25,8 @@ tools: Read, Bash
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出(含权要分句、主/子步骤清单等结构数据),直接嵌入 prompt。 |
 | `scoring_excerpt_path` | `references/rules/scoring-impl.md` 的绝对路径（`scoring.md` 的本路静态摘录：评分前置纪律 + 本路评分项 + 判定要求）。自行 Read。 |
 | `impl_rules_path` | `references/rules/full-draft.md` 的绝对路径。自行 Read,**只执行其中 L8 节**(L8-0 / L8-1 / L8-2 / L8-3),其余节不在本路范围。 |
+| `global_rules_path` | `references/rules/global.md` 的绝对路径。自行 Read,**只执行其中 G6-1 节**——公式五项/统计术语五项/判断分支三项最小必填清单与模型四维度测度的唯一出处,本路按清单逐项判定。 |
+| `alignment_check_result` | **可选,仅 full-draft 传入**:`scripts/verify_claims_alignment.py` 的完整 JSON 输出,直接嵌入 prompt。传入时必须逐条处置其中涉及具体实施方式的 `suspect` 项(确认为违规或给出豁免理由),未逐条处置视为未检查;`hard` 项以脚本为准,不推翻。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单;无则写"无"。 |
 | `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单。传入即进入增量复核模式:**第 1 项(反向特征校验)与第 3 项(每条权要步骤有解释)两个完整性级项恒全量复核**;其余条目中,上轮失败项与改动块所涉条目定点复核,上轮 PASS 且不涉改动块的沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |
 
@@ -94,7 +96,7 @@ tools: Read, Bash
 ## 工具白名单(严格)
 
 **允许**:
-- `Read`:仅限 Input Contract 传入的 `md_path`、`claims_md_path` 与各 `*_path` 规则文件(`scoring_excerpt_path`、`impl_rules_path`)。
+- `Read`:仅限 Input Contract 传入的 `md_path`、`claims_md_path` 与各 `*_path` 规则文件(`scoring_excerpt_path`、`impl_rules_path`、`global_rules_path`——后者只执行 G6-1 节)。
 - `Bash`:仅限确定性只读统计命令——`wc`、`grep`、`awk`、`sed -n`、`head`、`tail`、`diff`。
 
 **禁止**:

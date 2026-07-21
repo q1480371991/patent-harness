@@ -29,6 +29,8 @@ tools: Read, Bash
 | `global_rules_path` | `references/rules/global.md` 的绝对路径。自行 Read,本路只执行 **G3-G6**(G1 目录布局 / G2 交底书阅读时机 / G7 不在 md 语义审查范围)。 |
 | `short_block_rules_path` | 短块规则文件的绝对路径,由主 agent 按阶段指定:`claims-draft` 传 `claims.md`(只执行 L2 + L3 节);`full-draft` 传 `full-draft.md`(只执行 L4 + L5 + L7 节)。自行 Read。 |
 | `docx_template_rules_path` | `references/rules/docx-template.md` 的绝对路径。自行 Read,只执行 **md 阶段可判定条目**(章节标题格式、发明名称格式、案例性术语清理、权要 1 字数、分号断行),XML 层条目不在本路范围。 |
+| `alignment_check_result` | **可选,仅 full-draft 传入**:`scripts/verify_claims_alignment.py` 的完整 JSON 输出,直接嵌入 prompt。传入时必须逐条处置其中未被专审路认领的 `suspect` 项(撞名类线索归本路完整性判定),未逐条处置视为未检查。 |
+| `fingerprint_check_result` | **可选,仅 full-draft 传入**:`scripts/fingerprint_claims.py --check` 的结果(PASS / exit=3 及输出摘要)。用于完整性清单"权利要求书未被擅自改动"项的判据;未传入时该项报告"冻结校验缺失",不得凭 md 目测放行。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单,简短列出;无则写"无"。 |
 | `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的全部失败项 + 主 agent 列出的本轮改动块清单(改了哪些章节/权要/段落)。传入即进入"增量复核模式"(见下节);首轮审查不传。 |
 

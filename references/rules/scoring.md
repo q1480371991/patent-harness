@@ -37,14 +37,14 @@
 - **发明内容对每条权要均有对应展开**（L6-1）；缺任一条权要的对应 = 完整性 FAIL。
 - **具体实施方式对权要每一条步骤均有解释**（L8-1）；漏任一主步骤 Sxx 或其从权子步骤 = 完整性 FAIL。
 - **权要内撞名校验**（`claims.md` L1-1）：同一实体名词在权利要求书内指两个不同对象 = 完整性 FAIL；权要稿阶段拦截，全文阶段发现按 `full-draft.md` L8-0 撞名复校退回。
-- **Sxx 框架同构校验**（L8-0）：逐字比对具体实施方式的 S 步骤句与**最终已审权要 DOCX** 的权 1 分句——基准必须现场从 DOCX 提取，禁止使用 md 内部权要副本；数量不等或文字不同 = FAIL。
+- **Sxx 框架同构校验**（L8-0）：步骤**数量**由 `check_cross_block.py` X1 终判，框架句**文字层**由 impl-auditor 以 `claims_md_path` 为基准逐字比对后回传（该 md 基准与最新已审权要 DOCX 的一致性由主 agent 在全文一稿 step 1 回写保证，并经 `timestamp_guard.py`/`fingerprint_claims.py --check` 守卫）；global-auditor 只汇总二者结论，不自行从 DOCX 提取。数量不等或文字不同 = FAIL。
 - **反向特征校验（同构三节）**（L8-0）：提取具体实施方式、发明内容、有益效果三节框架句/对应句的实体名词与判断条件集合，与权利要求书特征集合做差集；差集非空 = FAIL，逐项列出多出的特征（功能性换述与白名单豁免项不计入）。
 - **步骤集差集校验**（L8-1）：权 1 分句与各从权分句的步骤短语集 vs 三节步骤短语集做差集；缺任一权要步骤 = FAIL，多出步骤逐项列出。具体实施方式 Sxx 顺序须与权 1 分句顺序一致（顺序局部同构）。
-- 权利要求书未被擅自改动（全文阶段权要冻结，`full-draft.md` 权要冻结条）。
+- 权利要求书未被擅自改动（全文阶段权要冻结，`full-draft.md` 权要冻结条）：以主 agent 传入的 `fingerprint_claims.py --check` 结果（`fingerprint_check_result`）PASS 为判据，global-auditor 汇总；结果缺失时报告“冻结校验缺失”，不得凭 md 目测放行。
 
 > 第一闸专抓"内容缺斤少两"。分数高但缺块，仍判 FAIL。
 
-> **机械执行层（双通道，脚本优先）**：Sxx 步骤数同构由 `scripts/check_cross_block.py` 终判；反向特征差集、权要内撞名、步骤集差集由 `scripts/verify_claims_alignment.py` 终判——其 `hard` 项（步骤集差集缺失）与 auditor 冲突时以脚本为准，`suspect` 项（反向特征/撞名的正则近似线索）回传各路 auditor 复核确认。权要基准时效由 `scripts/timestamp_guard.py` + `scripts/fingerprint_claims.py --check` 前置守卫，二者任一 exit=3 时全文稿未过闸、不进入本评分。
+> **机械执行层（双通道，脚本优先）**：Sxx 步骤数同构由 `scripts/check_cross_block.py` 终判；反向特征差集、权要内撞名、步骤集差集由 `scripts/verify_claims_alignment.py` 终判——其 `hard` 项（步骤集差集缺失）与 auditor 冲突时以脚本为准，`suspect` 项（反向特征/撞名的正则近似线索）以 `alignment_check_result` 字段回传各路 auditor 逐条复核处置。权要基准时效由 `scripts/timestamp_guard.py` + `scripts/fingerprint_claims.py --check` 前置守卫，二者任一 exit=3 时全文稿未过闸、不进入本评分。
 
 ---
 
@@ -65,7 +65,7 @@
 - 断行/分号/从权粒度依附符合 `claims-format-standard.md`【claims】
 
 全文稿：
-- G3、G4、G5、G6（`global.md`）【global】
+- G3、G4、G5（`global.md`）；G6 全局语义合规【global】——其中 G6-1 公式五项/统计术语五项/判断分支三项清单与模型四维度测度的**逐项清单判定归【impl】**（见下方 L8-1 行），本行不重复判
 - L6-1 发明内容与权要一一对应、有益效果给技术原因；发明内容/有益效果无权要外实体名词（反向断言三节，唯一出处 `full-draft.md` L8-0）【content】
 - L8-1 全部：解释每条权要步骤、阈值给确定依据、算法表述操作可实施优先（点名处有操作展开与超参，概括处操作写清）、求解/变换类四段清单与悬空指称测试、判断步骤用规定句式、公式规范、Sxx 展开范式、步骤集差集（三节无缺失/多余步骤）、顺序局部同构（具体实施方式 Sxx 序=权 1 分句序）、公式/统计/判断三类最小必填清单与模型四维度测度（唯一出处 `global.md` G6-1）、可实施（专利法 26.3）【impl】
 - L4-1 摘要（≤300 字、术语一致）、L5-1 摘要附图、L7-1 附图说明自身格式（编号连续、每图一句功能描述；与 L9 附图设计的一致性深审不在闸门范围）【global】
