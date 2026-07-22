@@ -42,6 +42,9 @@
 - 交底书 DOCX 转出的带批注 Markdown 统一命名为：`docs/交底书.md`。
 - 权要阶段 Markdown 草稿统一命名为：`docs/权要稿.md`。
 - 全文阶段 Markdown 草稿统一命名为：`docs/全文稿.md`。
+- `docs/权要稿.md` / `docs/全文稿.md` 恒为“最新基准”，固定文件名不改、不迁移，是所有脚本闸门与各路 auditor 的唯一基准路径；任何稿次都在原文件就地更新，不因稿次推进而改名。
+- 每完成一个交付稿次（权要 N 稿 / 全文 N 稿，含一稿与各返修留痕稿），除更新上述固定基准外，必须把该稿定稿时的 md 基准另存一份只读快照到案件 `docs/history/` 子目录（无则创建），命名 `权要N稿.md` / `全文N稿.md`，其 N 与对外交付 DOCX 稿次一致；同一稿次多轮迭代只保留最终交付态（同名覆盖）。稿次追溯以 `docs/history/` 内最新一份快照为准。
+- `docs/history/` 快照仅作历史留档，只读不再编辑；脚本闸门、auditor、DOCX 注入一律以固定基准 `docs/权要稿.md` / `docs/全文稿.md` 为输入，不读 history 快照。稿次不写入 `全文稿.md` 的指纹 front-matter——`fingerprint_claims.py --gen` 每次会整块重写该 front-matter，外加的稿次字段会被覆盖。
 - 老板批注稿以「审核N-」前缀命名（如 `审核1-案件号-权要1稿-作者-题目全称.docx`），保留原样不覆盖。
 - 旧的 `disclosure_annotated.md`、`case_draft.md` 命名不再作为标准；遇到旧案时应规范化改名，避免同一案件中多个草稿名并存。遇到工作文件还散在案件根目录的旧案，应把它们移入 `docs/` 后再继续。
 - 本节所称 `docs/` 均指**案件文件夹内**的 `docs/` 子目录；`patent` skill 自身的 `docs/` 目录（如 `docs/archive/`、`docs/install.md`）是技能文档目录，与案件文件无关，不得混用。
