@@ -7,7 +7,7 @@
 
 - 权要块: 编号 / 独权从权 / 保护主题 / 从权依附邻接表 / 分号分句
 - 具体实施方式主步骤: 行首 `在步骤S<nn>中，` (L8-1 主步骤展开范式)
-- 具体实施方式子步骤: 行首 `步骤S<nnn>：`
+- 具体实施方式子步骤 (仅兼容既有旧稿; 新范式子步骤无编号、在"包括："后分号列举、不产生此形态, 抽到空不报错): 行首 `步骤S<nnn>：`
 - 附图说明: 行首 `图N为...` / `图N是...`
 - 附图设计节是否存在 (历史字段: 附图设计节已废止, 附图改由 render_patent_figure.py
   从权要稿自动生成; figure_design_present 保留兼容, 不作为完整性依据)
@@ -47,7 +47,7 @@ from check_hard_rules import (  # noqa: E402
 MAIN_STEP_RE = re.compile(r"^\s*在步骤S(\d+)中[，,]")
 # 合并主步骤: `在步骤S17至步骤S19中，...` (L8-0 禁止合并展开, 抽出来供校验定位)
 MERGED_STEP_RE = re.compile(r"^\s*在步骤S(\d+)至步骤S(\d+)中[，,]")
-# 子步骤: `步骤S151：...` (中文/半角冒号)
+# 子步骤 (旧稿兼容; 新范式子步骤无编号、不产生此形态, 抽到空不报错): `步骤S151：...` (中文/半角冒号)
 SUB_STEP_RE = re.compile(r"^\s*步骤S(\d+)[：:]")
 # 附图说明: `图1为...` / `图1是...`
 FIGURE_RE = re.compile(r"^\s*图\s*(\d+)[为是]")
@@ -194,6 +194,47 @@ def extract_steps(lines: list[str], sections: dict, errors: list[str]) -> tuple[
     return main, sub
 
 
+def extract_fmnr_deps(lines: list[str], sections: dict) -> list[dict]:
+    """抽取发明内容"进一步地……包括："从权展开段：引导句 + 其后分号分句数.
+
+    每段 = {lead, clause_count, inline_after, line}. clause_count = 引导句后到下一
+    "进一步地"/"本发明"/章末之间以 ；/。 结尾的分句行数; inline_after = "包括："后引导
+    行是否还挤着子步骤 (逗号连缀). 供 check_cross_block X5 与权要方法从权 step_count 比对
+    (L6-1 发明内容从权分号分段同构).
+    """
+    body, offset = get_section_lines(lines, sections, "发明内容")
+    if offset < 0:
+        return []
+    deps: list[dict] = []
+    n = len(body)
+    for idx, line in enumerate(body):
+        s = line.strip()
+        if not s.startswith("进一步地，"):
+            continue
+        if "包括：" not in s:
+            continue
+        after = s.split("包括：", 1)[1].strip()
+        cc = 0
+        j = idx + 1
+        while j < n:
+            t = body[j].strip()
+            if not t:
+                j += 1
+                continue
+            if t.startswith("进一步地，") or t.startswith("本发明"):
+                break
+            if t.endswith("；") or t.endswith("。"):
+                cc += 1
+            j += 1
+        deps.append({
+            "lead": s[:50],
+            "clause_count": cc,
+            "inline_after": bool(after),
+            "line": offset + idx + 1,
+        })
+    return deps
+
+
 def extract_figures(lines: list[str], sections: dict, errors: list[str]) -> dict | None:
     """抽取附图说明的图 N 清单."""
     body, offset = get_section_lines(lines, sections, "附图说明")
@@ -248,10 +289,12 @@ def extract_structure(md_path: Path, stage: str, claims_md_path: Path | None = N
         claims = extract_claims(claims_lines, claims_sections, errors)
 
     main_steps = sub_steps = figures = None
+    fmnr_deps = None
     figure_design_present = False
     if stage == "full-draft":
         main_steps, sub_steps = extract_steps(lines, sections, errors)
         figures = extract_figures(lines, sections, errors)
+        fmnr_deps = extract_fmnr_deps(lines, sections)
         _, fd_offset = get_section_lines(lines, sections, "附图设计")
         figure_design_present = fd_offset >= 0
 
@@ -266,6 +309,7 @@ def extract_structure(md_path: Path, stage: str, claims_md_path: Path | None = N
         "main_steps": main_steps,
         "sub_steps": sub_steps,
         "figures": figures,
+        "fmnr_deps": fmnr_deps,
         "figure_design_present": figure_design_present,
     }
 

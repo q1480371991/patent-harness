@@ -399,37 +399,41 @@ def check_tech_field_single_paragraph(lines: list[str], sections: dict, report: 
 
 
 def check_section_order(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 13: 章节标题存在且顺序正确 (L1-L8)."""
+    """规则 13: 全文稿必备文本章节齐全且说明书内部顺序正确 (L4/L6/L7/L8).
+
+    全文稿.md 结构 (inject_fulldraft.py 要求): 技术领域/背景技术/发明内容/附图说明/
+    具体实施方式为 `## 说明书` 下的 `### ` 子标题, 说明书摘要为独立 `## ` 章节;
+    故须同时扫描 `## ` 与 `### ` 两级标题(split_sections 只切 `## `, 不足以覆盖)。
+    摘要附图(L5)为 DOCX 图形分节、无 md 文本标题(由 verify_docx_skeleton 核分节2/5),
+    不作为 md 级必备文本章节。"""
     if stage != "full-draft":
         return
-    titles_in_order = []
-    for title, (start, _) in sorted(sections.items(), key=lambda kv: kv[1][0]):
-        for name in FULL_DRAFT_REQUIRED_SECTIONS_ORDER:
-            if name in title:
-                titles_in_order.append((name, start))
-                break
-    seen = [t for t, _ in titles_in_order]
-    # 缺章节
-    for name in FULL_DRAFT_REQUIRED_SECTIONS_ORDER:
-        if name not in seen:
+    required = [n for n in FULL_DRAFT_REQUIRED_SECTIONS_ORDER if n != "摘要附图"]
+    pos: dict[str, int] = {}
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## ") or stripped.startswith("### "):
+            title = stripped.lstrip("#").strip()
+            for name in required:
+                if name in title and name not in pos:
+                    pos[name] = i
+    for name in required:
+        if name not in pos:
             report.add(
                 "L1-L8 章节顺序", "全文稿",
-                f"实际顺序 = {seen}",
+                f"已检出 = {list(pos)}",
                 f"缺少章节: {name}",
             )
-    # 顺序错
-    idx_map = {name: i for i, name in enumerate(FULL_DRAFT_REQUIRED_SECTIONS_ORDER)}
-    prev = -1
-    for name in seen:
-        cur = idx_map[name]
-        if cur < prev:
+    # 说明书正文内部顺序: 发明内容 → 附图说明 → 具体实施方式
+    body_seq = [n for n in ("发明内容", "附图说明", "具体实施方式") if n in pos]
+    for a, b in zip(body_seq, body_seq[1:]):
+        if pos[a] > pos[b]:
             report.add(
                 "L1-L8 章节顺序", "全文稿",
-                f"实际顺序 = {seen}",
-                f"章节顺序错误: {name} 出现在错误位置",
+                f"{a}@{pos[a] + 1} > {b}@{pos[b] + 1}",
+                f"章节顺序错误: {b} 应在 {a} 之后",
             )
-            return
-        prev = cur
+            break
 
 
 def check_claims_draft_forbidden_sections(lines: list[str], sections: dict, report: Report, stage: str) -> None:
@@ -452,7 +456,7 @@ def check_claims_draft_forbidden_sections(lines: list[str], sections: dict, repo
 
 
 def check_noun_colon_definition(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 10: 名词冒号定义句式 (G5-1). L8-1 子步骤引导句 `步骤SxN：...` 是合法范式, 排除."""
+    """规则 10: 名词冒号定义句式 (G5-1). 旧稿带编号子步骤引导句 `步骤SxN：...` 仍排除 (新范式子步骤无编号、在"包括："后分号列举, 不触发本规则)."""
     scan = _get_scan_ranges(lines, sections, stage)
     # 匹配: 行首 (可能有缩进) 短名词 + 中文冒号 + 内容 (不是子列表说明)
     pattern = re.compile(r"^\s*[一-龥A-Za-z0-9]{2,10}：[一-龥]{2,}")
@@ -471,16 +475,76 @@ def check_noun_colon_definition(lines: list[str], sections: dict, report: Report
 
 
 def check_latex_no_delimiter(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 16: LaTeX 公式不带定界符 (G6-1)."""
+    """规则 16: 块公式独立成段不带定界符; 行内公式用成对 $…$ (G6-1).
+
+    G6-1 区分两类: **块公式**独立成段、纯 LaTeX、不带 `$`; **行内公式**(参数解释段/
+    正文中引用的符号如 `$s_1$`、`$\\Sigma_1^{-1}$`)以**成对** `$…$` 定界, 注入时转原生
+    行内 `<m:oMath>` —— 成对行内 `$…$` 属规则要求, 合法放行。仅在下列情形报错:
+    出现 `$$` 行间定界符(本工作流不使用), 或单行内未转义 `$` 落单未闭合。"""
     if stage != "full-draft":
         return
     for i, line in enumerate(lines):
-        if re.search(r"\$\$|(?<![\\])\$", line):
+        if "$$" in line:
             report.add(
                 "G6-1", f"第{i + 1}行",
                 line.strip()[:80],
-                "LaTeX 公式不应带 $/$$ 定界符",
+                "不应使用 $$ 行间公式定界符(块公式独立成段、不带定界符)",
             )
+            continue
+        # 未转义单 $ 成对=行内公式(合法); 落单(奇数个)=定界符未闭合
+        if len(re.findall(r"(?<![\\])\$", line)) % 2 == 1:
+            report.add(
+                "G6-1", f"第{i + 1}行",
+                line.strip()[:80],
+                "行内公式 $ 定界符未成对闭合",
+            )
+
+
+def check_impl_no_stale_expansion(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 17: 具体实施方式禁"进一步地"逐条复述旧范式 (L8-1 新范式).
+
+    新范式下子步骤在"包括："后无编号分号集中列举、展开段用"具体而言/需要说明的是"
+    引导; "进一步地，"是已废止的旧范式子步骤复述引导, 仅合法出现于发明内容 (L6 从权
+    引导). 具体实施方式章内出现即旧范式残留, 逐处报.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "具体实施方式")
+    if offset < 0:
+        return
+    for i, line in enumerate(body):
+        s = line.strip()
+        if s.startswith("进一步地，") or s.startswith("进一步地,"):
+            report.add(
+                "L8-1", f"具体实施方式 第{offset + i + 1}行",
+                s[:60],
+                "具体实施方式出现'进一步地'旧范式子步骤复述; 新范式应在'包括：'后无编号分号列举、展开段用'具体而言/需要说明的是'",
+            )
+
+
+def check_include_lead_not_inline(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 18: "包括："引导句后不得把子步骤挤在同一行 (L6-1 / L8-0 分号分段).
+
+    规范写法: 引导句以"……，包括："结尾单独成段, 其后各子步骤分号断行、各自成段.
+    "，包括："(带全角冒号) 后同行还有非空文本 = 子步骤逗号连缀挤入引导行 (未分号分段).
+    系统权"……系统，包括存储器、处理器……"用"包括"无冒号、不匹配, 不误报. 仅扫发明内容
+    与具体实施方式两章.
+    """
+    if stage != "full-draft":
+        return
+    for key in ("发明内容", "具体实施方式"):
+        body, offset = get_section_lines(lines, sections, key)
+        if offset < 0:
+            continue
+        for i, line in enumerate(body):
+            s = line.strip()
+            m = re.search(r"，包括：(.*)$", s)
+            if m and m.group(1).strip():
+                report.add(
+                    "L6-1 / L8-0", f"{key} 第{offset + i + 1}行",
+                    s[:80],
+                    "'包括：'后子步骤挤在引导行 (逗号连缀), 应各子步骤分号断行、各自成段",
+                )
 
 
 def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, report: Report, stage: str, claims_text: str = "") -> None:
@@ -610,6 +674,8 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     # Phase 1c: 高误报风险
     check_noun_colon_definition(lines, sections, report, stage)
     check_latex_no_delimiter(lines, sections, report, stage)
+    check_impl_no_stale_expansion(lines, sections, report, stage)
+    check_include_lead_not_inline(lines, sections, report, stage)
     check_full_draft_forbidden_quantifiers(lines, sections, report, stage, claims_text)
     check_abstract_length(lines, sections, report, stage)
     check_figure_numbering(lines, sections, report, stage)

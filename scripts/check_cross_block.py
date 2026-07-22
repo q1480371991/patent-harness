@@ -163,6 +163,48 @@ def check_x3_dependency(structure: dict, violations: list[dict]) -> None:
                 })
 
 
+def check_x5_fmnr_dep_expansion(structure: dict, violations: list[dict]) -> None:
+    """X5: 发明内容"进一步地"从权展开段数/分句数 == 权要方法从权 (L6-1 分号同构).
+
+    发明内容应对每条方法从权 (权2..权N, dependent 且非系统权) 各有一段
+    "进一步地……包括："分号分段展开; 段数不符 = 漏写/合并从权; 逐段分句数 !=
+    对应从权 step_count = 未分号分段或漏/多子步骤. (补 verify_claims_alignment 盲区:
+    其步骤集差集只核权1/从权在三节'有无对应展开'的粗粒度, 不核发明内容对从权的分号
+    分段与子步骤数一致.)
+    """
+    fmnr = structure.get("fmnr_deps")
+    claims = structure.get("claims") or {}
+    if not fmnr:
+        return  # 发明内容无"进一步地"从权展开段: 不核段数(交 verify_claims_alignment 步骤集差集兜底), 避免对极简/不展开从权风格误伤
+    method_deps = [it for it in claims.get("items", [])
+                   if it["num"] >= 2 and it.get("dependent")
+                   and it.get("subject") is None and it.get("step_count")]
+    if not method_deps:
+        return
+    if len(fmnr) != len(method_deps):
+        violations.append({
+            "rule_id": "L6-1",
+            "check": "X5",
+            "location": "发明内容 vs 权利要求书",
+            "evidence": f"发明内容'进一步地'从权段数 = {len(fmnr)}, 方法从权数 = {len(method_deps)}",
+            "message": f"发明内容应对每条方法从权 (权2..权{method_deps[-1]['num']}) 各有一段分号分段展开; "
+                       f"段数不符 (期望 {len(method_deps)}, 实际 {len(fmnr)}), 疑漏写或合并从权展开",
+        })
+    for i in range(min(len(fmnr), len(method_deps))):
+        cc = fmnr[i]["clause_count"]
+        sc = method_deps[i]["step_count"]
+        if cc != sc:
+            note = "; 且子步骤挤在引导行(逗号连缀未分段)" if fmnr[i].get("inline_after") else ""
+            violations.append({
+                "rule_id": "L6-1",
+                "check": "X5",
+                "location": f"发明内容 (md 第{fmnr[i]['line']}行)",
+                "evidence": f"该段分句数 = {cc}, 对应权 {method_deps[i]['num']} 子步骤数 = {sc}{note}",
+                "message": f"发明内容第 {i + 1} 段从权展开分句数应等于对应从权分句数 "
+                           f"(期望 {sc}, 实际 {cc}); 未分号分段或漏/多子步骤",
+            })
+
+
 # -----------------------------------------------------------------------------
 # 主流程
 # -----------------------------------------------------------------------------
@@ -174,6 +216,7 @@ def run_checks(structure: dict) -> dict:
         check_x1_step_count(structure, violations)
         check_x2_step_numbering(structure, violations)
         check_x4_no_merged_steps(structure, violations)
+        check_x5_fmnr_dep_expansion(structure, violations)
     check_x3_dependency(structure, violations)
 
     return {
