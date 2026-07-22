@@ -2,11 +2,12 @@
 """生成专利图 1（摘要附图 = 方法主流程图）PNG。
 
 唯一信源是权要稿：节点 = 权利要求 1 的分号分句**逐字**（去句末标点），
-编号 S11..S1N 以水平引出线标注在方框右侧外部，纵向单线单向箭头。
+编号 S11..S1N 以 45° 斜向上引出线标注在方框右上角外侧，纵向单线单向箭头。
 逐字一致由构造保证（直接从权要稿提取，不接受手工节点输入）。
 
 版式（经审核确认，勿随意改动）：等宽黑白矩形 520px、每行 26 字、
-框间距 50px、画布边距 30px、宋体、300 DPI。
+框间距 50px、画布边距 30px、宋体常规字重（不加粗）、300 DPI；
+框内折行遵循行首禁则（行首不出现标点，标点上提至上一行行尾）。
 
 用法：
     python3 scripts/render_patent_figure.py --claims-md docs/权要稿.md \
@@ -17,15 +18,15 @@
 
 import argparse
 import re
-import textwrap
 from pathlib import Path
 
 # ---- 版式常量 ----
 BOX_WIDTH = 520      # 矩形等宽
 GAP = 50             # 相邻矩形垂直间距（箭头长度）
 MARGIN = 30          # 画布边距
-LEADER = 28          # 右侧编号引出线长度
-LABEL_GAP = 10       # 引出线与编号文字间距
+TOP_ALLOWANCE = 0    # 斜线从框右边中点起、不超出首框顶边，无需顶部预留
+LEADER = 28          # 编号引出线水平/垂直位移（45° 斜向上）
+LABEL_GAP = 10       # 引出线末端与编号文字间距
 LABEL_ZONE = 105     # 右侧编号区总宽度
 WRAP = 26            # 框内文字每行字数
 LINE_H = 24          # 行高
@@ -33,6 +34,9 @@ FONT_BODY = 18
 SCALE = 2            # 2 倍采样，300 DPI
 
 VAGUE_FINAL = re.compile(r"(技术结果|处理结果|最终结果)")
+
+# 行首禁则字符：折行后不得作为行首，出现时上提至上一行行尾
+LINE_START_FORBIDDEN = set("，。、；：？！）】》〉」』％%,.;:!?)")
 
 
 def strip_tail_punct(text: str) -> str:
@@ -66,13 +70,26 @@ def extract_claim_clauses(claims_md: Path, claim_number: int) -> list[str]:
 
 
 def wrap_label(label: str) -> list[str]:
-    return textwrap.wrap(label, width=WRAP) or [""]
+    """按每行 WRAP 字折行；行首禁则字符上提至上一行行尾（该行最多超宽 1-2 字）。"""
+    lines: list[str] = []
+    for paragraph in str(label).splitlines() or [""]:
+        if not paragraph:
+            lines.append("")
+            continue
+        index, length = 0, len(paragraph)
+        while index < length:
+            cut = min(index + WRAP, length)
+            while cut < length and paragraph[cut] in LINE_START_FORBIDDEN:
+                cut += 1
+            lines.append(paragraph[index:cut])
+            index = cut
+    return lines or [""]
 
 
 def layout(clauses: list[str]):
     """返回每个节点的 (x, y, w, h) 与画布尺寸。"""
     boxes = []
-    y = MARGIN
+    y = MARGIN + TOP_ALLOWANCE
     for clause in clauses:
         height = max(72, 34 + len(wrap_label(clause)) * LINE_H)
         boxes.append((MARGIN, y, BOX_WIDTH, height))
@@ -81,6 +98,12 @@ def layout(clauses: list[str]):
 
 
 def load_font(size: int):
+    """加载中文宋体**常规字重**。
+
+    TTC 字体集合内含多个字面（如 macOS Songti.ttc 的 index 0 是 Black 特粗体），
+    直接取默认 index 会渲染成粗体；这里逐字面探测，优先选 style=Regular
+    （简体家族优先），确保不加粗。
+    """
     from PIL import ImageFont
 
     candidates = (
@@ -95,8 +118,27 @@ def load_font(size: int):
         Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
     )
     for candidate in candidates:
-        if candidate.exists():
+        if not candidate.exists():
+            continue
+        if candidate.suffix.lower() != ".ttc":
             return ImageFont.truetype(str(candidate), size=size)
+        best = None  # (score, font)：分数越小越优
+        for face_index in range(16):
+            try:
+                font = ImageFont.truetype(str(candidate), size=size, index=face_index)
+            except OSError:
+                break
+            family, style = font.getname()
+            if style.lower() == "regular":
+                score = 0 if ("sc" in family.lower() or "simsun" in family.lower()) else 1
+            else:
+                score = 2
+            if best is None or score < best[0]:
+                best = (score, font)
+            if best[0] == 0:
+                break
+        if best is not None:
+            return best[1]
     return ImageFont.load_default()
 
 
@@ -133,15 +175,16 @@ def render_png(clauses: list[str], output: Path) -> None:
             draw.text((pt(x + w / 2) - (box[2] - box[0]) / 2, text_y),
                       line, fill="black", font=font)
             text_y += line_h
-        # 右侧引出线 + 编号 S1<index>
-        mid_y = y + h / 2
-        draw.line((pt(x + w), pt(mid_y), pt(x + w + LEADER), pt(mid_y)),
+        # 右侧编号 S1<index>：45° 斜向上引出线，起点为矩形右边中点
+        start_x, start_y = x + w, y + h / 2
+        end_x, end_y = x + w + LEADER, y + h / 2 - LEADER
+        draw.line((pt(start_x), pt(start_y), pt(end_x), pt(end_y)),
                   fill="black", width=2 * SCALE)
         label = f"S1{index}"
         box = draw.textbbox((0, 0), label, font=font)
         draw.text(
-            (pt(x + w + LEADER + LABEL_GAP),
-             pt(mid_y) - (box[3] - box[1]) / 2 - box[1]),
+            (pt(end_x + LABEL_GAP),
+             pt(end_y) - (box[3] - box[1]) / 2 - box[1]),
             label, fill="black", font=font,
         )
 
