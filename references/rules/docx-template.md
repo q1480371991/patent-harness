@@ -80,6 +80,8 @@
 写入策略的唯一出处是 `references/rules/global.md` G6-1（默认原生公式、pandoc 缺失才回退纯文本）；本节管执行层怎么做：
 
 - 公式段一律用 `scripts/omml_formulas.py gen` 产出的整段 `<w:p>…<m:oMathPara>…</w:p>` XML：**整段插入** document.xml，不得拆开重组；不得给公式段添加段落级 `<w:jc w:val="center"/>`（居中由 oMathParaPr 自带，双重居中会让 WPS 把公式降级成线性文本）；不得把公式编号写成公式后的独立文本 run（编号用 gen 的 `--number` 内嵌为 `\qquad\text{(N)}`）。
+- **行内公式（`$…$`）注入（硬性约束，唯一出处）**：参数解释段/正文里以 `$…$` 定界的行内符号（规则见 `global.md` G6-1），用 `omml_formulas.py gen` 生成后**取其内层 `<m:oMath>` 子元素**（丢弃 `<m:oMathPara>` 块级包裹与外层 `<w:p>`），作为段落 `<w:p>` 的行内子节点与文本 `<w:r>` **混排**（`<m:oMath>` 合法地直接作 `<w:p>` 子元素）。注入脚本按 `$…$` 正则拆分段落文本：偶数段建文本 run、奇数段按片段查表取对应 `<m:oMath>` 并 **deepcopy** 插入（同一符号多次出现必须深拷贝，不能复用同一节点）。`$\Sigma_1^{-1}$` 经 gen 生成 `m:sSubSup`（下标与上标共竖线叠放）、`$s_1$` 生成 `m:sSub`（紧凑下标）。收尾 `check` 计 `m:oMathPara`（块公式）数；行内 `<m:oMath>` 数须另行统计（`m:oMath` 总数 − `m:oMathPara` 数）。
+- **打开占用回写陷阱（1级）**：交付 DOCX 在 WPS/Word 中开着时重新 pack，磁盘文件会被应用回写的**旧缓存覆盖**，症状=“脚本改了、用户看到的还是旧内容”。**规避**：重注前确认交付稿已在应用中关闭；或 pack 到**新文件名**，且交付前**直接读磁盘 DOCX 副本**（`zipfile` 读 `word/document.xml`）核验 `m:oMath` 总数（块 + 行内）= 预期值，**不得以 unpack 目录的计数代替磁盘副本核验**。
 - 注入完成、pack 之后收尾两步必跑：
   1. `omml_formulas.py fix-settings <docx>` — 把 settings.xml 的 mathPr 重建为仅 `m:mathFont`（按平台字体：macOS=STIX Two Math / Windows=Cambria Math / Linux=DejaVu Math TeX Gyre）；python-docx/WPS 模板默认 mathPr 携带的 `defJc`/`dispDef`/`intLim`/`naryLim` 是 WPS 降级源。
   2. `omml_formulas.py check <docx>` — 空结构壳（`<m:e/>` 等）= FAIL 必修；`<m:d>` 定界符、mathPr 未简化、幽灵字体告警须逐条处置或在完工报告书面确认。

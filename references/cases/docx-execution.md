@@ -104,6 +104,8 @@
 | 症状 | 根因层 | 机理与修法 |
 |---|---|---|
 | 压成一行线性文本（如 `Zk=LN(...)`） | 结构层 | 行内 `m:oMath`+尾随编号 run 混排、公式段带段落级 `w:jc` 与 oMathParaPr 双重居中、或 settings mathPr 携带 `defJc`/`dispDef`/`intLim`/`naryLim`。修法：块级 oMathPara 整段注入 + 编号内嵌 `\qquad\text{(N)}` + mathPr 只留 mathFont（`gen`/`fix-settings` 已内置）。 |
+| 行内符号显示为全角并列（`s2`、`Σ1⁻¹` 上下标不叠放） | 结构层 | 参数解释/正文里用了 **Unicode 上下标字符**（s₁、₀、⁻¹）而非原生行内 OMML——WPS 不把 Unicode 下标当下标渲染。修法：符号写成 `$…$` 行内 LaTeX，`gen` 后取内层 `<m:oMath>` 与文本 run 混排；`$\Sigma_1^{-1}$`→`m:sSubSup` 叠放（规则见 `docx-template.md` G8-3、`global.md` G6-1）。 |
+| 脚本改了、用户看到的仍是旧内容 | 落地层 | 交付 DOCX 被 WPS/Word 开着，重新 pack 被应用回写的旧缓存覆盖。修法：关闭文件后再 pack，或 pack 到**新文件名**并**直接读磁盘副本**（zipfile 读 document.xml）核验 `m:oMath` 数（块+行内）= 预期，不以 unpack 目录计数代替。 |
 | 整条公式空白 | 数学字体层 | `m:mathFont` 指向系统不存在的字体（典型：无 Office 的机器上的 Cambria Math——它只在 Word 私有字体库）。修法：`fix-settings` 按平台选系统实际存在字体（macOS=STIX Two Math）。 |
 | 仅正体部分空白（斜体变量 `Z`、`k` 可见，`LN`/`ReLU` 等函数名消失） | 样式链幽灵字体 | 公式正体 run（`m:sty="p"`）沿**段落样式链**（剥掉 pStyle 后落 Normal 样式）解析西文字体；样式引用系统不存在的字体时，WPS 在数学环境**不做字体回退**、直接空白。实测元凶：模板 Normal 样式的 `Dutch801 Rm BT`（本机不存在），换成 `Times New Roman` 后 12 条公式全部完整。修法：清理样式链幽灵字体；`check` 的幽灵字体告警即为此设。 |
 | 深嵌套公式中段留白 | `<m:d>` 定界符 | `\left(...\right)` 生成可伸缩定界符对象 `<m:d>`，WPS 对深嵌套 `<m:d>` 渲染失败。修法：LaTeX 用普通括号（`gen` 默认把 `\left`/`\right` 归一）。 |
