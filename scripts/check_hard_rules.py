@@ -720,6 +720,25 @@ def check_closing_boilerplate(lines: list[str], sections: dict, report: Report, 
             break
 
 
+def check_benefit_enumeration(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 22: 有益效果分项禁"其一/其二"式序数词, 用"（1）（2）"(L6-1).
+
+    发明内容有益效果分项一律全角括号数字"（1）（2）（3）", 禁"其一/其二/其三"或"其1".
+    "其"+序数汉字+全角逗号 模式在规范说明书 (分项用 Sxx/分号/括号数字) 不应出现, 零误报.
+    仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    pat = re.compile(r"其[一二三四五六七八九十]，")
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            if pat.search(lines[i]):
+                report.add(
+                    "L6-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
+                    "有益效果/正文分项用了'其一/其二'式序数词; 应改全角括号数字'（1）（2）（3）'",
+                )
+
+
 # -----------------------------------------------------------------------------
 # 辅助: 决定扫描范围 (只扫说明书正文, 避开代码块/表格头)
 # -----------------------------------------------------------------------------
@@ -783,6 +802,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_abstract_length(lines, sections, report, stage)
     check_figure_numbering(lines, sections, report, stage)
     check_closing_boilerplate(lines, sections, report, stage)
+    check_benefit_enumeration(lines, sections, report, stage)
 
     return report
 
