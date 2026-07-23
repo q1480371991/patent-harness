@@ -547,6 +547,48 @@ def check_include_lead_not_inline(lines: list[str], sections: dict, report: Repo
                 )
 
 
+# G6-1 Unicode 下标字符集 (冒充公式下标; 上标 ²³ 在单位 m² 合法故不纳入, 保零误报)
+UNICODE_SUBSCRIPTS = set("₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₒₓₕₖₗₘₙₚₛₜᵢⱼ")
+
+
+def check_unicode_subscript_abuse(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 19: 禁用 Unicode 下标字符冒充公式符号下标 (G6-1).
+
+    如 s₁、Σ₁、xᵢ 里的 ₁/ᵢ——WPS 渲染成全角、上下标不叠放, 等同未编译公式=公开不充分.
+    公式符号一律写 $…$ 行内 LaTeX (注入转原生 <m:oMath>). 仅查下标: 上标 ²³ 等在单位
+    (m²) 合法, 不纳入以保零误报. 仅扫说明书正文 (full-draft).
+    """
+    if stage != "full-draft":
+        return
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            hit = sorted({ch for ch in lines[i] if ch in UNICODE_SUBSCRIPTS})
+            if hit:
+                report.add(
+                    "G6-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
+                    f"出现 Unicode 下标字符 {''.join(hit)} 冒充公式下标; 应写 $…$ 行内 LaTeX",
+                )
+
+
+def check_double_punctuation(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 20: 相同句读标点连续 (双标点, 注入后通读机械化).
+
+    。。/；；/，，/：： 等相同全角标点连续 = 断句残缺或留痕注入残留. 中文省略号用 …(U+2026)
+    不在此集、不冲突. 仅查相同标点连续 (不查 ？！ 等合法组合) 以保零误报. 仅扫说明书正文.
+    """
+    if stage != "full-draft":
+        return
+    pat = re.compile(r"([。；，：！？])\1")
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            m = pat.search(lines[i])
+            if m:
+                report.add(
+                    "G8", f"{label} 第{i + 1}行", lines[i].strip()[:60],
+                    f"相同标点连续 '{m.group(0)}' (双标点/断句残缺)",
+                )
+
+
 def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, report: Report, stage: str, claims_text: str = "") -> None:
     """规则 12: 全文稿 (说明书部分) 禁用'若干个'/'多个' (G6-1).
 
@@ -676,6 +718,8 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_latex_no_delimiter(lines, sections, report, stage)
     check_impl_no_stale_expansion(lines, sections, report, stage)
     check_include_lead_not_inline(lines, sections, report, stage)
+    check_unicode_subscript_abuse(lines, sections, report, stage)
+    check_double_punctuation(lines, sections, report, stage)
     check_full_draft_forbidden_quantifiers(lines, sections, report, stage, claims_text)
     check_abstract_length(lines, sections, report, stage)
     check_figure_numbering(lines, sections, report, stage)
