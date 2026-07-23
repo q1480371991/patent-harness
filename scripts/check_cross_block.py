@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -205,6 +206,60 @@ def check_x5_fmnr_dep_expansion(structure: dict, violations: list[dict]) -> None
             })
 
 
+def _norm_clause(t: str) -> str:
+    return (t or "").strip().rstrip("；;。.，,").strip()
+
+
+def check_x6_verbatim_restatement(structure: dict, violations: list[dict]) -> None:
+    """X6: 权1分句在集中罗列段/展开入口/发明内容主步骤三处逐字一致 (L8-0 收紧, 确定性比对).
+
+    以权要1分句为基准逐字核对三处复述——集中罗列段 "Sxx，〔分句〕"、展开段入口
+    "在步骤Sxx中，〔复述〕，包括："、发明内容 "本发明提供……包括：" 后主步骤分句. 原压在
+    impl-auditor 契约"Sxx 框架句逐字比对", 纯 str== 下沉: 防 LLM 语义归一把改字读成一致.
+    """
+    claim1 = _claim1(structure)
+    if not claim1 or not claim1.get("steps"):
+        return
+    base = [_norm_clause(s) for s in claim1["steps"]]
+    n = len(base)
+
+    central = {c["num"]: c for c in (structure.get("central_list") or [])}
+    for k in range(n):
+        c = central.get(11 + k)
+        if c and _norm_clause(c["clause"]) != base[k]:
+            violations.append({
+                "rule_id": "L8-0", "check": "X6",
+                "location": f"具体实施方式集中罗列段 (md 第{c['line']}行)",
+                "evidence": f"S{11 + k} 罗列='{_norm_clause(c['clause'])[:36]}…' vs 权1第{k + 1}分句='{base[k][:36]}…'",
+                "message": f"集中罗列段 S{11 + k} 分句与权1第{k + 1}分句非逐字一致 (L8-0 逐字同构)",
+            })
+
+    occ = (structure.get("main_steps") or {}).get("occurrences") or []
+    lead_re = re.compile(r"^在步骤S(\d+)中，(.+)，包括：$")
+    for o in occ:
+        m = lead_re.match((o.get("text") or "").strip())
+        if not m:
+            continue
+        k = int(m.group(1)) - 11
+        if 0 <= k < n and _norm_clause(m.group(2)) != base[k]:
+            violations.append({
+                "rule_id": "L8-0", "check": "X6",
+                "location": f"具体实施方式展开入口 (md 第{o['line']}行)",
+                "evidence": f"S{11 + k} 复述='{_norm_clause(m.group(2))[:36]}…' vs 权1第{k + 1}分句='{base[k][:36]}…'",
+                "message": f"展开段入口 S{11 + k} 复述分句与权1第{k + 1}分句非逐字一致 (L8-0 逐字同构)",
+            })
+
+    fm = [_norm_clause(x) for x in (structure.get("fmnr_main_clauses") or [])]
+    for k in range(min(len(fm), n)):
+        if fm[k] != base[k]:
+            violations.append({
+                "rule_id": "L6-1", "check": "X6",
+                "location": "发明内容第一方面主步骤",
+                "evidence": f"发明内容第{k + 1}主步骤='{fm[k][:36]}…' vs 权1第{k + 1}分句='{base[k][:36]}…'",
+                "message": f"发明内容第{k + 1}主步骤分句与权1第{k + 1}分句非逐字一致 (L6-1 正向对应)",
+            })
+
+
 # -----------------------------------------------------------------------------
 # 主流程
 # -----------------------------------------------------------------------------
@@ -217,6 +272,7 @@ def run_checks(structure: dict) -> dict:
         check_x2_step_numbering(structure, violations)
         check_x4_no_merged_steps(structure, violations)
         check_x5_fmnr_dep_expansion(structure, violations)
+        check_x6_verbatim_restatement(structure, violations)
     check_x3_dependency(structure, violations)
 
     return {
