@@ -661,6 +661,65 @@ def check_figure_numbering(lines: list[str], sections: dict, report: Report, sta
             return
 
 
+def check_closing_boilerplate(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 21: 具体实施方式收尾=实施例分层+固定套话 (L8-1).
+
+    说明书按实施例分层: 第一实施例=方法, 第二实施例=系统 (计算机设备式), 其后可续
+    计算机可读存储介质. 系统内容属第二实施例, 不得用"本发明实施例还提供了一种...系统"
+    模糊表述写进方法(第一实施例)正文并展开存储器/处理器构成与部署细节. 收尾四锚点按序
+    出现, 缺一或乱序即 FAIL. 锚点取模板固定骨架 (发明名称在填空处、不入锚点), 零误报.
+    仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    anchors = [
+        ("综上所述总结段(第一实施例=方法收口)", re.compile(r"综上所述，本发明公开了一种")),
+        ("第二实施例系统段", re.compile(r"第[一二三四五六七八九]实施例提供了一种")),
+        ("方法-系统对应段(因而不再赘述)", re.compile(r"因而不再赘述")),
+        ("结束语(并不用于限定本发明的保护范围)", re.compile(r"并不用于限定本发明的保护范围")),
+    ]
+    # 收尾总结段缺失 = 说明书未写收尾, 只报一次 (避免全缺时刷屏)
+    if not any(anchors[0][1].search(ln) for ln in lines):
+        report.add(
+            "L8-1", "具体实施方式(收尾)",
+            "未检出 综上所述，本发明公开了一种",
+            "缺收尾总结段'综上所述，本发明公开了一种〔发明名称〕方法……'",
+        )
+        return
+    pos: list[int] = []
+    missing = False
+    for name, pat in anchors:
+        hit = next((i for i, ln in enumerate(lines) if pat.search(ln)), -1)
+        pos.append(hit)
+        if hit < 0:
+            missing = True
+            if name == "第二实施例系统段":
+                report.add(
+                    "L8-1", "具体实施方式(收尾)",
+                    "未检出 第X实施例提供了一种",
+                    "系统实施例未按'本发明第二实施例提供了一种〔发明名称〕系统，包括：存储器、处理器…'规整: "
+                    "第一实施例=方法、第二实施例=系统; 勿用'本发明实施例还提供了一种系统'模糊表述, "
+                    "勿把系统构成/部署展开写进方法(第一实施例)正文",
+                )
+            else:
+                report.add(
+                    "L8-1", "具体实施方式(收尾)",
+                    f"缺锚点: {name}",
+                    f"收尾固定套话缺失: {name}",
+                )
+    if missing:
+        return
+    order_names = [a[0] for a in anchors]
+    for k in range(len(pos) - 1):
+        if pos[k] > pos[k + 1]:
+            report.add(
+                "L8-1", "具体实施方式(收尾)",
+                f"{order_names[k]}@{pos[k] + 1} 在 {order_names[k + 1]}@{pos[k + 1] + 1} 之后",
+                "收尾套话顺序错误: 应 综上所述(方法)→第二实施例(系统)→因而不再赘述→结束语",
+            )
+            break
+
+
 # -----------------------------------------------------------------------------
 # 辅助: 决定扫描范围 (只扫说明书正文, 避开代码块/表格头)
 # -----------------------------------------------------------------------------
@@ -723,6 +782,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_full_draft_forbidden_quantifiers(lines, sections, report, stage, claims_text)
     check_abstract_length(lines, sections, report, stage)
     check_figure_numbering(lines, sections, report, stage)
+    check_closing_boilerplate(lines, sections, report, stage)
 
     return report
 
