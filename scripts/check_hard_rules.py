@@ -208,6 +208,32 @@ def check_each_claim_one_period(lines: list[str], sections: dict, report: Report
             )
 
 
+def check_system_media_claim_no_debuzou(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 2b: 系统/装置独权、存储介质权末尾不写'的步骤'三字 (L1-1, claims.md 系统/介质权收尾口径).
+
+    系统/介质权末尾一律以句号收口, 即'……所述的〔方法权发明名称全称〕。',
+    不写'……所述的〔方法权发明名称全称〕的步骤。'。
+    识别: 权要正文含'包括存储器、处理器'或'计算机可读存储介质'者属系统/介质权。
+    """
+    blocks = extract_claim_blocks(lines, sections)
+    for num, (start, end) in blocks.items():
+        text = "\n".join(lines[start:end])
+        is_system_or_media = (
+            "包括存储器、处理器" in text or "计算机可读存储介质" in text
+        )
+        if not is_system_or_media:
+            continue
+        if "的步骤" in text:
+            report.add(
+                "L1-1", f"权利要求书 第{start + 1}行起",
+                f"权要 {num} (系统/介质权) 含 '的步骤'",
+                f"系统/装置独权、存储介质权末尾不写'的步骤', 以句号直接收口 "
+                f"('……所述的〔方法权发明名称全称〕。' 而非 '……的步骤。'); "
+                f"请删除权 {num} 末尾 '的步骤' 三字",
+            )
+
+
+
 def check_semicolon_line_ending(lines: list[str], sections: dict, report: Report) -> None:
     """规则 3: 含分号的段落以分号结尾 (L1-1 / G8-1)."""
     blocks = extract_claim_blocks(lines, sections)
@@ -244,13 +270,15 @@ def check_claim_numbering(lines: list[str], sections: dict, report: Report) -> N
 
 
 def check_total_claim_count(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 6: 权要总数 <= 10 (L1-1)."""
+    """规则 6: 权要总数必须 = 10 (L1-1, claims.md '必须写满十条')."""
     blocks = extract_claim_blocks(lines, sections)
-    if len(blocks) > 10:
+    n = len(blocks)
+    if n != 10:
         report.add(
             "L1-1", "权利要求书",
-            f"权要总数 = {len(blocks)}",
-            f"权要总数超过 10 (实际 {len(blocks)})",
+            f"权要总数 = {n}",
+            f"权要总数必须写满 10 条 (实际 {n}, {'少于' if n < 10 else '多于'} 10); "
+            f"通过拆分/合并方法从权调整条数凑满 10 条, 不得多写也不得少写",
         )
 
 
@@ -775,6 +803,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
         check_claim1_length(lines, sections, report)
         check_claim1_step_count(lines, sections, report)
         check_each_claim_one_period(lines, sections, report)
+        check_system_media_claim_no_debuzou(lines, sections, report)
         check_semicolon_line_ending(lines, sections, report)
         check_claim_numbering(lines, sections, report)
         check_total_claim_count(lines, sections, report)
