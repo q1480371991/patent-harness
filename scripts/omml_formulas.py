@@ -214,6 +214,7 @@ def check_docx(docx_path: Path) -> dict:
         "mathpr_simplified": mathpr_simplified,
         "math_font": font_m.group(1) if font_m else None,
         "unknown_fonts": unknown_fonts,
+        "formula_numbering_count": 0,
         "errors": [],
         "warnings": [],
     }
@@ -235,6 +236,27 @@ def check_docx(docx_path: Path) -> dict:
         result["warnings"].append(
             "样式链引用了安全清单外字体: " + ", ".join(unknown_fonts)
             + "；若系统缺失该字体，WPS 公式正体部分会空白（幽灵字体，C-DOCX-8），须人工确认"
+        )
+    # 公式编号残留检测（专利说明书公式不加编号；G8-3 禁止 --number 内嵌或独立文本 run 编号）
+    # 命中形态：① <m:t>...  (N)</m:t>（gen --number 经 pandoc 产出的全角空格+括号编号）
+    #          ② <m:t>(N)</m:t> 紧跟在 oMath/oMathPara 末尾的独立编号文本 run
+    #          ③ <m:t>...  </m:t> 末尾全角空格残留（编号被手动删除后留下的痕迹，提示公式段被改过）
+    numbering_hits = re.findall(r"<m:t[^>]*>[^<]*  \(\d+\)[^<]*</m:t>", doc)
+    numbering_hits += re.findall(r"<m:t[^>]*>\s*\(\d+\)\s*</m:t>", doc)
+    result["formula_numbering_count"] = len(numbering_hits)
+    if numbering_hits:
+        result["errors"].append(
+            f"发现 {len(numbering_hits)} 处公式编号残留（如 (1)(2)(3)），"
+            "违反 G8-3「不得给公式段添加编号」与专利公式惯例；"
+            "多为 omml_formulas.py gen 误传 --number 所致，去除 --number 重新生成并重注"
+        )
+    # 全角空格残留（编号被删但空格未清，告警级）
+    u2001_tail = re.findall(r"<m:t[^>]*>[^<]*  [^<]*</m:t>", doc)
+    u2001_tail = [t for t in u2001_tail if "  (" not in t]  # 排除已在编号errors计入的
+    if u2001_tail:
+        result["warnings"].append(
+            f"发现 {len(u2001_tail)} 处公式末尾全角空格残留（U+2001），"
+            "多为公式编号被手动删除后未清理干净；建议清理公式段末尾空白"
         )
     return result
 

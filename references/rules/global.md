@@ -175,7 +175,7 @@
 - 权利要求中不写公式。
 - 权要中如需计算，写为“根据 A 和 B 进行计算，得到 C”。
 - 公式放说明书中。
-- 说明书中的所有公式一律写成 **LaTeX 源码**并独立成段：`全文稿.md` 中写纯 LaTeX 源码文本，**不带 `$`/`$$` 定界符**；公式段后必须紧跟参数解释段。
+- 说明书中的所有公式一律写成 **LaTeX 源码**并独立成段：`全文稿.md` 中写纯 LaTeX 源码文本，**不带 `$`/`$$` 定界符**；公式段后必须紧跟参数解释段。**公式不加编号（无 (1)(2)(3) 等式号）**——专利撰写惯例，公式独立成段、不挂章节式号；`omml_formulas.py gen` 不得传 `--number`，`check` 的 `formula_numbering_count` 须为 0。
 - 公式写入 DOCX 时默认转为**原生可编辑二维公式**（WPS/Word 均可编辑）：用 `scripts/omml_formulas.py gen` 把每条 LaTeX 经 pandoc 转成块级 `m:oMathPara` 公式段整段注入，收尾对交付 DOCX 依次执行 `omml_formulas.py fix-settings`（数学字体与 mathPr 修正）和 `omml_formulas.py check`（公式健康体检）；不得把 LaTeX 源码文本原样留在交付稿正文，不得要求用户手动进 Word 编译公式。仅当 pandoc 不可用时才回退为纯 LaTeX 文本写入（Times New Roman），并在完工报告注明回退原因。执行细节与陷阱的唯一出处：`references/rules/docx-template.md` G8-3、`references/cases/docx-execution.md` C-DOCX-8。
 - 用可编辑的字母符号公式，不用中文字符作为公式变量。
 - **行内引用的符号也须做成原生公式，禁用 Unicode 上下标充数**：参数解释段与正文里引用公式符号时，写成行内 LaTeX 并以 `$…$` 定界（与本节“块公式独立成段、不带 `$` 定界符”相区分——**块公式无 `$`、行内公式用 `$…$`**），注入时转为原生行内 `<m:oMath>`。**不得用 Unicode 上/下标字符（如 s₁、₀、⁻¹）冒充**：WPS 会把 Unicode 下标渲染成全角 `s2`、且上标下标不叠放，等同未编译，与上一条“不得把 LaTeX 源码原样留在交付稿正文”同属公开不充分。含大写字母下标（如 `\Sigma_I`、`r_I`，无对应 Unicode 下标）时改用数字下标（`\Sigma_1`、`r_1`）或马氏型 `r^{T}\Sigma^{-1}r` 规避。行内注入执行细节见 `references/rules/docx-template.md` G8-3。
