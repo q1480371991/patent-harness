@@ -26,13 +26,15 @@ tools: Read, Bash
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `scoring_excerpt_path` | `references/rules/scoring-global.md` 的绝对路径（`scoring.md` 的本路静态摘录：评分前置纪律 + 第一闸完整性清单 + 本路评分项 + 判定要求）。自行 Read,按 `stage` 取对应完整性清单。 |
-| `global_rules_path` | `references/rules/global.md` 的绝对路径。自行 Read,本路只执行 **G3-G6**(G1 目录布局 / G2 交底书阅读时机 / G7 不在 md 语义审查范围)。 |
-| `short_block_rules_path` | 短块规则文件的绝对路径,由主 agent 按阶段指定:`claims-draft` 传 `claims.md`(只执行 L2 + L3 节);`full-draft` 传 `full-draft.md`(只执行 L4 + L5 + L7 节)。自行 Read。 |
-| `docx_template_rules_path` | `references/rules/docx-template.md` 的绝对路径。自行 Read,只执行 **md 阶段可判定条目**(章节标题格式、发明名称格式、案例性术语清理、权要 1 字数、分号断行),XML 层条目不在本路范围。 |
+| `global_rules_path` | `references/rules/global.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## G3\. /,/^## G7\. /p' <global_rules_path>` 定向提取并只执行 **G3-G6**(G1 目录布局 / G2 交底书阅读时机 / G7 不在 md 语义审查范围);1级/2级分级依据需要时按需提取「0. 规则分级总表」:`sed -n '/^## 0\. /,/^## G1\. /p' <global_rules_path>`。 |
+| `short_block_rules_path` | 短块规则文件的绝对路径,由主 agent 按阶段指定,**不整篇 Read**:`claims-draft` 传 `claims.md`,用 `sed -n '/^## L2\. /,/^## 权要阶段自检重点/p' <short_block_rules_path>` 提取(只执行 L2 + L3 节);`full-draft` 传 `full-draft.md`,用 `sed -n '/^## L4\. /,/^## L6\. /p' <short_block_rules_path>` 与 `sed -n '/^## L7\. /,/^## L8\. /p' <short_block_rules_path>` 提取(只执行 L4 + L5 + L7 节)。 |
+| `docx_template_rules_path` | `references/rules/docx-template.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## G8-0\. /,/^## G8\. DOCX/p' <docx_template_rules_path>`(分节对照表与标题/正文格式)与 `sed -n '/^### G8-2 /,/^### G8-3 /p' <docx_template_rules_path>`(案例性术语迁移禁令)定向提取,只执行 **md 阶段可判定条目**(章节标题格式、发明名称格式、案例性术语清理、权要 1 字数、分号断行——后两项唯一出处 `claims.md` L1-1,沿用脚本结论),XML 层条目不在本路范围。 |
 | `alignment_check_result` | **可选,仅 full-draft 传入**:`scripts/verify_claims_alignment.py` 的完整 JSON 输出,直接嵌入 prompt。传入时必须逐条处置其中未被专审路认领的 `suspect` 项(撞名类线索归本路完整性判定),未逐条处置视为未检查。 |
 | `fingerprint_check_result` | **可选,仅 full-draft 传入**:`scripts/fingerprint_claims.py --check` 的结果(PASS / exit=3 及输出摘要)。用于完整性清单"权利要求书未被擅自改动"项的判据;未传入时该项报告"冻结校验缺失",不得凭 md 目测放行。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单,简短列出;无则写"无"。 |
 | `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的全部失败项 + 主 agent 列出的本轮改动块清单(改了哪些章节/权要/段落)。传入即进入"增量复核模式"(见下节);首轮审查不传。 |
+
+**规则读取纪律**:规则文件一律按上表给定的 `sed -n` 标题区间定向提取,禁止整篇 Read;提取结果为空即按"输入不完整"报告,不得静默跳过。所执行节内引用的节外条目,出处在本契约点名的规则文件内时按需追加 `sed -n` 标题区间提取,出处在未传入文件内时维持指针语义(沿用脚本结论或既有判定),不自行读取。
 
 ## 本路审查范围
 
@@ -103,7 +105,7 @@ tools: Read, Bash
 ## 工具白名单(严格)
 
 **允许**:
-- `Read`:仅限 Input Contract 传入的 `md_path`、`claims_md_path` 与各 `*_path` 规则文件(`scoring_excerpt_path`、`global_rules_path`、`short_block_rules_path`、`docx_template_rules_path`)。
+- `Read`:仅限 Input Contract 传入的 `md_path`、`claims_md_path` 与 `scoring_excerpt_path`;规则文件(`global_rules_path`、`short_block_rules_path`、`docx_template_rules_path`)不得整篇 Read,仅按"规则读取纪律"以 `sed -n` 区间定向提取。
 - `Bash`:仅限确定性只读统计命令——`wc`、`grep`、`awk`、`sed -n`、`head`、`tail`、`diff`。
 
 **禁止**:
