@@ -54,7 +54,7 @@
 
 **多路归属**：本闸门由多路审查（multi-auditor）并行执行，每个评分项由行末【】标注的审查路判定——【global】= `global-auditor`、【claims】= `claims-auditor`、【content】= `content-auditor`、【impl】= `impl-auditor`。完整性一票否决由 `global-auditor` 判定（其中 L6 权要覆盖、L8 反向特征/漏解释两类完整性级缺陷由 content / impl 专审发现后回传）。各路契约见 `agents/*-auditor.md`。
 
-**auditor 摘录范围（唯一出处）**：本文件**不整篇传入任何 auditor**。按路摘录已**实体化为静态文件** `references/rules/scoring-{claims,content,impl,global}.md`，主 agent 只把对应文件的**路径**（`scoring_excerpt_path`）传给各路 auditor，由其自行 Read；每份摘录含：评分前置纪律 + 本路评分项 + 判定要求，`scoring-global.md` 额外含第一闸完整性清单。"计分方法"与多路合并口径只归主 agent 使用，不进入任何摘录文件。**维护纪律**：修改本文件的评分项、完整性清单或前置纪律时，必须同步更新对应摘录文件。
+**auditor 摘录范围（唯一出处）**：本文件**不整篇传入任何 auditor**。按路摘录已**实体化为静态文件** `references/rules/scoring-{claims,content,impl,global}.md`，主 agent 只把对应文件的**路径**（`scoring_excerpt_path`）传给各路 auditor，由其自行 Read；每份摘录含：评分前置纪律 + 本路评分项 + 判定要求，`scoring-global.md` 额外含第一闸完整性清单。"计分方法"与多路合并口径只归主 agent 使用，不进入任何摘录文件。**维护纪律**：修改本文件的评分项、完整性清单或前置纪律时，必须同步更新对应摘录文件。同步后跑 `python3 scripts/verify_scoring_excerpts.py` 机械校验编号分派一致性，非 0 退出即为漏同步。
 
 **A. 1 级硬规则（零容忍，任一 FAIL → 整体不通过）**
 

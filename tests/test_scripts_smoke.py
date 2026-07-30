@@ -521,6 +521,48 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("X1", checks)  # 权 1 分句 3 vs 主步骤 2
             self.assertIn("X3", checks)  # 依附了不存在的权要 9
 
+    def test_check_cross_block_x7_dep_quote_verbatim(self):
+        import json
+
+        good_md = """## 权利要求书
+
+1.一种测试控制方法，其特征在于，包括：获取输入数据；根据输入数据确定中间结果；根据中间结果生成控制信号。
+
+2.根据权利要求1所述的测试控制方法，其特征在于，所述根据输入数据确定中间结果，包括：对输入数据滤波；确定中间结果。
+
+## 技术领域
+
+本发明涉及测试领域。
+
+## 背景技术
+
+现有技术存在问题。
+"""
+
+        def run_case(md_text):
+            with tempfile.TemporaryDirectory() as tmp:
+                md_path = Path(tmp) / "权要稿.md"
+                md_path.write_text(md_text, encoding="utf-8")
+                result = run_script_allow_fail(
+                    "check_cross_block.py", "--md", md_path, "--stage", "claims-draft"
+                )
+                data = json.loads(result.stdout)
+                return [v for v in data["violations"] if v["check"] == "X7"]
+
+        # 规范引用 (仅去连接词/加"所述") 通过
+        self.assertEqual(run_case(good_md), [])
+        # 改动词 (根据→对): 引用句不再是权 1 原文连续子串, X7 FAIL
+        bad_verb = good_md.replace(
+            "所述根据输入数据确定中间结果，包括", "所述对输入数据确定中间结果，包括"
+        )
+        self.assertEqual(len(run_case(bad_verb)), 1)
+        # 引用句内附加原句没有的限定, X7 FAIL
+        bad_extra = good_md.replace(
+            "所述根据输入数据确定中间结果，包括",
+            "所述根据输入数据确定中间结果，其中所述中间结果为预设模型输出，包括",
+        )
+        self.assertEqual(len(run_case(bad_extra)), 1)
+
     def test_extract_structure_fails_hard_on_nonstandard_writing(self):
         import json
 
