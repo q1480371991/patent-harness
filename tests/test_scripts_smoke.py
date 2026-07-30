@@ -548,6 +548,47 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertEqual(len(run_case("当判定满足触发条件时，则执行降载操作。")), 1)
         self.assertEqual(len(run_case("计算残差，若否，则继续采集。")), 1)
 
+    def test_check_hard_rules_substep_generic_and_echo(self):
+        import json
+
+        def run_case(md, keys):
+            with tempfile.TemporaryDirectory() as tmp:
+                md_path = Path(tmp) / "全文稿.md"
+                md_path.write_text(md, encoding="utf-8")
+                result = run_script_allow_fail(
+                    "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json"
+                )
+                data = json.loads(result.stdout)
+                return [v for v in data["violations"] if any(k in v["message"] for k in keys)]
+
+        # 规则 24: 子步骤编号残留 S111 抓到; 主步骤 S11 不报
+        self.assertEqual(len(run_case(
+            "## 具体实施方式\n\n在步骤S11中，处理数据，包括：步骤S111，读取数据。\n",
+            ["子步骤编号"])), 1)
+        self.assertEqual(run_case(
+            "## 具体实施方式\n\n在步骤S11中，处理数据，包括：读取数据；解析数据。\n",
+            ["子步骤编号"]), [])
+        # 规则 25: 光杆泛词抓到; 带具体宾语不报
+        self.assertEqual(len(run_case(
+            "## 发明内容\n\n本方案提高效率，提升了系统稳定性。\n", ["光杆泛词"])), 2)
+        self.assertEqual(run_case(
+            "## 发明内容\n\n本方案提高了热源定位的准确性与响应速度。\n", ["光杆泛词"]), [])
+        # 规则 26: 缺收口 / 双收口 / 呼应断裂 抓到; 逐字呼应放行
+        self.assertEqual(len(run_case(
+            "## 背景技术\n\n现有方法不好用。\n\n## 发明内容\n\n本发明以解决现有问题。\n",
+            ["标准收口"])), 1)
+        self.assertEqual(len(run_case(
+            "## 背景技术\n\n方法甲，导致误报率高的问题。方法乙，导致漏报频发的问题。\n",
+            ["必须唯一"])), 1)
+        self.assertEqual(len(run_case(
+            "## 背景技术\n\n方法甲不适配，导致误报率高的问题。\n\n"
+            "## 发明内容\n\n本发明提供一种方法，以解决漏报频发的技术问题。\n",
+            ["逐字包含"])), 1)
+        self.assertEqual(run_case(
+            "## 背景技术\n\n方法甲不适配，导致误报率高的问题。\n\n"
+            "## 发明内容\n\n本发明提供一种方法，以解决现有技术无法自适应过滤、导致误报率高的问题。\n",
+            ["标准收口", "必须唯一", "逐字包含", "以解决"]), [])
+
     def test_check_cross_block_x7_dep_quote_verbatim(self):
         import json
 

@@ -818,6 +818,91 @@ def check_judgment_sentence_pattern(lines: list[str], sections: dict, report: Re
                 )
 
 
+def check_substep_numbering(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 24: 子步骤禁 SXX1/步骤Sxxx 式编号 (L8-2, 原 impl-auditor 语义项 14 的编号半边).
+
+    主步骤编号为 S11..S16 (权 1 分句数硬上限 6, 两位数字); 具体实施方式出现
+    S+三位及以上数字即子步骤编号残留 (子步骤一律在"包括："后无编号分号列举)。
+    LaTeX 公式中的下标写作 S_{11} 带下划线, 不匹配。仅 full-draft。
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "具体实施方式")
+    if offset < 0:
+        return
+    pat = re.compile(r"S\d{3,}")
+    for i, line in enumerate(body):
+        m = pat.search(line)
+        if m:
+            report.add(
+                "L8-2", f"具体实施方式 第{offset + i + 1}行", line.strip()[:60],
+                f"子步骤编号残留 '{m.group(0)}'; 子步骤一律无编号, 在'包括：'后分号断行集中列举(L8-2)",
+            )
+
+
+def check_benefit_generic_phrases(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 25: 有益效果光杆泛词 (L6-2, 原 content-auditor 语义项 7 的泛词半边).
+
+    只抓紧邻形态"提高/提升/增强/降低(了)(系统/整体)效率/准确性/精度/鲁棒性/可靠性/
+    稳定性/成本"——动词与泛化名词间无具体宾语即光杆泛词; "提高了xx识别的准确性"
+    带具体宾语, 不匹配 (实测三真实案件零命中边界)。只扫发明内容章, 仅 full-draft。
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "发明内容")
+    if offset < 0:
+        return
+    pat = re.compile(r"(?:提高|提升|增强|降低)(?:了)?(?:系统|整体)?(?:效率|准确性|精度|鲁棒性|可靠性|稳定性|成本)")
+    for i, line in enumerate(body):
+        for m in pat.finditer(line):
+            report.add(
+                "L6-2", f"发明内容 第{offset + i + 1}行", line.strip()[:60],
+                f"有益效果光杆泛词 '{m.group(0)}'; 应与具体技术特征/对象逐项对应, 写明提升的是什么环节的什么指标(L6-2)",
+            )
+
+
+def check_problem_echo(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 26: 背景技术收口唯一 + 发明内容"以解决…"逐字呼应 (L3-1 / L6-1,
+    原 content-auditor 语义项 2 的逐字呼应半边).
+
+    背景技术须有且仅有一个"导致〔单一技术问题〕的(技术)?问题"收口 (L3-1 标准句式,
+    技术问题唯一); full-draft 时发明内容"以解决…"句须逐字包含该收口原文 (实测三
+    真实案件均为收口原文整段嵌入)。创新处与技术问题的语义对应仍归 content-auditor。
+    """
+    bg, _ = get_section_lines(lines, sections, "背景技术")
+    if not bg:
+        return
+    collectors = list(dict.fromkeys(re.findall(r"导致[^。；，、]{2,60}的(?:技术)?问题", "".join(bg))))
+    if not collectors:
+        report.add(
+            "L3-1", "背景技术", "".join(bg).strip()[:60],
+            "背景技术缺标准收口句'……，导致〔单一技术问题〕的问题'(L3-1)",
+        )
+        return
+    if len(collectors) > 1:
+        report.add(
+            "L3-1", "背景技术", " / ".join(c[:30] for c in collectors[:3]),
+            f"背景技术出现 {len(collectors)} 个'导致…的问题'收口; 技术问题必须唯一(L3-1)",
+        )
+        return
+    if stage != "full-draft":
+        return
+    fm, _ = get_section_lines(lines, sections, "发明内容")
+    if not fm:
+        return
+    fm_text = "".join(fm)
+    if "以解决" not in fm_text:
+        report.add(
+            "L6-1", "发明内容", fm_text.strip()[:60],
+            "发明内容首段缺'以解决……问题'句(L6-1, 须与背景技术收口逐字呼应)",
+        )
+    elif collectors[0] not in fm_text:
+        report.add(
+            "L6-1", "发明内容", f"背景收口='{collectors[0][:40]}'",
+            "发明内容'以解决…'句未逐字包含背景技术收口'导致…的问题'原文; 二者必须逐字呼应(L6-1/L3-1)",
+        )
+
+
 # -----------------------------------------------------------------------------
 # 辅助: 决定扫描范围 (只扫说明书正文, 避开代码块/表格头)
 # -----------------------------------------------------------------------------
@@ -884,6 +969,9 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_closing_boilerplate(lines, sections, report, stage)
     check_benefit_enumeration(lines, sections, report, stage)
     check_judgment_sentence_pattern(lines, sections, report, stage)
+    check_substep_numbering(lines, sections, report, stage)
+    check_benefit_generic_phrases(lines, sections, report, stage)
+    check_problem_echo(lines, sections, report, stage)
 
     return report
 
