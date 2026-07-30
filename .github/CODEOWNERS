@@ -1,0 +1,10 @@
+# CODEOWNERS — 专利 skill 协作权限路由
+# 规则：所有路径的审批权归维护者 @Nafsae；lxl 的经验档案同样需 @Nafsae 审批
+# （lxl 不作为 owner 列出，避免其自行审批自己的 PR）。
+# experience-guard CI 另在 PR 层校验：非维护者 PR 只能改 references/cases/experience/<自己>.md
+
+# 默认：一切归维护者
+*                        @Nafsae
+
+# 经验档案目录：同样归维护者审批（lxl 可提交，但合并需 @Nafsae 批）
+references/cases/experience/   @Nafsae
