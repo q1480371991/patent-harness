@@ -1,6 +1,5 @@
 name: experience-path-guard
-# 非维护者的 PR 只允许改动自己的撰写者经验档案（references/cases/experience/<user>.md）。
-# 维护者（MAINTAINERS 列表）不受限制。
+# 非维护者 PR 只允许改动一个经验档案文件，且该文件头部登记的 github 用户名必须等于 PR 作者（自助注册制）。
 on:
   pull_request:
     branches: [claude]
@@ -13,27 +12,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check changed paths
+      - name: Check changed paths and registration
         run: |
           AUTHOR="${{ github.event.pull_request.user.login }}"
           for m in $MAINTAINERS; do
-            if [ "$AUTHOR" = "$m" ]; then echo "maintainer $AUTHOR: skip guard"; exit 0; fi
+            [ "$AUTHOR" = "$m" ] && { echo "maintainer $AUTHOR: skip guard"; exit 0; }
           done
           git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
           CHANGED=$(git diff --name-only "origin/${{ github.event.pull_request.base.ref }}"...HEAD)
           echo "changed files:"; echo "$CHANGED"
-          BAD=0
+          BAD=0; EXP=""
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
               references/cases/experience/*.md)
                 base=$(basename "$f" .md)
-                if [ "$base" = "README" ]; then echo "DENY: $f (README 仅维护者可改)"; BAD=1; fi
+                [ "$base" = "README" ] && { echo "DENY: $f (README 仅维护者可改)"; BAD=1; continue; }
+                EXP="$f"
                 ;;
               *) echo "DENY: $f (非经验档案路径)"; BAD=1 ;;
             esac
           done <<< "$CHANGED"
-          # 额外约束：一个 PR 只能改一个经验档案文件（防止代改他人档案需人工审）
           N=$(echo "$CHANGED" | grep -c '^references/cases/experience/.*\.md$' || true)
-          if [ "$N" -gt 1 ]; then echo "DENY: 一次 PR 只允许改动一个经验档案文件"; BAD=1; fi
+          [ "$N" -gt 1 ] && { echo "DENY: 一次 PR 只允许改动一个经验档案文件"; BAD=1; }
+          if [ -n "$EXP" ] && [ -f "$EXP" ]; then
+            REG=$(grep -m1 -oE 'github: *[A-Za-z0-9-]+' "$EXP" | awk '{print $2}')
+            if [ -z "$REG" ]; then echo "DENY: $EXP 缺少头部登记行 'github: <用户名>'（自助注册）"; BAD=1
+            elif [ "$REG" != "$AUTHOR" ]; then echo "DENY: PR 作者 $AUTHOR ≠ $EXP 登记的 github 用户名 $REG"; BAD=1
+            else echo "OK: $AUTHOR 匹配 $EXP 登记"; fi
+          fi
           exit $BAD
