@@ -717,7 +717,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
     def test_delivery_filename_uses_writer_directory(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
 
-        self.assertIn("`夏晓贝/` 和 `王培元/`", global_text)
+        self.assertIn("撰写者目录白名单：`夏晓贝/`（经验档案 xxb）、`王培元/`（经验档案 wpy）", global_text)
         # 现行 G1-1: 对外交付用全称命名, 禁止简写与状态后缀
         self.assertIn("`案件号-稿次-作者-发明题目全称.docx`", global_text)
         self.assertIn("不得使用 `<撰写者>-<稿次>.docx` 简写", global_text)
