@@ -119,6 +119,7 @@ def extract_claims(lines: list[str], sections: dict, errors: list[str]) -> dict 
             "subject": subj_m.group(1) if subj_m else None,
             "step_count": len(steps) if steps else None,
             "steps": steps,
+            "flat": flat,
         })
 
     claim1 = next((it for it in items if it["num"] == 1), None)

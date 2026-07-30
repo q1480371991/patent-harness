@@ -8,6 +8,9 @@
 - X2 (L8-0, 仅 full-draft): 主步骤编号为 S11..S1N 连续 (与权 1 分句一一对应).
 - X3 (L1-1, 两阶段): 从权依附/范围引用合法 —— 目标权要存在且在前位.
 - X4 (L8-0, 仅 full-draft): 主步骤不得用 `在步骤Sx至步骤Sy中` 合并展开.
+- X7 (L1-1, 两阶段): 从权引用句逐字一致 —— `其特征在于，所述〔引用句〕，包括：`
+  的引用句 (仅允许去句首连接词并/再/然后、加"所述") 必须是依附链上某条权要
+  原文的连续子串; 防改动词 (对↔根据) 与引用句内附加限定 (审批人硬要求).
 
 其余第二类项 (权要 1 步骤数/附图 1 节点数、发明内容对每条权要、附图说明数 vs
 反向特征校验、从权多元化依附) 为语义项, 归各路 auditor (multi-auditor)
@@ -120,6 +123,56 @@ def check_x4_no_merged_steps(structure: dict, violations: list[dict]) -> None:
                        "L8-0 要求每个主步骤单独按 L8-1 范式展开 "
                        "(`在步骤SxN中，〔复述权1对应分句〕，包括：...`), 不得合并",
         })
+
+
+def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None:
+    """X7: 从权引用句逐字一致 (claims.md L1-1, 审批人硬要求).
+
+    从权 preamble `其特征在于，所述〔引用句〕，包括：` 的引用句, 去掉句首"所述"与
+    连接词(并/再/然后)后, 必须逐字命中其依附链(含传递依附)上某条权要原文的连续
+    子串. 命不中 = 改了动词(对↔根据)、换了措辞、或在引用句内附加了原句没有的
+    限定. 引用句过短(<8字)或无 `包括：` 锚点的从权不在本检范围(交 auditor 语义判).
+    """
+    import re as _re
+    claims = structure.get("claims") or {}
+    by_num = {it["num"]: it for it in claims.get("items", [])}
+
+    def ancestors(num: int) -> set[int]:
+        seen: set[int] = set()
+        stack = list(by_num.get(num, {}).get("depends_on", []))
+        while stack:
+            d = stack.pop()
+            if d in seen or d not in by_num:
+                continue
+            seen.add(d)
+            stack.extend(by_num[d].get("depends_on", []))
+        return seen
+
+    quote_re = _re.compile(r"其特征在于，(.*?)，?包括[：:]")
+    for it in claims.get("items", []):
+        if not it.get("dependent"):
+            continue
+        flat = it.get("flat") or ""
+        m = quote_re.search(flat)
+        if not m:
+            continue
+        q = m.group(1)
+        for prefix in ("所述", "并", "再", "然后"):
+            if q.startswith(prefix):
+                q = q[len(prefix):]
+        if len(q) < 8:
+            continue
+        chain = ancestors(it["num"])
+        if not any(q in (by_num[d].get("flat") or "") for d in chain):
+            violations.append({
+                "rule_id": "L1-1",
+                "check": "X7",
+                "location": f"权要 {it['num']} (md 第{it['start_line']}行起)",
+                "evidence": f"引用句='{q[:60]}…'" if len(q) > 60 else f"引用句='{q}'",
+                "message": f"权要 {it['num']} 的引用句未逐字命中依附链权要 "
+                           f"{sorted(chain)} 原文; 引用的步骤须与前面的步骤完全一致"
+                           "(不得改动词、不得附加限定, claims.md L1-1)",
+            })
 
 
 def check_x3_dependency(structure: dict, violations: list[dict]) -> None:
@@ -274,6 +327,7 @@ def run_checks(structure: dict) -> dict:
         check_x5_fmnr_dep_expansion(structure, violations)
         check_x6_verbatim_restatement(structure, violations)
     check_x3_dependency(structure, violations)
+    check_x7_dep_quote_verbatim(structure, violations)
 
     return {
         "stage": structure["stage"],
