@@ -14,18 +14,6 @@ from docx.enum.text import WD_COLOR_INDEX
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 
-# 单内核 + 薄适配层: core 测试在两个适配分支都要能跑.
-# 两个宿主分支的入口文件都叫 SKILL.md, 但内容不同——Claude 范式 vs Codex 范式.
-# 校验 Claude 范式专属内容的断言, 只在"当前 SKILL.md 是 Claude 范式"时跑,
-# 否则跳过(不是失败). 判据用 Codex 范式没有、Claude 范式必有的锚点串.
-_skill_md = SKILL_DIR / "SKILL.md"
-_skill_text = _skill_md.read_text(encoding="utf-8") if _skill_md.exists() else ""
-# core(subagent) 分支与 claude 分支的 SKILL.md 是 Claude 范式(含"接入前环境自检"段);
-# codex 分支的 SKILL.md 是 Codex 适配层(含"Codex 适配层"标题, 无该段).
-CLAUDE_SKILL = "接入前环境自检" in _skill_text and "Codex 适配层" not in _skill_text
-CODEX_SKILL = "Codex 适配层" in _skill_text
-AGENTS_MD_PRESENT = (SKILL_DIR / "AGENTS.md").exists()
-
 
 def run_script(script_name, *args):
     return subprocess.run(
@@ -206,9 +194,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("C-DOCX-8", case_text)
         self.assertIn("幽灵字体", case_text)
         self.assertTrue((SCRIPTS_DIR / "omml_formulas.py").exists())
-        if CLAUDE_SKILL:
-            skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("omml_formulas.py", skill_text)
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("omml_formulas.py", skill_text)
 
     def test_bundled_template_has_no_ghost_font(self):
         # 模板样式链引用系统不存在的字体 (如 Dutch801 Rm BT) 会让 WPS 公式
@@ -242,7 +229,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("highlights=1", result.stdout)
             self.assertIn("comments=1/1", result.stdout)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_skill_frontmatter_and_bundled_template_paths_are_stable(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 
@@ -252,7 +238,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("assets/docx/专利撰写模板.docx", skill_text)
         self.assertNotIn("assets/专利撰写模板.docx", skill_text)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_claims_format_guidance_is_bundled_not_external_path(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         claims_text = (SKILL_DIR / "references" / "rules" / "claims.md").read_text(encoding="utf-8")
@@ -273,7 +258,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("可用 zipfile + xml.etree 直接读写", docx_text)
         self.assertIn("已显式加载官方 `docx` skill", docx_text)
         self.assertIn("不得替代 `docx` skill 的执行层", docx_text)
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_progressive_rules_files_exist_and_are_referenced(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
@@ -303,7 +287,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("# 第二部分：局部规则", rules_text)
         self.assertNotIn("# 第三部分：最终交付前总自检", rules_text)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_skill_uses_progressive_rule_loading(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 
@@ -353,7 +336,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("附图自动生成规则", figures_text)
         self.assertIn("图 1", figures_text)
         self.assertIn("Visio", figures_text)
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_audit_reinforcements_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
@@ -401,7 +383,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("原稿、返修稿和 `comments.xml`", revision_text)
         self.assertIn("对应阶段规则文件", skill_text)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_second_reaudit_alignment_fixes_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
@@ -432,8 +413,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
 
         self.assertNotIn("方法 ≤7 条", claims_text)
         self.assertIn("方法权通常写到权要 7 左右", claims_text)
-        self.assertIn("可扩展方法权数量或压缩系统/装置从权数量", claims_text)
-        self.assertIn("计算机设备式系统/装置独权", claims_text)
+        self.assertIn("可扩展方法权数量或压缩系统", claims_text)
+        self.assertIn("系统/装置独权默认采用计算机设备式写法", claims_text)
         self.assertIn("计算机可读存储介质权", claims_text)
         self.assertNotIn("系统/装置独权及其从权的结构", skill_text)
 
@@ -461,7 +442,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("句末标点", figures_text)
         self.assertIn("分号分句", figures_text)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_dedup_and_segmented_write_rules_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
@@ -616,7 +596,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("X4", checks)   # 合并展开被点名
             self.assertNotIn("X1", checks)  # 覆盖数 3 == 分句数 3, 不误报数量
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_skill_wires_cross_block_check_into_gates(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 
@@ -635,7 +614,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
             text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
             self.assertIn("必审语义项", text)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_signature_not_defaulted_to_juventude(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
@@ -648,7 +626,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("署 Juventude", skill_text)
         self.assertNotIn("默认作者名为 `Juventude`", revision_text)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_innovation_points_driven_by_disclosure_annotations(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
@@ -665,9 +642,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
 
         self.assertNotIn("高亮", global_text)
-        if CLAUDE_SKILL:
-            skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-            self.assertNotIn("高亮", skill_text)
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("高亮", skill_text)
 
     def test_delivery_filename_uses_writer_directory(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
@@ -677,9 +653,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("`案件号-稿次-作者-发明题目全称.docx`", global_text)
         self.assertIn("不得使用 `<撰写者>-<稿次>.docx` 简写", global_text)
         self.assertIn("不得加 `-留痕` 等状态后缀", global_text)
-        if CLAUDE_SKILL:
-            skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("案件号-权要1稿-作者-发明题目全称.docx", skill_text)
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("案件号-权要1稿-作者-发明题目全称.docx", skill_text)
 
     def test_a_paradigm_anchor_matches_extractor(self):
         """L8-0 展开段入口句锚点与 extract_structure.py 的主步骤正则互相匹配(防规则句面与脚本漂移)。"""
@@ -688,7 +663,6 @@ class PatentScriptSmokeTests(unittest.TestCase):
         extractor_src = (SKILL_DIR / "scripts" / "extract_structure.py").read_text(encoding="utf-8")
         self.assertIn("在步骤S", extractor_src)
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_slimming_regression_guards(self):
         """三项瘦身 + 增量复核的回归保护：防止改动回退成整篇传规则/全量重审。"""
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
@@ -759,50 +733,32 @@ class PatentScriptSmokeTests(unittest.TestCase):
         pandoc_check = next(c for c in data["checks"] if c["name"] == "pandoc")
         self.assertFalse(pandoc_check["required"])  # pandoc 为可选
 
-    @unittest.skipUnless(CLAUDE_SKILL, "当前 SKILL.md 非 Claude 范式(codex 分支), 跳过 Claude 专属断言")
     def test_skill_wires_env_check_into_onboarding(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("接入前环境自检", skill_text)
         self.assertIn("scripts/check_env.py", skill_text)
         self.assertTrue((SKILL_DIR / "docs" / "install.md").exists())
 
-    def test_check_env_host_codex_skips_docx_plugin(self):
+    def test_check_env_includes_docx_plugin_check(self):
         import json
 
-        # Claude 宿主: 含 docx 插件检测项
-        r_claude = run_script_allow_fail("check_env.py", "--host", "claude", "--json")
-        d_claude = json.loads(r_claude.stdout)
-        names_claude = {c["name"] for c in d_claude["checks"]}
-        self.assertTrue(any("document-skills:docx" in n for n in names_claude))
+        # 单宿主 (claude): docx 插件检测项恒在, python-docx 同为必需 pip 项
+        r = run_script_allow_fail("check_env.py", "--json")
+        d = json.loads(r.stdout)
+        names = {c["name"] for c in d["checks"]}
+        self.assertTrue(any("document-skills:docx" in n for n in names))
+        self.assertTrue(any(c["name"] == "python-docx" for c in d["checks"]))
 
-        # Codex 宿主: 跳过 docx 插件 (由 python-docx 直连)
-        r_codex = run_script_allow_fail("check_env.py", "--host", "codex", "--json")
-        d_codex = json.loads(r_codex.stdout)
-        names_codex = {c["name"] for c in d_codex["checks"]}
-        self.assertFalse(any("document-skills:docx" in n for n in names_codex))
-        self.assertEqual(d_codex["host"], "codex")
-        # python-docx 两端都在 (Codex 的 DOCX 能力由它提供)
-        self.assertTrue(any(c["name"] == "python-docx" for c in d_codex["checks"]))
-
-    def test_dual_host_adapter_layer_present(self):
-        # 单内核 + 薄适配层: porting 指南属 core 恒在; 入口文件都叫 SKILL.md
-        # 但内容分 Claude 范式 / Codex 范式. 当前分支必属其一.
-        self.assertTrue((SKILL_DIR / "docs" / "porting.md").exists())
-        self.assertTrue(
-            CLAUDE_SKILL or CODEX_SKILL,
-            msg="SKILL.md 必须是 Claude 范式或 Codex 范式之一",
-        )
-        # Codex 范式 SKILL.md: 校验其指向共享内核并声明 auditor 降级自查
-        if CODEX_SKILL:
-            self.assertIn("references/", _skill_text)
-            self.assertIn("scripts/", _skill_text)
-            self.assertIn("自查", _skill_text)
-            self.assertIn("--host codex", _skill_text)
-            self.assertTrue((SKILL_DIR / "agents" / "openai.yaml").exists())
-        # 多路 auditor 契约含跨宿主说明 (属 core, 两分支恒在)
+    def test_single_host_no_codex_residue(self):
+        # 2026-07-30 起 codex 分支删除, 仅维护 claude 单宿主; 跨宿主适配层不得回流
+        self.assertFalse((SKILL_DIR / "docs" / "porting.md").exists())
+        self.assertFalse((SKILL_DIR / "agents" / "openai.yaml").exists())
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("Codex", skill_text)
         for fname in ("global-auditor.md", "claims-auditor.md", "content-auditor.md", "impl-auditor.md"):
             auditor_text = (SKILL_DIR / "agents" / fname).read_text(encoding="utf-8")
-            self.assertIn("跨宿主", auditor_text)
+            self.assertNotIn("跨宿主", auditor_text)
+            self.assertNotIn("Codex", auditor_text)
 
 
 class FigureScriptsSmokeTest(unittest.TestCase):

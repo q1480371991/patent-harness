@@ -9,8 +9,6 @@ description: Use when 用户要求基于交底书 DOCX 撰写、修订或继续�
 
 跨设备迁移与首次接入的完整步骤参考 `docs/install.md`（含 Windows/macOS 目录、路径适配、依赖自检）。
 
-> **本文件是 Claude 宿主的入口（claude 分支的 `SKILL.md`）。** 本 skill 采用单内核 + 薄适配层：规则、脚本、模板、subagent 契约（`references/`、`scripts/`、`assets/`、`agents/`）为两端共享的 core。**两个宿主都以 `SKILL.md` 为 skill 入口**，区别在分支：claude 分支的 `SKILL.md` 为 Claude 范式（本文件），codex 分支的 `SKILL.md` 为 Codex 范式（+ `agents/openai.yaml` 界面清单）。规则改动只落 core，两端自动同步。架构与分支纪律见 `docs/porting.md`（维护者指南）。
-
 ## 接入前环境自检（首次接入必做）
 
 本 skill 首次被接入一台新机器（Windows/macOS/Linux），或用户要求"检查/配置环境""能不能直接用"时，**在开始任何专利撰写工作前先跑一次环境自检**：
@@ -99,7 +97,7 @@ python3 scripts/check_env.py --json
 - **通过判定**（合并口径唯一出处 `scoring.md` 计分方法）：global-auditor 完整性 PASS + 各路 1 级均 100% + 合并 2 级分（Σ各路通过 ÷ Σ各路适用）≥90%。
 - **合并落盘**：主 agent 合并各路报告落盘一份 `docs/审查报告-<稿次>.md`（合并结论在前、各路原始报告附后；同位置同规则去重，跨路冲突按 `rules.md` 冲突处理原则裁决）。未达标不得进入 DOCX。
 - **回修重审**：按合并后的最短回修清单改 md 后重审——**本阶段全部机械脚本必重跑**（权要稿：check_hard_rules + check_cross_block；全文稿：check_hard_rules + check_cross_block + verify_claims_alignment）；上轮有 FAIL 的路（专审路与 global-auditor 均适用）**以增量复核模式重调**（重审轮重新调用一次 Workflow，仅编排上轮 FAIL 的路）：额外传 `reaudit_context`（上轮该路报告的失败项 + 主 agent 列出的本轮改动块清单），各路契约中标注"完整性级"或"恒全文复核"的项仍全量复核，其余上轮 PASS 且不涉改动块的项沿用上轮结论并标注"沿用"；上轮全 PASS 的专审路不重调。
-- **降级兜底**：任一路两次失败（无契约结构或报告"输入不完整"）时，仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效，但脚本闸门必须通过。若 `Workflow` 工具本身不可用或整次运行连续两次失败（脚本报错、全部路无返回），**首先回退到 Agent 工具逐路并行派发**（每路一个 subagent，prompt 与输入字段同调用机制条，保留物理隔离与并行独立性），在完工报告标注"Workflow 未生效，已 Agent 派发"；Agent 工具亦不可用时，才整级降级为主 agent 按各路契约**分轮自查**（每轮只带一路规则包，同 Codex 宿主模式），标注"已分轮自查"。任何降级级别下脚本闸门都必须通过；降级不得静默——完工报告校验清单首行必须写明本次审查的实际执行方式（Workflow 编排 / Agent 派发 / 分轮自查）。
+- **降级兜底**：任一路两次失败（无契约结构或报告"输入不完整"）时，仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效，但脚本闸门必须通过。若 `Workflow` 工具本身不可用或整次运行连续两次失败（脚本报错、全部路无返回），**首先回退到 Agent 工具逐路并行派发**（每路一个 subagent，prompt 与输入字段同调用机制条，保留物理隔离与并行独立性），在完工报告标注"Workflow 未生效，已 Agent 派发"；Agent 工具亦不可用时，才整级降级为主 agent 按各路契约**分轮自查**（每轮只带一路规则包），标注"已分轮自查"。任何降级级别下脚本闸门都必须通过；降级不得静默——完工报告校验清单首行必须写明本次审查的实际执行方式（Workflow 编排 / Agent 派发 / 分轮自查）。
 
 ## 权要一稿
 

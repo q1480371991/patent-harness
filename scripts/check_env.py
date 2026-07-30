@@ -19,11 +19,6 @@ patent skill 接入前环境自检器 (跨平台: Windows / macOS / Linux).
     python3 scripts/check_env.py                    # 只检测, 人类可读报告到 stderr
     python3 scripts/check_env.py --json             # 追加 JSON 报告到 stdout (给 AI 消费)
     python3 scripts/check_env.py --fix              # 对 pip 类缺失项执行 pip install
-    python3 scripts/check_env.py --host codex       # Codex 宿主: 跳过 document-skills:docx 插件检测
-
-`--host`（单内核多宿主）:
-- `claude`（默认）: 检测 document-skills:docx 插件（DOCX 执行层走该插件）。
-- `codex`: 不检测该插件（Codex 无此插件, DOCX 由 python-docx 直接提供, 已被 pip 必需项覆盖）。
 
 Exit code: 0 = 必需项全部就绪 (可选项缺失不影响); 非 0 = 缺必需项数量.
 """
@@ -148,17 +143,14 @@ def check_docx_plugin() -> dict:
     }
 
 
-def run_checks(host: str = "claude") -> list[dict]:
-    checks = [
+def run_checks() -> list[dict]:
+    return [
         check_python_version(),
         check_python_docx(),
         check_pillow(),
         check_pandoc(),
+        check_docx_plugin(),
     ]
-    # document-skills:docx 仅 Claude 宿主适用; Codex 用 python-docx 直连, 不检测插件.
-    if host == "claude":
-        checks.append(check_docx_plugin())
-    return checks
 
 
 def do_fix(results: list[dict]) -> list[dict]:
@@ -202,25 +194,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="patent skill 环境自检 (仅标准库).")
     parser.add_argument("--json", action="store_true", help="stdout 输出 JSON 报告 (给 AI 消费)")
     parser.add_argument("--fix", action="store_true", help="对 pip 类缺失项执行 pip install 后重检")
-    parser.add_argument(
-        "--host", choices=["claude", "codex"], default="claude",
-        help="宿主: claude 检测 docx 插件; codex 跳过插件 (用 python-docx 直连)",
-    )
     args = parser.parse_args()
 
-    results = run_checks(args.host)
+    results = run_checks()
     fixes = []
     if args.fix:
         fixes = do_fix(results)
         if fixes:  # 装完重检, 反映最新状态
-            results = run_checks(args.host)
+            results = run_checks()
 
     missing_required, missing_optional = summarize(results)
 
     if args.json:
         print(json.dumps({
             "platform": OS_NAME,
-            "host": args.host,
             "python": ".".join(map(str, sys.version_info[:3])),
             "missing_required": missing_required,
             "missing_optional": missing_optional,
