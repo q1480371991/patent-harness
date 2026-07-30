@@ -16,9 +16,9 @@
 
 | 阶段 | 必读核心 | 触发式按需（命中才读） | 禁止默认读取 |
 |---|---|---|---|
-| 权要一稿 | `global.md`、`claims.md`、`scoring.md`、`docx-template.md`、`cases/experience/<本案撰写者>.md`（撰写者经验档案，撰写者由案件路径识别，其余撰写者档案不读） | — | `full-draft.md`、`figures.md`、`revision.md` |
+| 权要一稿 | `global.md`、`claims.md`、`scoring.md`、`docx-template.md` | — | `full-draft.md`、`figures.md`、`revision.md`、`cases/experience/*` |
 | 权要二稿/三稿 | `global.md`、`claims.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md` | `revision.md` A4-0 触发块（删除类/算法类/序号类）；`cases/INDEX.md`（挂回复批注、清痕等） | 未被批注涉及的全文块规则 |
-| 全文一稿 | `global.md`、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md`、`cases/experience/<本案撰写者>.md`（撰写者经验档案，撰写者由案件路径识别，其余撰写者档案不读） | `claims.md` L1/L2/L3 一级规则（冻结块只读体检用，唯一出处 `full-draft.md`「权要冻结」节） | `claims.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动 |
+| 全文一稿 | `global.md`、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims.md` L1/L2/L3 一级规则（冻结块只读体检用，唯一出处 `full-draft.md`「权要冻结」节） | `claims.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动；`cases/experience/*` |
 | 全文二稿/三稿 | `global.md`、`full-draft.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims.md` L1/L2/L3 一级规则（冻结块体检） | `claims.md` 其余内容，除非批注涉及权要联动 |
 | Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`，并按批注内容读 `claims.md`/`full-draft.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims.md` L1/L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
 | DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
@@ -27,6 +27,8 @@
 > **docx-template.md 分层读取**：md 撰写阶段只读 G8-0 / G8-0b 及 md 层可判定条目；G8-1 XML 骨架与注入细节延后到进入 DOCX 执行层（权要一稿 step 8-12 / 全文一稿 step 9-12）时再读，避免前置占用撰写上下文。
 
 **加载顺序**：先读必读核心 → 判断当前批注/操作命中哪些触发条件 → 只加载命中的触发式块或 cases 详情。不得为省事一次性全量加载，也不得跳过命中的触发块导致漏规则。
+
+**经验档案读取纪律**：`references/cases/experience/<撰写者>.md` 不在任何撰写/返修阶段默认读取（其可迁移条目均已按学习闭环升格进对应规则文件，日常撰写按规则文件执行即可）；仅在整理 skill、升级归纳沉淀经验、或用户主动要求调整 skill 规则时才读取。
 
 ## 交底书阅读时机
 
