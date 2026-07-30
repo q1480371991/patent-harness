@@ -589,6 +589,28 @@ class PatentScriptSmokeTests(unittest.TestCase):
             "## 发明内容\n\n本发明提供一种方法，以解决现有技术无法自适应过滤、导致误报率高的问题。\n",
             ["标准收口", "必须唯一", "逐字包含", "以解决"]), [])
 
+    def test_check_hard_rules_suspect_channel(self):
+        import json
+
+        md = (
+            "## 具体实施方式\n\n"
+            "在步骤S11中，采用数字调光方式调节PWM占空比。\n\n"
+            "在步骤S12中，通过电流镜像电路进行模拟调流补偿，并将特征输入预设的状态识别模型，输出状态类别。\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(md, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json"
+            )
+            data = json.loads(result.stdout)
+        # 规则 27 互斥体系共现 + 规则 28 模型缺维度 → suspect 线索, 不计 FAIL
+        self.assertEqual(data["suspect_count"], 2)
+        self.assertTrue(any("互斥技术体系" in s["message"] for s in data["suspects"]))
+        self.assertTrue(any("四维度" in s["message"] for s in data["suspects"]))
+        self.assertTrue(all("互斥" not in v["message"] and "四维度" not in v["message"]
+                            for v in data["violations"]))
+
     def test_check_cross_block_x7_dep_quote_verbatim(self):
         import json
 

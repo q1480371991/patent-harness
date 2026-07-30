@@ -74,9 +74,14 @@ class Report:
     stage: str
     md_path: str
     violations: list[Violation] = field(default_factory=list)
+    suspects: list[Violation] = field(default_factory=list)
 
     def add(self, rule_id: str, location: str, evidence: str, message: str) -> None:
         self.violations.append(Violation(rule_id, location, evidence, message))
+
+    def add_suspect(self, rule_id: str, location: str, evidence: str, message: str) -> None:
+        """线索级: 不计 FAIL、不影响 exit code, 随 JSON 回传对应 auditor 逐条复核处置."""
+        self.suspects.append(Violation(rule_id, location, evidence, message))
 
     def count(self) -> int:
         return len(self.violations)
@@ -903,6 +908,74 @@ def check_problem_echo(lines: list[str], sections: dict, report: Report, stage: 
         )
 
 
+# 规则 27 词表唯一出处: 同一技术实现路径上互斥的技术体系 (impl-auditor 语义项"技术
+# 路径术语自洽"的机械探测词表; 新互斥体系一律在此登记, 契约只引用不复列).
+MUTEX_TECH_SYSTEMS: list[tuple[str, list[str], str, list[str]]] = [
+    ("数字调光/PWM 体系", ["数字调光", "PWM", "占空比", "数字信号链"],
+     "模拟调流/线性体系", ["模拟调流", "电流镜像", "恒流线性", "模拟信号链"]),
+]
+
+
+def check_tech_system_mixing(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 27 (suspect 线索级): 互斥技术体系词共现探测 (L8-1 技术路径术语自洽).
+
+    MUTEX_TECH_SYSTEMS 中一对互斥体系的词在具体实施方式内同时出现 → 出 suspect
+    线索(附两侧命中词与行号), 由 impl-auditor 判定是否同一技术路径混用(合法的对比
+    描述/背景引用可豁免)。时域/频域共现在信号处理案中常为合法变换关系, 不入词表。
+    不计 FAIL、不影响 exit code。仅 full-draft。
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "具体实施方式")
+    if offset < 0:
+        return
+    text = "\n".join(body)
+    for name_a, words_a, name_b, words_b in MUTEX_TECH_SYSTEMS:
+        hit_a = [w for w in words_a if w in text]
+        hit_b = [w for w in words_b if w in text]
+        if hit_a and hit_b:
+            loc_a = next(offset + i + 1 for i, l in enumerate(body) if any(w in l for w in hit_a))
+            loc_b = next(offset + i + 1 for i, l in enumerate(body) if any(w in l for w in hit_b))
+            report.add_suspect(
+                "L8-1", f"具体实施方式 第{loc_a}行/第{loc_b}行",
+                f"{name_a}:{hit_a} ↔ {name_b}:{hit_b}",
+                "互斥技术体系词共现; impl-auditor 判定是否同一技术路径混用, 混用则给出应统一为的本领域公认技术",
+            )
+
+
+def check_model_detail_hints(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 28 (suspect 线索级): 模型四维度细节缺失探测 (L8-1 模型细节/G6-1 模型测度).
+
+    具体实施方式出现"预设(的)xx模型"时, 按关键词探测四维度是否在章内有着落:
+    训练数据(训练/样本/标注)、损失或目标(损失/目标函数)、使用方式(输入/输出)、
+    终止条件(终止/收敛/迭代/轮次)。某维度零关键词命中 → 出 suspect 线索列出缺失
+    维度, 由 impl-auditor 复核(关键词只探在场性, 不判"算够"; 不适用维度可豁免)。
+    不计 FAIL、不影响 exit code。仅 full-draft。
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "具体实施方式")
+    if offset < 0:
+        return
+    text = "\n".join(body)
+    models = list(dict.fromkeys(re.findall(r"预设的?([^，。；：\s]{1,14}模型)", text)))
+    if not models:
+        return
+    dims = [
+        ("训练数据", ["训练", "样本", "标注"]),
+        ("损失/目标", ["损失", "目标函数"]),
+        ("使用方式", ["输入", "输出"]),
+        ("终止条件", ["终止", "收敛", "迭代", "轮次", "早停"]),
+    ]
+    missing = [name for name, kws in dims if not any(k in text for k in kws)]
+    if missing:
+        report.add_suspect(
+            "L8-1", "具体实施方式",
+            f"模型: {models[:3]}",
+            f"模型细节四维度关键词缺失: {missing}; impl-auditor 复核是否公开不充分(不适用维度可豁免并注明理由)",
+        )
+
+
 # -----------------------------------------------------------------------------
 # 辅助: 决定扫描范围 (只扫说明书正文, 避开代码块/表格头)
 # -----------------------------------------------------------------------------
@@ -972,6 +1045,9 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_substep_numbering(lines, sections, report, stage)
     check_benefit_generic_phrases(lines, sections, report, stage)
     check_problem_echo(lines, sections, report, stage)
+    # suspect 线索级 (不计 FAIL, 回传 auditor 复核)
+    check_tech_system_mixing(lines, sections, report, stage)
+    check_model_detail_hints(lines, sections, report, stage)
 
     return report
 
@@ -1023,6 +1099,8 @@ def main() -> int:
             "md_path": report.md_path,
             "violation_count": report.count(),
             "violations": [asdict(v) for v in report.violations],
+            "suspect_count": len(report.suspects),
+            "suspects": [asdict(v) for v in report.suspects],
         }, ensure_ascii=False, indent=2))
     else:
         print(format_human_report(report), file=sys.stderr)
