@@ -767,6 +767,57 @@ def check_benefit_enumeration(lines: list[str], sections: dict, report: Report, 
                 )
 
 
+def check_judgment_sentence_pattern(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 23: 说明书判断步骤句式合规 (G6-1 规定句式, 原 impl-auditor 语义项 9 的句式半边).
+
+    G6-1 只允许两种双分支句式:
+      句式一: 当判定满足xx时，则执行xx；当判定不满足xx时，则执行xx。
+      句式二: 判断是否满足xx，若是，则执行xx；若否，则执行xx。
+    单分支条件触发合并写成"若xx，则xx"(不含"判断是否"), 合法。机械红线 (按句号分句判):
+      - 某分句以"判断/判定…是否"作步骤谓语开头(允许前置'则/再/并/先/随后/然后'),
+        整句却未同时含"若是"与"若否" → 句式二残缺或未用规定句式。"用于判定是否…"
+        "作为判断是否…的依据"等名词性描述非步骤谓语, 不报(实测三真实案件的误报边界);
+      - 句内出现"当判定满足"却无"当判定不满足"(或反之) → 句式一只写半支;
+      - 句内"若是，/若是则"与"若否，/若否则"落单 → 分支不成对("若是首次采集"式
+        白话条件不匹配, 不报)。
+    分支数与权要一致(G6-1 清单①②)需比对权要语义, 仍归 impl-auditor, 本规则不越权。
+    仅 full-draft, 只扫具体实施方式章。
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "具体实施方式")
+    if offset < 0:
+        return
+    judge_step = re.compile(r"^(?:则|再|并|先|随后|然后)?判[断定][^，；：]{0,30}?是否")
+    branch_yes = re.compile(r"若是[，,则]")
+    branch_no = re.compile(r"若否[，,则]")
+    for i, line in enumerate(body):
+        loc = f"具体实施方式 第{offset + i + 1}行"
+        for sent in re.split(r"。", line):
+            if not sent.strip():
+                continue
+            ev = sent.strip()[:70]
+            is_judge_step = any(judge_step.match(cl.strip()) for cl in re.split(r"[，；：]", sent))
+            if is_judge_step and not (branch_yes.search(sent + "，") and branch_no.search(sent + "，")):
+                report.add(
+                    "G6-1", loc, ev,
+                    "判断步骤含'判断…是否'但未按规定句式写全'若是，则…；若否，则…'两分支; "
+                    "单分支逻辑应合并为'若xx，则执行xx'(G6-1 判断句式)",
+                )
+                continue
+            if ("当判定满足" in sent) != ("当判定不满足" in sent):
+                report.add(
+                    "G6-1", loc, ev,
+                    "判断句式一只写了半支; '当判定满足…时，则…'必须与'当判定不满足…时，则…'成对(G6-1)",
+                )
+                continue
+            if bool(branch_yes.search(sent)) != bool(branch_no.search(sent)):
+                report.add(
+                    "G6-1", loc, ev,
+                    "'若是'/'若否'分支落单; 双分支判断两支必须在同一句内成对写全(G6-1 判断句式)",
+                )
+
+
 # -----------------------------------------------------------------------------
 # 辅助: 决定扫描范围 (只扫说明书正文, 避开代码块/表格头)
 # -----------------------------------------------------------------------------
@@ -832,6 +883,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_figure_numbering(lines, sections, report, stage)
     check_closing_boilerplate(lines, sections, report, stage)
     check_benefit_enumeration(lines, sections, report, stage)
+    check_judgment_sentence_pattern(lines, sections, report, stage)
 
     return report
 

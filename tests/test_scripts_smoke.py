@@ -521,6 +521,33 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertIn("X1", checks)  # 权 1 分句 3 vs 主步骤 2
             self.assertIn("X3", checks)  # 依附了不存在的权要 9
 
+    def test_check_hard_rules_judgment_sentence_pattern(self):
+        import json
+
+        def run_case(impl_body):
+            md = "## 具体实施方式\n\n" + impl_body + "\n"
+            with tempfile.TemporaryDirectory() as tmp:
+                md_path = Path(tmp) / "全文稿.md"
+                md_path.write_text(md, encoding="utf-8")
+                result = run_script_allow_fail(
+                    "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json"
+                )
+                data = json.loads(result.stdout)
+                return [v for v in data["violations"]
+                        if "判断" in v["message"] or "落单" in v["message"] or "半支" in v["message"]]
+
+        # 合法: 规范句式二 / 单分支合并 / 名词性描述 / 白话"若是" 均不报 (规则 23 零误报边界)
+        self.assertEqual(run_case(
+            "判断所述残差是否超过预设阈值，若是，则触发告警；若否，则继续采集。\n\n"
+            "若所述温度越限，则执行降载操作。\n\n"
+            "所述阈值作为判断是否进入剧烈反应阶段的依据，用于判定是否出现卡顿。\n\n"
+            "此时若是首次采集，需要初始化缓存。"
+        ), [])
+        # 违规: 判断步骤缺规定分支 / 句式一半支 / 若否落单
+        self.assertEqual(len(run_case("在步骤S12中，判断所述数据是否有效，若有效则输出。")), 1)
+        self.assertEqual(len(run_case("当判定满足触发条件时，则执行降载操作。")), 1)
+        self.assertEqual(len(run_case("计算残差，若否，则继续采集。")), 1)
+
     def test_check_cross_block_x7_dep_quote_verbatim(self):
         import json
 
