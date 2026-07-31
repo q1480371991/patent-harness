@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -454,11 +456,11 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("单一出处原则", rules_text)
         self.assertIn("仅适用于**权要一稿**和**全文一稿**", global_text)
 
-        # 全文稿分块撰写法：Markdown 层 + DOCX 注入层
+        # 全文稿分块撰写法：Markdown 层 + DOCX 注入层（脚本化注入）
         self.assertIn("全文稿分块撰写法", full_text)
         self.assertIn("不得一次性生成全文长文", global_text)
-        self.assertIn("一次只注入一个内容块", full_text)
-        self.assertIn("有效 checkpoint", full_text)
+        self.assertIn("inject_fulltext_docx.py", full_text)
+        self.assertIn("一次性注入", full_text)
         self.assertIn("要求用户手动复制粘贴进 Word", full_text)
         self.assertIn("全文稿分块撰写法", skill_text)
 
@@ -989,6 +991,120 @@ class FigureScriptsSmokeTest(unittest.TestCase):
                 "--claims-md", claims, "--output", tmp / "figure-1.png",
             )
             self.assertNotEqual(result.returncode, 0)
+
+
+class InjectFulltextSmokeTest(unittest.TestCase):
+    """inject_fulltext_docx.py + verify_docx_injection.py 冒烟：全文稿 md → 模板 DOCX 注入。
+
+    用真实模板（assets/docx/专利撰写模板.docx）unpack 出 5 sectPr 骨架 + 一份含块公式
+    与行内 $...$ 公式的全文稿.md fixture，真跑注入与校验脚本，断言段落数、oMath 数、
+    无 $ 残留、sectPr 仍为 5。@skipUnless pandoc。
+    """
+
+    FULLTEXT_MD_FIXTURE = (
+        "## 说明书摘要\n\n"
+        "本发明涉及测试领域，公开了一种测试方法，获取输入数据；根据输入数据确定中间结果；"
+        "根据中间结果生成控制信号。本发明实现了测试效果。\n\n"
+        "## 摘要附图\n\n图1\n\n"
+        "## 发明内容\n\n"
+        "本发明提供一种测试方法，包括：\n"
+        "获取输入数据；\n"
+        "根据所述输入数据确定所述中间结果；\n"
+        "根据所述中间结果生成所述控制信号。\n\n"
+        "## 附图说明\n\n图1为测试方法流程示意图。\n\n"
+        "## 具体实施方式\n\n"
+        "在步骤S11中，获取输入数据，包括：读取传感器数据；对传感器数据滤波。\n\n"
+        "其中，核函数的表达式为：\n\n"
+        r"K(x, y) = \exp(-\gamma \|x - y\|^{2})" "\n\n"
+        "式中，$K(x, y)$ 为核函数输出，$\\gamma$ 为核参数，$\\|x - y\\|$ 为欧氏距离，"
+        "本实施例中取 $\\gamma=0.5$。\n\n"
+        "综上所述，本发明公开了一种测试方法。本发明实现了测试效果。\n\n"
+        "本发明第二实施例提供了一种测试系统，包括存储器、处理器及存储在存储器上并可在"
+        "处理器上运行的计算机程序，所述处理器执行所述计算机程序时实现上述测试方法的步骤。\n\n"
+        "需要说明的是，本发明实施例提供的一种测试系统用于执行上述实施例的一种测试方法的"
+        "所有流程步骤，两者的工作原理和有益效果一一对应，因而不再赘述。\n\n"
+        "以上所述的具体实施例，对本发明的目的、技术方案和有益效果进行了进一步的详细说明，"
+        "应当理解，以上所述仅为本发明的具体实施例而已，并不用于限定本发明的保护范围。\n"
+    )
+
+    def _docx_skill_dir(self):
+        """探测 document-skills:docx skill 目录，避免硬编码 commit hash 路径。
+
+        优先级：环境变量 DOCX_SKILL_DIR → ~/.claude/plugins/cache 下最新 document-skills
+        commit → 兜底硬编码本机当前 hash。他机/CI 用 DOCX_SKILL_DIR 覆盖即可。
+        """
+        env = os.environ.get("DOCX_SKILL_DIR")
+        if env and Path(env).is_dir():
+            return Path(env)
+        cache = Path.home() / ".claude" / "plugins" / "cache" / "anthropic-agent-skills"
+        if cache.is_dir():
+            cands = sorted(cache.glob("document-skills/*/skills/docx"), reverse=True)
+            if cands:
+                return cands[0]
+        fallback = (cache / "document-skills" / "690f15cac7f7" / "skills" / "docx")
+        return fallback
+
+    def _unpack_template(self, dest: Path):
+        tpl = SKILL_DIR / "assets" / "docx" / "专利撰写模板.docx"
+        subprocess.run(
+            [sys.executable, str(self._docx_skill_dir() / "scripts" / "office" / "unpack.py"),
+             str(tpl), str(dest)],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def _pack(self, unpacked: Path, out: Path):
+        subprocess.run(
+            [sys.executable, str(self._docx_skill_dir() / "scripts" / "office" / "pack.py"),
+             str(unpacked), str(out)],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    @unittest.skipUnless(PANDOC_AVAILABLE, "pandoc 不可用, 跳过全文稿注入测试")
+    def test_inject_fulltext_then_verify(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            md = tmp / "全文稿.md"
+            md.write_text(self.FULLTEXT_MD_FIXTURE, encoding="utf-8")
+            unpacked = tmp / "unpack"
+            self._unpack_template(unpacked)
+
+            run_script("inject_fulltext_docx.py", unpacked, "--md", md)
+
+            doc = (unpacked / "word" / "document.xml").read_text(encoding="utf-8")
+            # 骨架未损
+            self.assertEqual(len(re.findall(r"<w:sectPr[ >]", doc)), 5)
+            # 块公式编译（1 条 LaTeX 独立成段）
+            self.assertEqual(len(re.findall(r"<m:oMathPara\b", doc)), 1)
+            # 行内 $...$ 实例数对账（$ 数必为偶数）
+            om_inline = len(re.findall(r"<m:oMath\b", doc)) - len(re.findall(r"<m:oMathPara\b", doc))
+            md_text = md.read_text(encoding="utf-8")
+            self.assertEqual(om_inline, md_text.count("$") // 2)
+            # 无 $ 残留、无裸 LaTeX
+            all_t = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", doc))
+            self.assertNotIn("$", all_t)
+            self.assertNotIn(r"\exp", all_t)
+            # 章节标题齐全（加粗）
+            for title in ("发明内容", "附图说明", "具体实施方式"):
+                # 在含该标题文本的段内查 <w:b/>
+                self.assertTrue(re.search(
+                    r"<w:p\b[^>]*>(?:(?!</w:p>).)*?<w:b/>(?:(?!</w:p>).)*?>"
+                    + title + r"</w:t>", doc, re.S))
+            # 占位套话段被替换为 md 真实套话
+            self.assertNotIn("......", all_t)
+            self.assertIn("综上所述", all_t)
+
+            # pack 后跑 verify_docx_injection（图1 未注入时 drawing 项会 FAIL，单独验证公式/骨架项）
+            out = tmp / "out.docx"
+            self._pack(unpacked, out)
+            result = run_script_allow_fail(
+                "verify_docx_injection.py", out, "--md", md,
+            )
+            # 公式/骨架/标题/套话项应 PASS；图1 drawing 项预期 FAIL（本测试未注图）
+            self.assertIn("[PASS] 块公式 oMathPara=1", result.stdout)
+            self.assertIn("[PASS] 行内 oMath=", result.stdout)
+            self.assertIn("[PASS] sectPr=5", result.stdout)
+            self.assertIn("[PASS] $残留=0", result.stdout)
+            self.assertIn("[FAIL] 图1 drawing=0", result.stdout)  # 未注图，预期失败
 
 
 if __name__ == "__main__":
