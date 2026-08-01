@@ -27,6 +27,19 @@ def run_script(script_name, *args):
     )
 
 
+def all_suspects(data):
+    """把 suspect_manifest 摊平成扁平列表 (每条附 owner).
+
+    脚本 JSON 不再输出顶层 `suspects`(与 manifest 同源、重复占比 26.6%),
+    suspect 的唯一出口是 suspect_manifest.<owner>。测试统一经本函数读取。
+    """
+    out = []
+    for owner, items in (data.get("suspect_manifest") or {}).items():
+        for it in items:
+            out.append({**it, "owner": owner})
+    return out
+
+
 def run_script_allow_fail(script_name, *args):
     return subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / script_name), *map(str, args)],
@@ -376,7 +389,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("案例性术语清理", skill_text)
         self.assertIn("后续阶段槽位保留不删", skill_text)
 
-        self.assertIn("全文终稿目标约 1.5–2 万字", full_text)
+        self.assertIn("全文终稿**目标**约 1.5–2 万字", full_text)
         self.assertIn("render_patent_figure.py", figures_text)
         self.assertIn("insert_figures_docx.py", figures_text)
         self.assertIn("子流程图默认不画", figures_text)
@@ -606,12 +619,15 @@ class PatentScriptSmokeTests(unittest.TestCase):
                 "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json"
             )
             data = json.loads(result.stdout)
-        # 规则 27 互斥体系共现 + 规则 28 模型缺维度 → suspect 线索, 不计 FAIL
-        self.assertEqual(data["suspect_count"], 2)
-        self.assertTrue(any("互斥技术体系" in s["message"] for s in data["suspects"]))
-        self.assertTrue(any("四维度" in s["message"] for s in data["suspects"]))
+        # 规则 27 互斥体系共现 + 规则 28 模型缺维度 → suspect 线索, 不计 FAIL.
+        # 断言按"本 fixture 触发的线索类型"判定, 不锁死总数: 新增探测器 (W08/W11/
+        # W14/W16/W20/W26/W46) 各有独立 fixture, 本例只守历史两条线索仍在场.
+        self.assertTrue(any("互斥技术体系" in s["message"] for s in all_suspects(data)))
+        self.assertTrue(any("四维度" in s["message"] for s in all_suspects(data)))
         self.assertTrue(all("互斥" not in v["message"] and "四维度" not in v["message"]
                             for v in data["violations"]))
+        # suspect 不进 exit code / 不计 FAIL
+        self.assertNotIn("suspect", " ".join(v["message"] for v in data["violations"]))
 
     def test_check_cross_block_x7_dep_quote_verbatim(self):
         import json
@@ -1105,6 +1121,458 @@ class InjectFulltextSmokeTest(unittest.TestCase):
             self.assertIn("[PASS] sectPr=5", result.stdout)
             self.assertIn("[PASS] $残留=0", result.stdout)
             self.assertIn("[FAIL] 图1 drawing=0", result.stdout)  # 未注图，预期失败
+
+
+class RuleAnchorGuardTest(unittest.TestCase):
+    """verify_rule_anchors.py 的四类防护 (审计实测的四个洞).
+
+    全部在 /tmp 隔离副本上做破坏实验, 不触碰仓库文件。
+    """
+
+    def _fake_skill(self, tmp):
+        """在 tmp 下搭一份 scripts/ + agents/ + references/rules/ 的副本."""
+        root = Path(tmp)
+        shutil.copytree(SCRIPTS_DIR, root / "scripts")
+        shutil.copytree(SKILL_DIR / "agents", root / "agents")
+        (root / "references").mkdir()
+        shutil.copytree(SKILL_DIR / "references" / "rules", root / "references" / "rules")
+        return root
+
+    def _run_guard(self, root, *extra):
+        return subprocess.run(
+            [sys.executable, str(root / "scripts" / "verify_rule_anchors.py"), *extra],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+
+    def test_baseline_clean_state_passes(self):
+        """未破坏时 12 条全 PASS、exit=0 (基线与实际一致)."""
+        result = self._run_guard(SKILL_DIR)
+        self.assertEqual(result.returncode, 0, f"基线与实际不一致:\n{result.stderr[-800:]}")
+        self.assertIn("失败 0", result.stderr)
+
+    def test_detects_interval_collapse(self):
+        """洞1: 区间内出现同名结束锚点 → 提取塌缩, 必须 FAIL 而非"PASS 正文 1 行".
+
+        sed 的 /start/,/end/ 首次命中即闭合。旧逻辑只判 `if not body`(空才 FAIL),
+        L8 区间从 77 行塌到 1 行(L8-1/L8-2/L8-3 全丢)仍报 PASS —— 规则静默消失。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._fake_skill(tmp)
+            fd = root / "references" / "rules" / "full-draft.md"
+            lines = fd.read_text(encoding="utf-8").splitlines()
+            for i, l in enumerate(lines):
+                if l.startswith("## L8. "):
+                    lines.insert(i + 3, "## 全文阶段自检重点")
+                    break
+            fd.write_text("\n".join(lines), encoding="utf-8")
+            result = self._run_guard(root)
+        self.assertNotEqual(result.returncode, 0, "区间塌缩未被检出")
+        self.assertIn("区间塌缩", result.stderr)
+
+    def test_double_quoted_anchor_is_parsed(self):
+        """洞2: 契约用双引号书写 sed 时锚点不得静默隐身 (仍应解析到 12 条)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._fake_skill(tmp)
+            ia = root / "agents" / "impl-auditor.md"
+            s = ia.read_text(encoding="utf-8")
+            old = "sed -n '/^## L8\\. /,/^## 全文阶段自检重点/p'"
+            self.assertIn(old, s, "fixture 前提失效: 未找到单引号形态锚点")
+            ia.write_text(s.replace(old, 'sed -n "/^## L8\\. /,/^## 全文阶段自检重点/p"', 1),
+                          encoding="utf-8")
+            result = self._run_guard(root)
+        self.assertIn("共 12 条", result.stderr, "双引号锚点被漏解析")
+        self.assertEqual(result.returncode, 0, f"双引号形态误报:\n{result.stderr[-500:]}")
+
+    def test_detects_deleted_anchor_via_count(self):
+        """洞3: 误删一条锚点 → 条数校验必须亮红 (旧逻辑 12→11 仍报 0 失败)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._fake_skill(tmp)
+            ia = root / "agents" / "impl-auditor.md"
+            s = ia.read_text(encoding="utf-8")
+            old = "sed -n '/^### G6-1 /,/^### G6-2 /p'"
+            self.assertIn(old, s, "fixture 前提失效")
+            ia.write_text(s.replace(old, "(锚点已删)", 1), encoding="utf-8")
+            result = self._run_guard(root)
+        self.assertNotEqual(result.returncode, 0, "误删锚点未被检出")
+        self.assertIn("期望 12 条", result.stderr)
+
+    def test_update_baseline_refuses_on_collapse(self):
+        """洞4: --update-baseline 在塌缩状态下必须拒绝, 不把错误固化为基线."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._fake_skill(tmp)
+            fd = root / "references" / "rules" / "full-draft.md"
+            lines = fd.read_text(encoding="utf-8").splitlines()
+            for i, l in enumerate(lines):
+                if l.startswith("## L8. "):
+                    lines.insert(i + 3, "## 全文阶段自检重点")
+                    break
+            fd.write_text("\n".join(lines), encoding="utf-8")
+            before = (root / "scripts" / "verify_rule_anchors.py").read_text(encoding="utf-8")
+            result = self._run_guard(root, "--update-baseline")
+            after = (root / "scripts" / "verify_rule_anchors.py").read_text(encoding="utf-8")
+        self.assertEqual(result.returncode, 1, "塌缩时 --update-baseline 未拒绝")
+        self.assertIn("拒绝更新", result.stderr)
+        self.assertEqual(before, after, "塌缩状态下基线被改写 → 错误已固化")
+
+
+class CrossBlockFlatStripTest(unittest.TestCase):
+    """emit 层剥离 `flat` 省 token, 且不得让 X7 静默失效."""
+
+    CASE = Path("/Users/example/Desktop/Patent/夏晓贝/"
+                "X2607084基于边缘计算的喷胶机自适应控制方法及系统/docs")
+
+    def test_flat_stripped_from_emitted_json(self):
+        """emit 的 JSON 不含 flat (下游零消费, 实测占比 22.4%)."""
+        import json
+        md = GOOD_FULL_DRAFT_MD
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "权要稿.md"
+            md_path.write_text(md, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_cross_block.py", "--md", md_path, "--stage", "claims-draft",
+            )
+            self.assertNotIn('"flat"', result.stdout, "emit 的 JSON 仍含 flat, 省 token 失效")
+            data = json.loads(result.stdout)  # 仍是合法 JSON
+            self.assertIn("structure", data)
+
+    def test_x7_reports_input_incomplete_when_flat_missing(self):
+        """回读已剥离 flat 的 structure 时, X7 必须报输入不完整而非静默 PASS.
+
+        X7 靠 flat 做逐字子串匹配。若 emit 剥离后用户再经 --structure 回读,
+        flat 缺失会让真违规也报 PASS —— 与"合规"输出完全同形、无法分辨。
+        故必须显式报错。
+        """
+        import json
+        md = GOOD_FULL_DRAFT_MD
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "权要稿.md"
+            md_path.write_text(md, encoding="utf-8")
+            first = run_script_allow_fail(
+                "check_cross_block.py", "--md", md_path, "--stage", "claims-draft",
+            )
+            structure = json.loads(first.stdout)["structure"]
+            # 该 md 有从权 (权2 依附权1), 满足触发条件
+            self.assertTrue(any(it.get("dependent") for it in structure["claims"]["items"]),
+                            "fixture 需含至少一条从权才能验 X7")
+            struct_path = Path(tmp) / "structure.json"
+            struct_path.write_text(json.dumps(structure, ensure_ascii=False), encoding="utf-8")
+            reread = run_script_allow_fail(
+                "check_cross_block.py", "--structure", struct_path,
+            )
+            data = json.loads(reread.stdout)
+        x7 = [v for v in data["violations"] if v.get("check") == "X7"]
+        self.assertEqual(len(x7), 1, "缺 flat 时 X7 未报输入不完整 → 静默失效风险复发")
+        self.assertIn("缺 `flat` 字段", x7[0]["message"])
+
+    def test_extraction_failure_does_not_crash_strip(self):
+        """抽取失败时 claims 为 None (非缺键), 剥离逻辑不得崩."""
+        import json
+        idx = GOOD_FULL_DRAFT_MD.index("## 技术领域")
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(GOOD_FULL_DRAFT_MD[idx:], encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_cross_block.py", "--md", md_path, "--stage", "full-draft",
+            )
+        # 必须是合法 JSON (未崩), 且报出缺 --claims-md
+        data = json.loads(result.stdout)
+        self.assertTrue(any("--claims-md" in e for e in data["extraction_errors"]))
+
+
+class SuspectManifestRoutingTest(unittest.TestCase):
+    """suspect manifest 唯一路由校验 (设计稿 §2.4/§5.5).
+
+    每个脚本产出的 suspect 必须: ①带稳定 suspect_id; ②有唯一合法 owner;
+    ③恰好出现在 manifest 的一个 owner 分组下; ④不进 exit code.
+    W46 是唯一按章节互斥路由者: L8→impl, 其他说明书块→global, 未知章节转
+    violation 而非广播多路.
+    """
+
+    VALID_OWNERS = {"global", "impl", "content", "claims"}
+
+    # 七个探测器全部触发的 fixture (取自 approval_items 真实批注 anchor 语料)
+    TRIGGER_MD = (
+        "## 权利要求书\n\n"
+        "1.一种充电桩电源的故障诊断预警方法，其特征在于，包括：获取数据。\n\n"
+        "## 发明内容\n\n"
+        "本发明不判断设备类型。\n\n"
+        "## 具体实施方式\n\n"
+        "下面将结合本发明实施例中的附图进行描述。本实施方式中的充电桩电源包括交流输入侧的"
+        "功率因数校正电路和连接于直流母线的直流变换电路，功率因数校正电路用于整流。\n\n"
+        "在步骤S11中，获取数据，包括：采集电压。\n\n"
+        "当原始电压数据达到预设切换电压，且原始电流数据由恒定状态转为下降状态时，"
+        "确定充电桩电源处于恒流恒压切换阶段。\n\n"
+        "允许偏差范围和稳定变化限值由同型号健康充电桩的历史切换数据预先标定。\n\n"
+        "需要说明的是，健康充电桩是指经绝缘检测、输出电压精度检测均满足设备技术要求的充电桩。\n\n"
+        "按照功率因数校正电路状态数据在前、直流变换电路状态数据在后的顺序沿特征维度拼接，"
+        "得到运行状态数据集。\n\n"
+        "波动超限值 = 波动指标 - 阈值\n\n"
+        "当判定不存在故障显性风险时，不生成预警指令。\n"
+    )
+
+    def _run(self, md_text, *extra):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(md_text, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path,
+                "--stage", "full-draft", "--json", *extra,
+            )
+            return json.loads(result.stdout), result.returncode
+
+    def test_every_suspect_has_unique_owner(self):
+        """每条 suspect 都有稳定 id 与唯一合法 owner, manifest 分组无遗漏无重复."""
+        data, _ = self._run(self.TRIGGER_MD)
+        new = [s for s in all_suspects(data) if s.get("suspect_id")]
+        self.assertTrue(new, "七探测器 fixture 未产出任何带 suspect_id 的线索")
+        for s in new:
+            self.assertTrue(s["suspect_id"], "suspect 缺 suspect_id")
+            self.assertIn(s["owner"], self.VALID_OWNERS, f"非法 owner: {s['owner']}")
+            self.assertTrue(s["section"], f"{s['suspect_id']} 缺 section")
+        manifest = data["suspect_manifest"]
+        self.assertEqual(
+            sum(len(v) for v in manifest.values()), data["suspect_count"],
+            "manifest 分组总数与 suspect 总数不等 (存在遗漏或重复归属)",
+        )
+
+    def test_seven_detectors_all_fire(self):
+        """七个新探测器在触发 fixture 上各出一条线索."""
+        data, _ = self._run(self.TRIGGER_MD)
+        ids = {s["suspect_id"] for s in all_suspects(data) if s.get("suspect_id")}
+        for expected in ("S-W08-impl-opening", "S-W11-state-bounds",
+                         "S-W14-calibration", "S-W16-vague-def",
+                         "S-W20-concat-schema", "S-W26-trivial-formula",
+                         "S-W46-negative-only"):
+            self.assertIn(expected, ids, f"探测器未触发: {expected}")
+
+    def test_w46_section_routing_mutually_exclusive(self):
+        """W46: L8 归 impl, 其他说明书块归 global, 同一线索不跨路重复."""
+        data, _ = self._run(self.TRIGGER_MD)
+        w46 = [s for s in all_suspects(data) if s.get("suspect_id") == "S-W46-negative-only"]
+        routes = {s["section"]: s["owner"] for s in w46}
+        self.assertEqual(routes.get("L8"), "impl", "L8 的 W46 线索应归 impl")
+        self.assertEqual(routes.get("L6"), "global", "L6 的 W46 线索应归 global")
+        manifest = data["suspect_manifest"]
+        impl_w46 = [x for x in manifest["impl"] if x["suspect_id"] == "S-W46-negative-only"]
+        global_w46 = [x for x in manifest["global"] if x["suspect_id"] == "S-W46-negative-only"]
+        self.assertTrue(all(x["section"] == "L8" for x in impl_w46))
+        self.assertTrue(all(x["section"] != "L8" for x in global_w46))
+
+    def test_suspects_not_in_exit_code(self):
+        """只含 suspect 触发、无 hard 违规时 exit code 为 0."""
+        md = (
+            "## 说明书摘要\n\n本发明涉及测试领域，公开了一种测试方法。\n\n"
+            "## 摘要附图\n\n图1\n\n"
+            "## 发明内容\n\n本发明提供一种测试方法。\n\n"
+            "## 附图说明\n\n图1为测试方法流程示意图。\n\n"
+            "## 具体实施方式\n\n"
+            "如图1所示，本发明实施例提供的一种测试方法，包括步骤S11至步骤S11：\n\n"
+            "在步骤S11中，获取数据。\n\n"
+            "差值 = 甲量 - 乙量\n\n"
+            "综上所述，本发明公开了一种测试方法。本发明通过测试，实现了测试效果。\n\n"
+            "本发明第二实施例提供了一种测试系统，包括存储器、处理器及存储在存储器上并可在"
+            "处理器上运行的计算机程序，所述处理器执行所述程序时实现如上述所述的一种测试方法。\n\n"
+            "需要说明的是，本发明实施例提供的一种测试系统用于执行上述实施例的一种测试方法的"
+            "所有流程步骤，两者的工作原理和有益效果一一对应，因而不再赘述。\n\n"
+            "以上所述的具体实施例，并不用于限定本发明的保护范围。\n"
+        )
+        data, code = self._run(md, "--invention-name", "一种测试方法")
+        self.assertTrue(any(s.get("suspect_id") == "S-W26-trivial-formula"
+                            for s in all_suspects(data)), "应触发初等算术线索")
+        self.assertEqual(data["violation_count"], 0,
+                         f"该 fixture 不应有 hard 违规: {[v['message'][:40] for v in data['violations']]}")
+        self.assertEqual(code, 0, "suspect 不得计入 exit code")
+
+    def test_manifest_owners_declared_in_contracts(self):
+        """每个 suspect_id 在其 owner 的 auditor 契约中有强制消费条款 (设计稿 §5.5)."""
+        data, _ = self._run(self.TRIGGER_MD)
+        contracts = {
+            owner: (SKILL_DIR / "agents" / f"{owner}-auditor.md").read_text(encoding="utf-8")
+            for owner in self.VALID_OWNERS
+        }
+        for s in all_suspects(data):
+            sid = s.get("suspect_id")
+            if not sid:
+                continue
+            self.assertIn(
+                sid, contracts[s["owner"]],
+                f"{sid} 未在 agents/{s['owner']}-auditor.md 中声明强制消费",
+            )
+
+
+class InventionNameSlotTest(unittest.TestCase):
+    """规则 31 正式题名槽位 (W35): 漏后缀/重复拼接/输入不足三态."""
+
+    # A 类槽位 (须写正式题名全称): 摘要句 + 技术领域句 + 发明内容目的句.
+    # B 类槽位 (收尾"综上所述"段) 固定写方法名, 不参与本规则判定.
+    BASE = (
+        "## 说明书摘要\n\n"
+        "本发明涉及测试领域，公开了一种{name}，获取数据。\n\n"
+        "## 技术领域\n\n"
+        "本发明涉及测试领域，具体涉及一种{name}。\n\n"
+        "## 权利要求书\n\n"
+        "1.一种充电桩电源的故障诊断预警方法，其特征在于，包括：获取数据。\n\n"
+        "9.一种充电桩电源的故障诊断预警系统，包括存储器、处理器。\n\n"
+        "## 发明内容\n\n"
+        "本发明的目的在于提供一种{name}，旨在解决现有问题。\n\n"
+        "## 具体实施方式\n\n"
+        "综上所述，本发明公开了一种充电桩电源的故障诊断预警方法。本发明实现了预警效果。\n"
+    )
+    FULL_NAME = "一种充电桩电源的故障诊断预警方法及系统"
+
+    def _run(self, name_in_md, *extra):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(self.BASE.format(name=name_in_md), encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path,
+                "--stage", "full-draft", "--json", *extra,
+            )
+            return json.loads(result.stdout)
+
+    def test_missing_suffix_detected(self):
+        """A 类槽位漏"及系统"三字 → 三处各报一次 (摘要/技术领域/目的句)."""
+        data = self._run("充电桩电源的故障诊断预警方法", "--invention-name", self.FULL_NAME)
+        hits = [v for v in data["violations"] if v["rule_id"] == "G8-0b"]
+        self.assertEqual(len(hits), 3, f"三个 A 类槽位应各报一次漏后缀, 实得 {len(hits)}")
+        self.assertTrue(all("漏后缀" in v["message"] for v in hits))
+
+    def test_verbatim_match_passes(self):
+        """A 类逐字一致 → 不报."""
+        data = self._run("充电桩电源的故障诊断预警方法及系统", "--invention-name", self.FULL_NAME)
+        self.assertEqual([v for v in data["violations"] if v["rule_id"] == "G8-0b"], [])
+
+    def test_closing_summary_is_b_class_not_flagged(self):
+        """回归: 收尾"综上所述，本发明公开了一种〔权1保护主题〕"属 B 类, 写方法名不得报违规.
+
+        真实稿 X2607084 曾被误报: 该段句式的唯一出处是 docx-template.md G8-2 与
+        full-draft.md L8-1 收尾条 (骨架为"〔发明名称〕方法"分体式), 在此写入含
+        "及系统"的正式全称反而产出"……方法及系统方法"式重复拼接.
+        """
+        # A 类三处全部写全称, 收尾段写方法名 (BASE 固定如此) → 应 0 违规
+        data = self._run("充电桩电源的故障诊断预警方法及系统", "--invention-name", self.FULL_NAME)
+        hits = [v for v in data["violations"] if v["rule_id"] == "G8-0b"]
+        self.assertEqual(hits, [], f"收尾段写方法名被误判为漏后缀: {[v['message'][:60] for v in hits]}")
+        # 反向确认: 收尾段确实在稿中且只写方法名
+        md = self.BASE.format(name=self.FULL_NAME)
+        self.assertIn("综上所述，本发明公开了一种充电桩电源的故障诊断预警方法。", md)
+
+    def test_missing_input_is_suspect_not_violation(self):
+        """闸门死锁回归: 缺 --invention-name 走 suspect 通道, 不计 violation/exit code.
+
+        该状态**无法通过改稿消除**(触发条件是参数没传, 不是稿子写错)。若计为
+        violation, 按 SKILL.md"任一 FAIL 直接回修, 不进入阶段 B"的纪律, 主 agent
+        会陷入死锁: 要么反复空转去改本来正确的题名句, 要么判定脚本误报而跳过整个
+        闸门、丢失机械前置保护。故"配置缺失"与"稿件违规"必须分通道。
+        """
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(self.BASE.format(name=self.FULL_NAME), encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json",
+            )
+            data = json.loads(result.stdout)
+        # 不得计入 violation
+        self.assertEqual([v for v in data["violations"] if v["rule_id"] == "G8-0b"], [],
+                         "缺参数被计为 violation → 闸门死锁复发")
+        # 必须回一条配置缺失 suspect, 且明确区分于稿件违规
+        hits = [s for s in all_suspects(data) if s.get("suspect_id") == "S-W35-name-input-missing"]
+        self.assertEqual(len(hits), 1, "应恰好回一条配置缺失 suspect")
+        self.assertIn("配置缺失", hits[0]["message"])
+        self.assertIn("--invention-name", hits[0]["message"])
+        self.assertIn("不得从权 1", hits[0]["message"])
+        self.assertEqual(hits[0]["owner"], "global")
+
+    def test_scan_excludes_non_delivery_sections(self):
+        """越界回归: 只扫交付正文, 审查报告节内复述题名不得误判为槽位违规.
+
+        审查报告在引述问题时常复述题名(如"摘要写'公开了一种xx方法'漏了'及系统'"),
+        规则 31 若用 enumerate(lines) 扫全文会把这类引述当成正文槽位报违规。
+        必须走 _get_scan_ranges(排除评分报告/审查报告/元数据/TODO)。
+        """
+        import json
+        md = (
+            "## 说明书摘要\n\n"
+            "本发明涉及测试领域，公开了一种智能控制方法及系统，获取数据。\n\n"
+            "## 发明内容\n\n"
+            "本发明的目的在于提供一种智能控制方法及系统，旨在解决问题。\n\n"
+            "## 审查报告\n\n"
+            "本轮审查发现：说明书摘要写\"公开了一种智能控制方法\"，漏了\"及系统\"三字，需回修。\n\n"
+            "## 具体实施方式\n\n"
+            "在步骤S11中，获取数据。\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(md, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path, "--stage", "full-draft",
+                "--invention-name", "一种智能控制方法及系统", "--json",
+            )
+            data = json.loads(result.stdout)
+        hits = [v for v in data["violations"] if v["rule_id"] == "G8-0b"]
+        self.assertEqual(hits, [],
+                         f"审查报告节内的题名引述被误判: {[v['location'] for v in hits]}")
+
+    def test_skill_md_commands_pass_invention_name(self):
+        """SKILL.md 的 full-draft 命令行必须带 --invention-name (调用方与脚本必需参数一致).
+
+        脚本新增必需参数时若忘改调用方, 规则 31 会对所有案件静默失效
+        (永远走"缺参数"分支, A 类槽位从此不校验)。本测试锁住两者同步。
+        """
+        skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        # 取所有含 check_hard_rules.py 且 stage=full-draft 的命令行片段
+        cmds = [seg for seg in re.findall(r"`[^`]*check_hard_rules\.py[^`]*`", skill)
+                if "full-draft" in seg]
+        self.assertTrue(cmds, "SKILL.md 未找到 full-draft 的 check_hard_rules 命令行")
+        missing = [c for c in cmds if "--invention-name" not in c]
+        self.assertEqual(
+            missing, [],
+            f"以下 full-draft 命令行缺 --invention-name (会导致 G8-0b 静默失效): {missing}",
+        )
+
+
+class SpecNoClaimsWordingTest(unittest.TestCase):
+    """规则 29 说明书禁权要体例 (W18/W29/W30): 违规/合规/权要书内合法例外."""
+
+    def _run(self, md_text):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(md_text, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json",
+            )
+            return json.loads(result.stdout)
+
+    def test_claims_wording_in_spec_fails(self):
+        """说明书出现权要体例措辞 → 逐处报 (取 W18/W29/W30 真实 anchor)."""
+        md = (
+            "## 权利要求书\n\n1.一种测试方法，其特征在于，包括：获取数据。\n\n"
+            "## 具体实施方式\n\n"
+            "多维空间欧氏距离属于公知距离度量，不在权利要求中增加其常规计算展开。\n\n"
+            "所述计算机程序被处理器执行时，实现权利要求1至8任一项所述的方法的步骤。\n\n"
+            "实际部署形式不影响处理器执行权利要求1至8任一项所述方法步骤。\n"
+        )
+        data = self._run(md)
+        hits = [v for v in data["violations"] if "权要体例" in v["message"]]
+        self.assertEqual(len(hits), 3, "三处权要体例措辞应各报一次")
+
+    def test_claims_section_itself_exempt(self):
+        """权利要求书章节内的"其特征在于"是法定体例 → 不报 (最易误报的合法例外)."""
+        md = (
+            "## 权利要求书\n\n"
+            "1.一种测试方法，其特征在于，包括：获取数据。\n\n"
+            "3.一种测试系统，包括存储器、处理器，其特征在于，"
+            "所述处理器执行程序时实现所述的一种测试方法。\n\n"
+            "## 具体实施方式\n\n"
+            "本发明第二实施例提供了一种测试系统，包括：存储器、处理器及存储在存储器上并可在"
+            "处理器上运行的计算机程序，所述处理器执行所述程序时实现如上述所述的一种测试方法。\n"
+        )
+        data = self._run(md)
+        self.assertEqual([v for v in data["violations"] if "权要体例" in v["message"]], [])
 
 
 if __name__ == "__main__":

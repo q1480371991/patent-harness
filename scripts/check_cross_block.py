@@ -149,6 +149,22 @@ def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None
         return seen
 
     quote_re = _re.compile(r"其特征在于，(.*?)，?包括[：:]")
+    # X7 依赖 `flat` (权要整句无换行副本) 做逐字子串匹配。emit 层会剥离 flat 省 token,
+    # 若从这样的 JSON 经 --structure 回读, flat 缺失会让本检查**静默失效**(真违规也
+    # 报 PASS)。故此处显式探测: 有从权却全员无 flat = 输入不完整, 报抽取错误而非跳过。
+    dependents = [it for it in claims.get("items", []) if it.get("dependent")]
+    if dependents and not any(it.get("flat") for it in claims.get("items", [])):
+        violations.append({
+            "rule_id": "L1-1",
+            "check": "X7",
+            "location": "权利要求书(结构输入)",
+            "evidence": "structure.claims.items[*].flat 全部缺失",
+            "message": "X7 从权引用句逐字校验无法执行: 输入 structure 缺 `flat` 字段"
+                       "(emit 层已剥离以省 token)。请改用 `--md <md> --stage <stage> "
+                       "[--claims-md <权要稿.md>]` 现场抽取, 不要用已剥离的 JSON 经 "
+                       "--structure 回读 —— 否则本检查静默失效。",
+        })
+        return
     for it in claims.get("items", []):
         if not it.get("dependent"):
             continue
@@ -394,6 +410,19 @@ def main() -> int:
         return 2
 
     result = run_checks(structure)
+
+    # emit 前剥离 `flat`: 它是 extract_structure 产出的权要整句无换行副本, X7 检查
+    # (从权引用句逐字命中依附链) 在 run_checks 内已消费完毕; 下游零消费方
+    # (agents/*.md、SKILL.md、references/rules/*.md、tests/ 均不读它), 但按
+    # SKILL.md「脚本 JSON 全文内嵌」纪律会随 JSON 进入每一路 auditor 的 prompt,
+    # 实测占 JSON 总量 22.4% (X2607084: 2844/12720 字符) 且与 steps 内容重叠。
+    # 注意: 只在输出层剥离, 不动 extract_structure 的产出 —— `--structure` 回读
+    # 路径仍需完整 flat 供 X7 使用。
+    # 注: 抽取失败时 structure/claims 可能为 None (非缺键), 故不能只靠 .get() 链默认值.
+    _claims = (result.get("structure") or {}).get("claims") or {}
+    for _it in _claims.get("items") or []:
+        _it.pop("flat", None)
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
     print(format_human_report(result), file=sys.stderr)
 

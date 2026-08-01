@@ -67,6 +67,11 @@ class Violation:
     location: str
     evidence: str
     message: str
+    # --- 以下仅 suspect 使用 (hard violation 留空), 唯一出处: 设计稿 §2.4 ---
+    suspect_id: str = ""          # 稳定的探测器编号 (如 "S-W08-impl-opening")
+    section: str = ""             # 规范化章节编号 (L1..L8); 未知章节不得产出 suspect
+    owner: str = ""               # 唯一负责 auditor (global/impl/content/claims)
+    missing_dimensions: list[str] = field(default_factory=list)  # 疑似缺失维度
 
 
 @dataclass
@@ -79,9 +84,47 @@ class Report:
     def add(self, rule_id: str, location: str, evidence: str, message: str) -> None:
         self.violations.append(Violation(rule_id, location, evidence, message))
 
-    def add_suspect(self, rule_id: str, location: str, evidence: str, message: str) -> None:
-        """线索级: 不计 FAIL、不影响 exit code, 随 JSON 回传对应 auditor 逐条复核处置."""
-        self.suspects.append(Violation(rule_id, location, evidence, message))
+    def add_suspect(self, rule_id: str, location: str, evidence: str, message: str,
+                    suspect_id: str = "", section: str = "", owner: str = "",
+                    missing_dimensions: list[str] | None = None) -> None:
+        """线索级: 不计 FAIL、不影响 exit code, 随 JSON 回传对应 auditor 逐条复核处置.
+
+        新增结构化字段 (设计稿 §2.4 唯一路由): suspect_id/section/owner/
+        missing_dimensions. owner 必须唯一确定; 未知章节或 owner 不唯一时调用方
+        应改报结构抽取/路由错误 (report.add), 不得广播给多路 auditor (设计稿 §7).
+        规则 27/28 为历史调用, 暂不带新字段 (其 owner 由契约固定为 impl).
+        """
+        self.suspects.append(Violation(
+            rule_id, location, evidence, message,
+            suspect_id=suspect_id, section=section, owner=owner,
+            missing_dimensions=list(missing_dimensions or []),
+        ))
+
+    def suspect_manifest(self) -> dict[str, list[dict]]:
+        """按 owner 分组的 suspect 路由清单 (设计稿 §5.5).
+
+        主 agent 按此分发给各路 auditor; 每条 suspect 恰好出现在一个 owner 下.
+        owner 为空的历史 suspect (规则 27/28) 归入 impl —— 与 impl-auditor 契约
+        既有的"规则 27/28 必须逐条处置"条款一致.
+
+        **本 manifest 是 suspect 的唯一出口** (顶层 `suspects` 已在 emit 层去除以
+        省 token: 两者同源, 重复载荷实测占 JSON 26.6%)。故字段必须完整、不截断——
+        `message` 是 auditor 的判定依据, `evidence` 是原文证据, 缺任一项都会让
+        auditor 无从判断违规与豁免。
+        """
+        manifest: dict[str, list[dict]] = {"global": [], "impl": [], "content": [], "claims": []}
+        for s in self.suspects:
+            owner = s.owner or "impl"
+            manifest.setdefault(owner, []).append({
+                "suspect_id": s.suspect_id,
+                "rule_id": s.rule_id,
+                "section": s.section,
+                "location": s.location,
+                "evidence": s.evidence,
+                "message": s.message,
+                "missing_dimensions": s.missing_dimensions,
+            })
+        return manifest
 
     def count(self) -> int:
         return len(self.violations)
@@ -129,6 +172,51 @@ def get_section_lines(lines: list[str], sections: dict, key_substr: str) -> tupl
         if key_substr in title:
             return lines[start:end], start
     return [], -1
+
+
+# -----------------------------------------------------------------------------
+# 章节规范化与 suspect 唯一路由 (设计稿 §2.4/§3.2; W46 按章节互斥路由的前置)
+# -----------------------------------------------------------------------------
+
+# 章节标题 → 规范化编号. suspect 的 section 字段与 owner 路由均以此为唯一映射表.
+SECTION_NORM_MAP: dict[str, str] = {
+    "权利要求书": "L1",
+    "技术领域": "L2",
+    "背景技术": "L3",
+    "说明书摘要": "L4",
+    "摘要附图": "L5",
+    "发明内容": "L6",
+    "附图说明": "L7",
+    "具体实施方式": "L8",
+}
+
+
+def normalize_section(title: str) -> str | None:
+    """章节标题 → 规范化编号 (L1..L8); 未知章节返回 None.
+
+    未知章节意味着无法确定唯一 owner, 调用方必须改报结构抽取/路由错误
+    (report.add), 不得把 suspect 广播给多路 auditor (设计稿 §7).
+    "摘要附图" 必须先于 "说明书摘要" 之外的模糊匹配命中, 故按最长键优先匹配.
+    """
+    for key in sorted(SECTION_NORM_MAP, key=len, reverse=True):
+        if key in title:
+            return SECTION_NORM_MAP[key]
+    return None
+
+
+def suspect_owner_for_section(section_code: str | None) -> str | None:
+    """规范化章节编号 → 唯一 auditor owner; 无法唯一确定时返回 None.
+
+    W46 路由表 (设计稿 §3.2, 唯一按章节互斥路由的 suspect):
+      L8 → impl; 其他说明书块 (L4/L5/L6/L7) → global.
+    规则正文仍只有一个出处 (global.md G3-1), 执行路由由 section 决定;
+    同一线索只由一路处置, 不重复计分 (scoring.md 路由例外条).
+    """
+    if section_code == "L8":
+        return "impl"
+    if section_code in ("L4", "L5", "L6", "L7"):
+        return "global"
+    return None
 
 
 def extract_claim_blocks(lines: list[str], sections: dict) -> dict[int, tuple[int, int]]:
@@ -669,6 +757,34 @@ def check_abstract_length(lines: list[str], sections: dict, report: Report, stag
         )
 
 
+def check_full_draft_length(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 (L8-1): 全文稿纯汉字字数下限 = 13000 (full-draft 阶段闸门).
+
+    口径: 纯 CJK 汉字 (不含标点/数字/空白), 阈值留有余量 (经验上易写到 1.3 万,
+    优质终稿 1.5–2 万)。低于下限 = hard FAIL, 阻断进 DOCX (字数不足在旧版是 2 级
+    质量项、不阻断闸门, 是字数缩水的根因之一; 本条将其提为闸门前置)。
+
+    统计范围: 全文稿全文 (权要三章冻结在权要稿.md, 不在此文件内, 故只统计算说明书
+    各章节), 不剔 front-matter; front-matter 行数极少, 误差可忽略。
+    """
+    if stage != "full-draft":
+        return
+    text = "\n".join(lines)
+    n = count_chinese(text)
+    # 豁免: 非真实全文稿的短样例 (如单元测试 fixture、半成品草稿).
+    # 真实全文稿必然含"具体实施方式"且远超 1000 字; 不足 1000 字的样例
+    # 不适用本下限, 直接跳过, 避免误伤测试与中途草稿.
+    if n < 1000:
+        return
+    if n < 13000:
+        report.add(
+            "L8-1", "全文稿",
+            f"纯汉字字数 = {n}",
+            f"全文稿纯汉字字数不足 (< 13000, 实际 {n}); 补足 S11–S15 解释段"
+            "数据来源/工况/标定/示例细节至 ≥ 13000 字 (不引权外特征)",
+        )
+
+
 def check_figure_numbering(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 (L7-1): 附图编号连续."""
     if stage != "full-draft":
@@ -976,6 +1092,116 @@ def check_model_detail_hints(lines: list[str], sections: dict, report: Report, s
         )
 
 
+# 规则 29 禁词表唯一出处: 说明书正文不得出现的权要专用体例措辞 (G5-1 说明书禁用
+# 权要体例条; W18/W29/W30 三条批注合并为一项义务, 不写三个近义函数).
+SPEC_FORBIDDEN_CLAIM_WORDINGS: list[tuple[str, str]] = [
+    ("不在权利要求中",
+     "删除该取舍元叙述, 直接写技术内容 (与 G5-1 AI 元叙述条同源, 本规则先命中不重复报)"),
+    ("权利要求",
+     "说明书不写'权利要求1至N所述的……'式引用; 系统/介质段改用说明书专用套话"
+     "(唯一出处 full-draft.md L8-1 收尾条), 方法名用发明名称全称"),
+    ("其特征在于",
+     "说明书不写'其特征在于'(权要专用体例); 直接陈述特征内容"),
+]
+
+
+def check_spec_no_claims_wording(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 29: 说明书禁用权要体例措辞 (G5-1, W18/W29/W30 合并).
+
+    说明书正文块不得出现权要专用体例: "权利要求"(含"权利要求1至8任一项"等引用
+    形态)、"其特征在于"、"不在权利要求中……"式取舍元叙述.
+
+    扫描边界: 只扫说明书正文章节 (发明内容/附图说明/具体实施方式/说明书摘要);
+    权利要求书章节本身出现"其特征在于"是法定体例, 不适用; 评分报告/审查报告等
+    非交付正文由 _get_scan_ranges 排除. 每行只报一次 (禁词表按特异性排序, 长词
+    "不在权利要求中"先于"权利要求"命中), 避免同行多词重复计数. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        code = normalize_section(label)
+        # 权要/技术领域/背景技术 (L1-L3) 冻结块不在本规则范围: L1 的"其特征在于"是法定体例
+        if code in ("L1", "L2", "L3"):
+            continue
+        for i in range(start, end):
+            for kw, advice in SPEC_FORBIDDEN_CLAIM_WORDINGS:
+                if kw in lines[i]:
+                    report.add(
+                        "G5-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
+                        f"说明书出现权要体例措辞'{kw}': {advice}",
+                    )
+                    break
+
+
+def check_second_aspect_boilerplate(lines: list[str], sections: dict, report: Report,
+                                    stage: str, claims_text: str = "") -> None:
+    """规则 30: 第二方面系统复述段用固定套话 (L6-1, W05).
+
+    发明内容存在系统/装置保护主题时, 第二方面系统复述段须直接套用固定计算机
+    设备式段落、只替换案件变量:
+      「第二方面，本发明提供一种〔系统名全称〕，包括存储器、处理器及存储在所述
+      存储器上并可在所述处理器上运行的计算机程序，所述处理器执行所述计算机程序
+      时实现如上所述的〔方法名全称〕。」
+
+    检查: ①计算机设备式骨架(存储器/处理器/计算机程序); ②方法名用全称而非"第一方面
+    所述方法"式简称(线索级, 交 content-auditor 语义复核).
+
+    **不检查"的步骤"**: 说明书侧第二方面段固定套话本身带"的步骤"(与 L8-1 收尾套话②
+    骨架一致); claims.md L1-1 的"不写'的步骤'"只约束权利要求书的系统/介质权收尾,
+    由规则 2b 负责, 两侧口径不同源、勿交叉迁移.
+
+    适用边界(避免对未采用该体例的稿件误判): 仅当发明内容**已出现"第二方面"
+    锚点**时才校验其套话形态. 有系统权却整段缺失第二方面, 属"发明内容与权要
+    一一对应"的完整性问题, 由 content-auditor 按 L6-1 判定, 不在本机械规则内
+    —— 机械规则只在体例已采用时校验其正确性, 不强制体例选择. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "发明内容")
+    if offset < 0:
+        return
+    second_idx = next((i for i, ln in enumerate(body) if "第二方面" in ln), -1)
+    if second_idx < 0:
+        return  # 未采用"方面"体例, 本规则不适用
+
+    line_no = offset + second_idx + 1
+    # 第二方面段: 从锚点行起至下一个空行或段末 (套话通常单段)
+    chunk_lines = []
+    for ln in body[second_idx:]:
+        if not ln.strip() and chunk_lines:
+            break
+        chunk_lines.append(ln)
+    chunk = "".join(chunk_lines)
+
+    # 判断本案是否有系统/装置保护主题 (claims_text 优先, 回退到本文权要块)
+    claims_src = claims_text or "\n".join(
+        ln
+        for t in sections if "权利要求书" in t
+        for ln in lines[sections[t][0]:sections[t][1]]
+    )
+    has_system = bool(re.search(r"一种[^，。；]{2,40}(系统|装置)[，。]", claims_src))
+
+    # ①计算机设备式骨架
+    if has_system and not re.search(r"包括存储器、处理器|包括：存储器、处理器", chunk):
+        report.add(
+            "L6-1", f"发明内容 第{line_no}行", chunk.strip()[:60],
+            "第二方面系统段未用固定计算机设备式套话; 应为'包括存储器、处理器及存储在所述"
+            "存储器上并可在所述处理器上运行的计算机程序，所述处理器执行所述计算机程序时实现…'",
+        )
+    # 注: 说明书侧的第二方面段固定套话**本身带"的步骤"**(与 L8-1 收尾套话②骨架一致),
+    # 不校验该三字。claims.md L1-1 的"不写'的步骤'"只约束权利要求书的系统/介质权收尾
+    # (由规则 2b check_system_media_claim_no_debuzou 负责), 两侧口径不同源、勿交叉迁移。
+    # ②方法名简称 → 线索级, 交 content-auditor 语义复核
+    if re.search(r"(第一方面所述方法|如上所述的方法(?!名))", chunk):
+        report.add_suspect(
+            "L6-1", f"发明内容 第{line_no}行", chunk.strip()[:60],
+            "第二方面系统段疑似用'第一方面所述方法'式简称; 应写发明名称方法全称"
+            "(如'一种基于反向视角验证的无人机融合定位方法'), content-auditor 复核确认或豁免",
+            suspect_id="S-W05-aspect-name", section="L6", owner="content",
+            missing_dimensions=["方法名全称"],
+        )
+
+
 # -----------------------------------------------------------------------------
 # 辅助: 决定扫描范围 (只扫说明书正文, 避开代码块/表格头)
 # -----------------------------------------------------------------------------
@@ -992,12 +1218,358 @@ def _get_scan_ranges(lines: list[str], sections: dict, stage: str) -> list[tuple
     return ranges
 
 
+# 规则 31 槽位表唯一出处: docx-template.md G8-0b 的 **A 类槽位**(须写正式题名全称,
+# 含"及系统/及装置"后缀; 这四处代表整件发明). B 类槽位(权要各条、第一/第二方面复述、
+# 实施例引入句、图1附图说明、收尾"综上所述"段、第二实施例系统段、介质段)按保护主题
+# 分别写方法名/系统名, 句式出处见 docx-template.md G8-2 与 full-draft.md L8-1 收尾条
+# —— 在 B 类写入含"及系统"的全称反而产出"……方法及系统方法"式重复拼接, 故不入本表.
+# 分节4首段发明名称属 DOCX 可见层, 由 verify_docx_injection.py 后验, 不在 md 层.
+INVENTION_NAME_SLOTS: list[tuple[str, str]] = [
+    (r"本发明的目的在于提供了?一种([^，。；]{4,60})", "发明内容 目的句"),
+    (r"具体涉及一种([^，。；]{4,60})", "技术领域 句"),
+    # (?<!综上所述，本发明) 排除收尾总结段 —— 该段属 B 类, 句式为"综上所述，本发明
+    # 公开了一种〔权1保护主题〕"(方法名), 不填含"及系统"的正式全称.
+    (r"(?<!综上所述，本发明)公开了一种([^，。；]{4,60})", "说明书摘要 句"),
+]
+
+
+def check_invention_name_slots(lines: list[str], sections: dict, report: Report,
+                               stage: str, invention_name: str | None = None) -> None:
+    """规则 31: 正式题名槽位逐字一致 (docx-template.md G8-0b, W35).
+
+    正式发明题名在各复现槽位必须逐字一致, 含"及系统／及装置"等后缀.
+    违规形态: 漏后缀、简称、变形、重复拼接.
+
+    信源纪律(设计稿 §5.3): 题名由 --invention-name 显式传入, **不从权 1 主题
+    (extract_structure.py SUBJECT_RE) 推导** —— 权 1 主题只含方法名, 推不出
+    "及系统".
+
+    **配置缺失 vs 稿件违规的通道分离(闸门死锁修复)**: 检出槽位但未传该参数时,
+    走 **suspect 通道** 报"配置缺失", 不计 violation、不影响 exit code —— 因为
+    该状态**无法通过改稿消除**, 计为 violation 会让"任一 FAIL 直接回修"的闸门
+    纪律陷入死锁(稿子完全合规也过不了闸, 主 agent 要么空转改坏正确的题名句,
+    要么跳过整个闸门失去机械前置保护). 稿件真违规(漏后缀/简称/变形/重复拼接)
+    仍走 violation 通道硬拦。
+
+    与规则 26 (check_problem_echo) 的边界: 规则 26 扫同一句的"以解决…"部分,
+    本规则只判题名槽位部分, 两者不重复报同一问题. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    # 只扫交付正文: _get_scan_ranges 排除评分报告/审查报告/元数据/TODO 等非正文节 ——
+    # 审查报告在引述问题时常复述题名(如"摘要写'公开了一种xx方法'漏了'及系统'"),
+    # 扫全文会把这类引述误判为槽位违规.
+    hits: list[tuple[str, str, int]] = []  # (slot_label, found_name, line_no)
+    for _label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            for pat, slot_label in INVENTION_NAME_SLOTS:
+                m = re.search(pat, lines[i])
+                if m:
+                    hits.append((slot_label, m.group(1).strip(), i + 1))
+    if not hits:
+        return  # 无题名槽位, 本规则不适用
+
+    if not invention_name:
+        # 配置缺失 ≠ 稿件违规: 走 suspect 通道, 不计 exit code, 不阻断闸门.
+        report.add_suspect(
+            "G8-0b", "全文稿(调用配置)",
+            f"检出题名槽位 {len(hits)} 处: {hits[0][0]}第{hits[0][2]}行等",
+            "**配置缺失, 非稿件违规**: 未传 --invention-name, 规则 31(G8-0b A 类槽位"
+            "题名逐字一致)本轮未执行。请在调用命令补 --invention-name \"<正式题名全称>\""
+            "(含'及系统/及装置'等后缀, 取自案件已确认元数据)后重跑; "
+            "不得从权 1 保护主题推导后缀(设计稿 §5.3 信源纪律)。"
+            "本条不可通过改稿消除, 故不计 FAIL —— 但该项校验缺失, 不得据此认为题名已合规",
+            suspect_id="S-W35-name-input-missing", section="G8", owner="global",
+            missing_dimensions=["--invention-name 参数"],
+        )
+        return
+
+    name = invention_name.strip()
+    name_body = name[2:] if name.startswith("一种") else name
+    for slot_label, found, line_no in hits:
+        if found == name_body:
+            continue
+        if name_body.startswith(found):
+            detail = f"题名漏后缀'{name_body[len(found):]}': 应为'{name_body}', 实为'{found}'"
+        elif found.startswith(name_body):
+            detail = f"题名重复拼接: 应为'{name_body}', 实为'{found}'"
+        else:
+            detail = f"题名变形/简称: 应逐字写'{name_body}', 实为'{found}'"
+        report.add(
+            "G8-0b", f"{slot_label} 第{line_no}行", found[:60],
+            f"{detail} (G8-0b 正式题名逐字一致, 含'及系统/及装置'后缀)",
+        )
+
+
+def _impl_body(lines: list[str], sections: dict) -> tuple[list[str], int]:
+    """具体实施方式正文与其起始行号 (未找到返回 [], -1). 供 L8 类 suspect 复用."""
+    return get_section_lines(lines, sections, "具体实施方式")
+
+
+def check_impl_opening_tech_hints(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 32 (suspect): 实施方式开篇技术展开线索 (L8-1, W08).
+
+    首个 Sxx 主步骤之前的开篇段只应写法律/结构套话与图导引句; 出现案件技术展开
+    (设备构成与机制、参数示例值、公式) 即出线索, 由 impl-auditor 判定应否下沉到
+    对应步骤解释段. 纯法律套话与图导引句不报. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    first_sxx = next((i for i, ln in enumerate(body) if re.search(r"步骤S\d+|^S\d+，", ln.strip())), -1)
+    if first_sxx <= 0:
+        return  # 无 Sxx 或开篇为空
+    # 技术展开特征: 具体数值+单位 / 器件构成句 / 公式号 / 示例值
+    tech_pat = re.compile(
+        r"\d+(\.\d+)?\s*(伏特|安培|瓦特|秒|毫秒|赫兹|摄氏度|%|米|毫米)"
+        r"|包括[^，。；]{0,20}(电路|模块|单元|传感器)[^，。；]{0,20}(用于|连接)"
+        r"|一个实施值|示例值|取值为"
+    )
+    for i in range(first_sxx):
+        ln = body[i]
+        if not ln.strip():
+            continue
+        if tech_pat.search(ln):
+            report.add_suspect(
+                "L8-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                "实施方式开篇(首个 Sxx 之前)疑似出现案件技术展开; 开篇只写法律/结构套话与图导引句, "
+                "技术细节应下沉到对应步骤解释段(W08). 纯套话可豁免",
+                suspect_id="S-W08-impl-opening", section="L8", owner="impl",
+                missing_dimensions=["技术展开位置"],
+            )
+
+
+# 规则 33 词表: 参与判断的定性状态词 (W11)
+QUALITATIVE_STATE_WORDS = ["恒定", "下降", "上升", "平稳", "稳定", "异常", "退化", "波动"]
+
+
+def check_qualitative_state_bounds(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 33 (suspect): 定性状态词双边界线索 (G6-1 定性状态词双边界, W11).
+
+    定性状态词参与判断 (同句含"当…时/判定/确定…阶段/转为") 时, 须同时具备幅度
+    边界 (数值+单位) 与时间/连续样本边界 ("连续N点/持续T秒"). 局部窗口 (命中行
+    前后各 3 行) 内两类边界齐全即豁免, 不出线索. 仅背景描述不报. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    judge_pat = re.compile(r"当[^，。；]{0,30}时|判定|确定[^，。；]{0,10}阶段|转为|视为")
+    amp_pat = re.compile(r"\d+(\.\d+)?\s*(伏特|安培|瓦特|秒|毫秒|%|倍|个)|阈值|超过|小于|大于")
+    dur_pat = re.compile(r"连续\s*\d+|持续\s*\d+|\d+\s*个?(采样点|采样周期|连续样本)|单点")
+    # 状态词须作状态判定使用; 嵌在名词短语内 (如"采样异常记录"的"异常"、"波动指标"
+    # 的"波动") 属对象命名的一部分, 不是参与判断的定性状态词, 剔除后再判以免误报.
+    noun_ctx_pat = re.compile(r"异常记录|异常数据|异常样本|异常事件|波动指标|波动幅度|波动值|波动特征|退化状态标识|稳定变化限值")
+    for i, ln in enumerate(body):
+        if not any(w in ln for w in QUALITATIVE_STATE_WORDS):
+            continue
+        if not judge_pat.search(ln):
+            continue  # 未参与判断, 不适用
+        if not any(w in noun_ctx_pat.sub("", ln) for w in QUALITATIVE_STATE_WORDS):
+            continue  # 状态词只是对象名的一部分, 非判断依据
+        lo, hi = max(0, i - 3), min(len(body), i + 4)
+        window = "\n".join(body[lo:hi])
+        missing = []
+        if not amp_pat.search(window):
+            missing.append("幅度边界")
+        if not dur_pat.search(window):
+            missing.append("时间/连续样本边界")
+        if missing:
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                f"定性状态词参与判断但局部窗口疑似缺{('与'.join(missing))}; "
+                "须同时给幅度边界(数值+单位)与时间/连续样本边界(W11). 边界已在他处给出可豁免",
+                suspect_id="S-W11-state-bounds", section="L8", owner="impl",
+                missing_dimensions=missing,
+            )
+
+
+def check_calibration_sample_dims(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 34 (suspect): 标定样本四维度线索 (G6-1 标定样本四维度, W14).
+
+    出现"标定/预先标定/历史数据确定"时, 须给全来源、纳排、数量、数量依据四项.
+    局部窗口 (命中行前后各 5 行) 四项齐全即豁免. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    trig_pat = re.compile(r"标定|由[^，。；]{0,20}历史[^，。；]{0,10}(数据|样本)[^，。；]{0,10}确定")
+    dims = [
+        ("样本来源", re.compile(r"同型号|同一型号|同功率|工况|历史切换|出厂|采集自")),
+        ("纳排条件", re.compile(r"未记录|排除|剔除|经[^，。；]{0,10}检测|合格|完成[^，。；]{0,6}检测")),
+        ("样本数量", re.compile(r"不少于\s*\d+|不低于\s*\d+|\d+\s*(次|组|个)(完整|历史|样本)?")),
+        ("数量依据", re.compile(r"依据|理由|以保证|为使|满足[^，。；]{0,10}(置信|统计|稳定)|足以")),
+    ]
+    reported_lines = set()
+    for i, ln in enumerate(body):
+        if not trig_pat.search(ln):
+            continue
+        lo, hi = max(0, i - 5), min(len(body), i + 6)
+        if any(x in reported_lines for x in range(lo, hi)):
+            continue  # 同一窗口只报一次
+        window = "\n".join(body[lo:hi])
+        missing = [name for name, pat in dims if not pat.search(window)]
+        if missing:
+            reported_lines.add(i)
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                f"标定过程疑似缺维度: {missing}; 须给全样本来源、纳排条件、样本数量、数量依据"
+                "四项方可复现(W14). 维度已在他处给出可豁免",
+                suspect_id="S-W14-calibration", section="L8", owner="impl",
+                missing_dimensions=missing,
+            )
+
+
+def check_vague_qualification_def(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 35 (suspect): 笼统资格定义线索 (L8-1 资格与状态定义须可测, W16).
+
+    "健康/合格/有效/正常"等资格类对象的定义句以"满足…要求/符合…标准/性能良好"
+    等笼统谓词收口, 且句内无量化指标 (数值+单位/阈值) 时出线索. 可测定义不报.
+    仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    def_pat = re.compile(r"(健康|合格|有效|正常|达标)[^，。；]{0,12}(是指|指的?是|定义为)")
+    vague_pat = re.compile(r"满足[^，。；]{0,12}(要求|标准|规定)|符合[^，。；]{0,12}(标准|规范|要求)|性能良好|状态良好")
+    quant_pat = re.compile(r"\d+(\.\d+)?\s*(伏特|安培|瓦特|秒|毫秒|%|兆欧|欧姆|摄氏度)|阈值|不低于\s*\d|不高于\s*\d|误差[^，。；]{0,8}\d")
+    for i, ln in enumerate(body):
+        if not def_pat.search(ln):
+            continue
+        # 定义句可能跨行, 取本行+后 2 行为判定窗口
+        window = "\n".join(body[i:min(len(body), i + 3)])
+        if vague_pat.search(window) and not quant_pat.search(window):
+            report.add_suspect(
+                "L8-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                "资格/状态定义疑似以笼统谓词收口而无量化指标; 每项判定条件须可测量可复核"
+                "(给检测项、量化指标、判定阈值或范围)(W16). 已有量化指标可豁免",
+                suspect_id="S-W16-vague-def", section="L8", owner="impl",
+                missing_dimensions=["可测量化指标"],
+            )
+
+
+def check_multisource_schema(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 36 (suspect): 多源拼接 schema 线索 (L8-1 多源特征拼接须公开 schema, W20).
+
+    多源数据经"拼接/融合/串接/沿特征维度组合"形成数据集/矩阵/向量时, 须公开
+    字段清单、列顺序、总维数三项. 局部窗口 (命中行前后各 4 行) 三项齐全即豁免.
+    仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    trig_pat = re.compile(r"(拼接|融合|串接|组合)[^。；]{0,20}(得到|形成)[^。；]{0,16}(数据集|矩阵|向量|序列)")
+    dims = [
+        ("字段清单", re.compile(
+            r"(包括|按照|其中)[^。；]{0,80}(电流|电压|占空比|温度|功率|频率|转速|压力|电阻|流量)"
+            r"[^。；]{0,60}(、|和|以及)[^。；]{0,60}"
+            r"(电流|电压|占空比|温度|功率|频率|转速|压力|电阻|流量)")),
+        ("列顺序", re.compile(r"在前|在后|依次|顺序[^，。；]{0,10}(排列|拼接|组合)|第[一二三四五六七八九十\d]+列")),
+        ("总维数", re.compile(r"共\s*\d+\s*(维|列)|总维数|维数为\s*\d+|n\s*为\s*\d+|\d+\s*维")),
+    ]
+    for i, ln in enumerate(body):
+        if not trig_pat.search(ln):
+            continue
+        lo, hi = max(0, i - 4), min(len(body), i + 5)
+        window = "\n".join(body[lo:hi])
+        missing = [name for name, pat in dims if not pat.search(window)]
+        if missing:
+            report.add_suspect(
+                "L8-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                f"多源拼接疑似缺 schema 维度: {missing}; 须公开各源具体字段、拼接列顺序与总维数"
+                "(不得以'运行状态数据'等统称代替)(W20). 已在他处公开可豁免",
+                suspect_id="S-W20-concat-schema", section="L8", owner="impl",
+                missing_dimensions=missing,
+            )
+
+
+def check_trivial_arithmetic_formula(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 37 (suspect): 初等算术公式线索 (G6-1 显而易见初等算术, W26).
+
+    极保守识别: 独立成段的公式行仅含两个已知量的一次减法或除法 (形如 A = B - C
+    或 A = B / C), 无函数、求和、上下标叠加、矩阵、条件分段. 命中即出线索, 由
+    impl-auditor 判断可否改用操作性文字表达. 任何复杂形态一律不报. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    complex_pat = re.compile(r"\\(frac|sum|int|sqrt|exp|log|min|max|left|begin)|\^|_\{|\||≥|≤|\\geq|\\leq")
+    simple_pat = re.compile(r"^\s*[A-Za-z一-龥]{1,12}\s*=\s*[A-Za-z一-龥]{1,12}\s*[-/]\s*[A-Za-z一-龥]{1,12}\s*$")
+    for i, ln in enumerate(body):
+        s = ln.strip()
+        if not s or complex_pat.search(s):
+            continue
+        if simple_pat.match(s):
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", s[:60],
+                "疑似显而易见的二元初等算术单独列为公式段; 此类运算优先用操作性文字表达"
+                "('计算 A 与 B 的差值，得到 C')(W26). 确需公式的复杂关系可豁免",
+                suspect_id="S-W26-trivial-formula", section="L8", owner="impl",
+                missing_dimensions=["文字化表达"],
+            )
+
+
+def check_negative_only_action(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 38 (suspect): 纯否定动作线索 (G3-1 正向动作—输出闭合, W46).
+
+    否定谓语 (不执行/不生成/不参与/不判断/不再等) 收束且句内无正向动作或输出时
+    出线索. 合法否定分支 (作触发条件、作范围限定) 由 auditor 豁免.
+
+    唯一按章节互斥路由的 suspect (设计稿 §3.2): section=L8 → impl; 其他说明书块
+    (L4/L5/L6/L7) → global. 未知章节 → 报结构抽取/路由错误 (add), **不广播给多路
+    auditor** (设计稿 §7). 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    neg_pat = re.compile(r"不(执行|生成|参与|判断|再|进行|输出|触发|计算|采集)")
+    # 正向动作: 否定词之外另有实质动作产出.
+    # (?<!不) 排除"不生成预警指令"中的"生成"—— 该动词本身正被否定, 不构成正向动作.
+    pos_pat = re.compile(r"(?<!不)(得到|输出|生成|执行|计算|确定|记录|发出|写入|存储|标记)[^，。；]{1,}")
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        code = normalize_section(label)
+        if code in ("L1", "L2", "L3"):
+            continue  # 权要/技术领域/背景技术不在说明书正文 W46 范围
+        owner = suspect_owner_for_section(code)
+        for i in range(start, end):
+            ln = lines[i]
+            if not neg_pat.search(ln):
+                continue
+            if pos_pat.search(ln):
+                continue  # 同句已有正向动作, 属合法否定分支
+            if owner is None:
+                report.add(
+                    "G3-1", f"{label} 第{i + 1}行", ln.strip()[:60],
+                    f"检出否定式表述, 但章节'{label}'无法规范化为已知编号, 无法确定唯一 auditor 路由; "
+                    "请先修复章节结构后重跑(设计稿 §7); 本条不广播给多路 auditor",
+                )
+                continue
+            report.add_suspect(
+                "G3-1", f"{label} 第{i + 1}行", ln.strip()[:60],
+                "疑似纯否定表述(否定谓语收束、未给正向动作或输出); 按 G3-1 改写为"
+                "'对X做Y得到Z'(W46). 合法否定分支(触发条件/范围限定)可豁免, 须给上下文证据",
+                suspect_id="S-W46-negative-only", section=code, owner=owner,
+                missing_dimensions=["正向动作或输出"],
+            )
+
+
 # -----------------------------------------------------------------------------
 # 主流程
 # -----------------------------------------------------------------------------
 
 
-def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Report:
+def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
+               invention_name: str | None = None) -> Report:
     lines = load_md(md_path)
     sections = split_sections(lines)
     claims_text = claims_md.read_text(encoding="utf-8") if claims_md else ""
@@ -1038,6 +1610,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_double_punctuation(lines, sections, report, stage)
     check_full_draft_forbidden_quantifiers(lines, sections, report, stage, claims_text)
     check_abstract_length(lines, sections, report, stage)
+    check_full_draft_length(lines, sections, report, stage)
     check_figure_numbering(lines, sections, report, stage)
     check_closing_boilerplate(lines, sections, report, stage)
     check_benefit_enumeration(lines, sections, report, stage)
@@ -1045,9 +1618,20 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None) -> Repo
     check_substep_numbering(lines, sections, report, stage)
     check_benefit_generic_phrases(lines, sections, report, stage)
     check_problem_echo(lines, sections, report, stage)
+    check_spec_no_claims_wording(lines, sections, report, stage)
+    check_second_aspect_boilerplate(lines, sections, report, stage, claims_text)
+    check_invention_name_slots(lines, sections, report, stage, invention_name)
     # suspect 线索级 (不计 FAIL, 回传 auditor 复核)
     check_tech_system_mixing(lines, sections, report, stage)
     check_model_detail_hints(lines, sections, report, stage)
+    # 新增 7 个探测器 (设计稿 §5.4; 均不计 FAIL、不影响 exit code)
+    check_impl_opening_tech_hints(lines, sections, report, stage)      # W08
+    check_qualitative_state_bounds(lines, sections, report, stage)     # W11
+    check_calibration_sample_dims(lines, sections, report, stage)      # W14
+    check_vague_qualification_def(lines, sections, report, stage)      # W16
+    check_multisource_schema(lines, sections, report, stage)           # W20
+    check_trivial_arithmetic_formula(lines, sections, report, stage)   # W26
+    check_negative_only_action(lines, sections, report, stage)         # W46
 
     return report
 
@@ -1079,6 +1663,11 @@ def main() -> int:
         "--claims-md", default=None,
         help="权要基准 md (full-draft 阶段可选; 用于量词检查的权要原文复述豁免)",
     )
+    parser.add_argument(
+        "--invention-name", default=None,
+        help="本案正式发明题名全称(含'及系统/及装置'等后缀, 如'一种基于反向视角验证的无人机融合定位方法及系统')。"
+             "full-draft 阶段用于 G8-0b 题名槽位逐字比对; 检出槽位却未传时报'输入不足'并阻断, 不从权 1 推导(设计稿 §5.3)",
+    )
     args = parser.parse_args()
 
     md_path = Path(args.md)
@@ -1091,16 +1680,20 @@ def main() -> int:
         print(f"[check_hard_rules] ERROR claims-md not found: {claims_path}", file=sys.stderr)
         return 2
 
-    report = run_checks(md_path, args.stage, claims_path)
+    report = run_checks(md_path, args.stage, claims_path, args.invention_name)
 
     if args.json:
+        # 注: 不输出顶层 `suspects` —— 它与 `suspect_manifest` 同源 (后者是按 owner
+        # 分组的完整投影), 两份并列会让重复载荷占 JSON 26.6%; 而 SKILL.md:97 要求
+        # 脚本 JSON 全文内嵌进**每一路** auditor prompt, 重复代价随并行路数放大。
+        # suspect 的唯一出口是 suspect_manifest.<owner>; suspect_count 保留作总数校验。
         print(json.dumps({
             "stage": report.stage,
             "md_path": report.md_path,
             "violation_count": report.count(),
             "violations": [asdict(v) for v in report.violations],
             "suspect_count": len(report.suspects),
-            "suspects": [asdict(v) for v in report.suspects],
+            "suspect_manifest": report.suspect_manifest(),
         }, ensure_ascii=False, indent=2))
     else:
         print(format_human_report(report), file=sys.stderr)
