@@ -16,7 +16,7 @@ tools: Read, Bash
 
 | 字段 | 含义 |
 |---|---|
-| `stage` | 仅接受 `claims-draft`。 |
+| `stage` | 仅接受 `claims-draft`。**本字段表稿件类型(权要稿)、不表稿次**——返修轮(权要2/3稿,或权要与全文同轮返修中改动权要三章)照传 `claims-draft`,返修态由 `reaudit_context` 标识。**不得自造 `claims-revision` 等取值**(各机械脚本 `--stage` 亦只认 `claims-draft`/`full-draft` 两值)。 |
 | `md_path` | 权要稿.md 的绝对路径。 |
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出(含权要分句、依附邻接表等结构数据),直接嵌入 prompt。 |

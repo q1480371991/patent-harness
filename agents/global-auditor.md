@@ -18,7 +18,7 @@ tools: Read, Bash
 
 | 字段 | 含义 |
 |---|---|
-| `stage` | 阶段字符串,接受 `claims-draft` 或 `full-draft`。返修阶段不在当前范围。 |
+| `stage` | 阶段字符串,接受 `claims-draft` 或 `full-draft`。**本字段表稿件类型、不表稿次**——返修轮照传所属稿件类型(改 L1/L2/L3 传 `claims-draft`、改 L4–L8 传 `full-draft`),"是否返修轮"由 `reaudit_context` 标识(传入即进增量复核模式,见下节)。两值与各机械脚本 `--stage` 枚举严格一致,**不得自造 `*-revision` 等取值**。 |
 | `md_path` | 待审 md 草稿的绝对路径(权要稿.md 或 全文稿.md)。 |
 | `claims_md_path` | 仅 `full-draft` 时必传:冻结权要稿(`docs/权要稿.md`)的绝对路径,作为全文术语一致性(G4)的基准。 |
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |

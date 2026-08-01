@@ -16,7 +16,7 @@ tools: Read, Bash
 
 | 字段 | 含义 |
 |---|---|
-| `stage` | 仅接受 `full-draft`。 |
+| `stage` | 仅接受 `full-draft`。**本字段表稿件类型(全文稿)、不表稿次**——返修轮(全文2/3稿,或权要与全文同轮返修中改动 L8)照传 `full-draft`,返修态由 `reaudit_context` 标识。**不得自造 `full-revision` 等取值**(各机械脚本 `--stage` 亦只认 `claims-draft`/`full-draft` 两值)。 |
 | `md_path` | 全文稿.md 的绝对路径。本路只审其中"具体实施方式"章节,其余章节仅作上下文。 |
 | `claims_md_path` | 冻结权要稿(`docs/权要稿.md`)的绝对路径。**只读基准**,权要冻结,任何"改权要"的建议都是越权。 |
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。含 `suspect_manifest` 字段(按 auditor 路分组的 suspect 清单);本路**只处置 `suspect_manifest.impl`**,其余路的条目不得越界处置。 |
