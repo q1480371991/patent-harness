@@ -1,3 +1,7 @@
 .DS_Store
 __pycache__/
 *.pyc
+
+# 审批意见原始数据（含在审案件权要/说明书逐字原文，只留本机，不进仓库）
+docs/approval_items.json
+docs/approval_item_results.json

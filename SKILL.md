@@ -83,7 +83,7 @@ python3 scripts/check_env.py --json
 | 有经验撰写者，一轮写完权要+全文 | direct full draft | `案件号-全文1稿-作者-发明题目全称.docx`（**不单独出 `权要1稿.docx`**，权要三章并入本稿；由用户指令"直接写完全文稿"触发，详见「直写全文稿」段） |
 | 老板对全文稿给批注 | full revision | 下一稿 `全文2稿` 或 `全文3稿` |
 
-如果缺以下任一元数据，应主动询问用户：案件号、发明题目、案件文件夹、当前阶段。撰写者从案件路径的一级目录自动识别（白名单与经验档案映射唯一出处 `global.md` G1）；路径不在白名单目录下或无法唯一判断时再询问用户，不要凭猜测填。
+元数据缺失分两类处置，**不得混同**：①**开工必需项**——`案件文件夹`、`当前阶段`缺失时必须主动询问用户（没有它们无法定位工作对象、无法选择工作流）；②**交付文件名/校验项**——`案件号`、`发明题目`（正式发明题名全称）、`作者署名`缺失时**一律不追问、不停顿**，按上文「默认立场」新稿留空规则先写完交付，缺项汇总进完工报告「待补清单」（该口径唯一出处即「默认立场」条）。撰写者从案件路径的一级目录自动识别（白名单与经验档案映射唯一出处 `global.md` G1）；路径不在白名单目录下或无法唯一判断时才询问用户，不要凭猜测填。
 
 ## 案件文件夹约定
 
@@ -174,7 +174,7 @@ python3 scripts/check_env.py --json
    **通过判定、合并落盘（`docs/审查报告-全文N稿.md`）、回修重审与降级兜底一律按「审查闸门通用规则」节执行。闸门通过后直接进入 step 9 写入 Word，不因缺元数据而停下询问（缺项按下方 step 9 留空规则处理，统一汇总到完工报告的待补清单）。**
 9. **闸门通过 → 直接写入 DOCX**（不等待用户确认/Enter）：确认已显式调用官方 `document-skills:docx`（即 docx）skill（首次进入执行层时调用一次即可，后续 step 复用）。**交付文件名命名规则**：`<案件号>-全文N稿-<作者>-<发明题目全称>.docx`（唯一出处 G1）。**缺元数据时的留空规则**（本 step 不追问、不停顿）：①**作者**未提供时，文件名作者位写 `待补`（如 `待补-全文1稿-待补-…docx`，案件号也缺则前缀整段省略或同样写 `待补`），完工后由用户自行改名；②**发明题名**未提供时，从权 1 保护主题自动提取作为文件名题名位（如"一种基于边缘计算的喷胶机自适应控制方法及系统"），但 `check_hard_rules.py --invention-name` 的正式题名**不得用自动提取值冒充**（G8-0b 信源纪律：正式题名须案件元数据确认；提取值仅用于文件名占位），此时该脚本传空、题名校验报 `S-W35-name-input-missing` suspect、记入待补清单。**所有留空/占位项一律记入完工报告「待补清单」**，由用户在收稿后补齐（含：案件号、正式发明题名全称、作者署名）。
 10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文N稿-作者-发明题目全称.docx`（命名唯一出处 G1）。
-11. 由 `docx` 执行层采用 unpack → edit XML → pack：先用模板 `assets/docx/专利撰写模板.docx` 拷贝为 `案件号-全文N稿-作者-发明题目全称.docx`（若 step 10 已前向拷贝则复用），再跑 `python3 scripts/inject_fulltext_docx.py <unpack目录> --md <案件文件夹>/docs/全文稿.md`（默认一次性注入摘要+发明内容+附图说明+具体实施方式四章，可选 `--block` 分块调试），把全文稿就地注入分节1（摘要）与分节4（L6–L8）。骨架保护与分节落位唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；权要三章（权利要求书/技术领域/背景技术）由 step 10 前向拷贝保留，不在本脚本范围。正文注入完成后、最终 pack 前，运行 `python3 scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png` 把图 1 注入分节 2（摘要附图）与分节 5（说明书附图，含"图1"图题），再 pack。pack 后跑 `python3 scripts/verify_docx_injection.py <案件文件夹>/案件号-全文N稿-作者-发明题目全称.docx --md <案件文件夹>/docs/全文稿.md` + `python3 scripts/omml_formulas.py check <docx>`（必要时 `fix-settings`）+ `python3 scripts/verify_docx_skeleton.py <docx> --stage 全文` 三件套收尾验收。
+11. 由 `docx` 执行层采用 unpack → edit XML → pack：**直接在 step 10 前向拷贝出的 `案件号-全文N稿-作者-发明题目全称.docx` 上就地操作**——**不得改用空白模板另存**（模板内没有本案权利要求书/技术领域/背景技术，权要三章正是靠 step 10 的前向拷贝带过来的；用模板会交出一份权要三章为模板占位内容的废稿）。随后跑 `python3 scripts/inject_fulltext_docx.py <unpack目录> --md <案件文件夹>/docs/全文稿.md`（默认一次性注入摘要+发明内容+附图说明+具体实施方式四章，可选 `--block` 分块调试），把全文稿就地注入分节1（摘要）与分节4（L6–L8）。骨架保护与分节落位唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；权要三章（权利要求书/技术领域/背景技术）由 step 10 前向拷贝保留，不在本脚本范围。正文注入完成后、最终 pack 前，运行 `python3 scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png` 把图 1 注入分节 2（摘要附图）与分节 5（说明书附图，含"图1"图题），再 pack。pack 后跑 `python3 scripts/verify_docx_injection.py <案件文件夹>/案件号-全文N稿-作者-发明题目全称.docx --md <案件文件夹>/docs/全文稿.md` + `python3 scripts/omml_formulas.py check <docx>`（必要时 `fix-settings`）+ `python3 scripts/verify_docx_skeleton.py <docx> --stage 全文` 三件套收尾验收。
 12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`（快照留档，命名见 G1）；完工报告按“完工报告”的**校验清单**格式逐规则打 ✅/❌/➖。
 
 ## 直写全文稿（有经验撰写者）

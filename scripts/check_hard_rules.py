@@ -1666,7 +1666,10 @@ def main() -> int:
     parser.add_argument(
         "--invention-name", default=None,
         help="本案正式发明题名全称(含'及系统/及装置'等后缀, 如'一种基于反向视角验证的无人机融合定位方法及系统')。"
-             "full-draft 阶段用于 G8-0b 题名槽位逐字比对; 检出槽位却未传时报'输入不足'并阻断, 不从权 1 推导(设计稿 §5.3)",
+             "full-draft 阶段用于 G8-0b 题名槽位逐字比对; 检出槽位却未传时"
+             "走 suspect 通道报'配置缺失'(suspect_id=S-W35-name-input-missing), "
+             "不计 violation、不阻断闸门(该状态无法通过改稿消除, 计入会致闸门死锁), "
+             "该项校验记为未执行、不得据此认为题名合规; 不从权 1 推导(设计稿 §5.3)",
     )
     args = parser.parse_args()
 
