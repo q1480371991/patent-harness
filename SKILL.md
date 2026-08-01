@@ -150,7 +150,7 @@ python3 scripts/check_env.py --json
 - 不覆盖老板批注过的原文件；留痕稿存为新文件名。
 - **权要联动回写**：若本次返修改动了权利要求书内容（无论留痕或干净稿），注入并校验完成后，把最新权要全文同步回写 `docs/权要稿.md`，保证后续全文阶段的 md 基准不陈旧。
 
-**学习闭环（每次返修收尾）：** 把本次批注体现的、可迁移的写作规律按主题补入对应阶段规则文件，例如返修纪律进 `references/rules/revision.md`，权要表达进 `references/rules/claims.md`，全文公开充分进 `references/rules/full-draft.md`，模板/XML 问题进 `references/rules/docx-template.md`，附图规则进 `references/rules/figures.md`；`rules.md` 仅在新增阶段索引或冲突原则时更新。具体案例只进入 `references/cases/`，并先给用户看 diff 再并入；本案技术对象名、参数值、附图名不进通用规则。
+**学习闭环（每次返修收尾）：** **先过升格三闸**（判据唯一出处 `references/rules/revision.md` 学习闭环）——「审批意见准入标准（三进四不进）」判进不进规则层 → 「升格前去重检索」判是否已被现有条覆盖 → 「规则节清单容量上限」判该节还能不能新增编号；三闸结论按「准入决策留痕」回标 experience 条目的升格状态字段，**不得为凑完整度强行升格**。过闸后，把可迁移的写作规律按主题补入对应阶段规则文件，例如返修纪律进 `references/rules/revision.md`，权要表达进 `references/rules/claims.md`，全文公开充分进 `references/rules/full-draft.md`，模板/XML 问题进 `references/rules/docx-template.md`，附图规则进 `references/rules/figures.md`；`rules.md` 仅在新增阶段索引或冲突原则时更新。具体案例只进入 `references/cases/`，并先给用户看 diff 再并入；本案技术对象名、参数值、附图名不进通用规则。
 
 批注与硬性规则、交底书或可实施性冲突时的处理，唯一出处是 `rules.md` 冲突处理与 `references/rules/revision.md` G9。
 
