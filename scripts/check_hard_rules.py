@@ -956,8 +956,8 @@ def check_substep_numbering(lines: list[str], sections: dict, report: Report, st
         m = pat.search(line)
         if m:
             report.add(
-                "L8-2", f"具体实施方式 第{offset + i + 1}行", line.strip()[:60],
-                f"子步骤编号残留 '{m.group(0)}'; 子步骤一律无编号, 在'包括：'后分号断行集中列举(L8-2)",
+                "L8-1", f"具体实施方式 第{offset + i + 1}行", line.strip()[:60],
+                f"子步骤编号残留 '{m.group(0)}'; 子步骤一律无编号, 在'包括：'后分号断行集中列举(L8-1, 1 级)",
             )
 
 

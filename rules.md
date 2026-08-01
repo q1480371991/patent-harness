@@ -21,7 +21,7 @@
 | 全文一稿 | `global.md`、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims.md` L1/L2/L3 一级规则（冻结块只读体检用，唯一出处 `full-draft.md`「阶段映射与权要冻结」节；仅权要已单独定稿的工作流适用） | `claims.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动；`cases/experience/*` |
 | 全文二稿/三稿 | `global.md`、`full-draft.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims.md` L1/L2/L3 一级规则（冻结块体检） | `claims.md` 其余内容，除非批注涉及权要联动 |
 | 直写全文稿（有经验撰写者，用户指令"直接写完全文稿"触发） | `global.md`、`claims.md`（**全量，不冻结**）、`full-draft.md`、`scoring.md`、`figures.md`、`docx-template.md` | `revision.md`（仅当存在批注）；`cases/INDEX.md` | `cases/experience/*` |
-| Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`，并按批注内容读 `claims.md`/`full-draft.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims.md` L1/L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
+| Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`、`scoring.md`（触发返修定向审查闸门时必读，合并计分口径），并按批注内容读 `claims.md`/`full-draft.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims.md` L1/L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
 | DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
 | 附图生成/替换 | `global.md`、`figures.md`，如需全文一致性再读 `claims.md` 和 `full-draft.md` | — | `revision.md`，除非存在批注返修 |
 

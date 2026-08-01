@@ -427,7 +427,10 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertEqual(global_text.count(row), 1, row)
 
         self.assertNotIn("方法 ≤7 条", claims_text)
-        self.assertIn("方法权通常写到权要 7 左右", claims_text)
+        # 默认配比示例守卫: 必须与"总数=10"算术闭合。旧文案"方法权通常写到权要 7 左右"
+        # + "权9 系统、权10 存储介质"只有 9 条(漏权8), 已改为方法权到权 8。
+        self.assertIn("方法权通常写到权要 8", claims_text)
+        self.assertNotIn("方法权通常写到权要 7", claims_text)
         self.assertIn("可扩展方法权数量或压缩系统", claims_text)
         self.assertIn("系统/装置独权默认采用计算机设备式写法", claims_text)
         self.assertIn("计算机可读存储介质权", claims_text)
@@ -1054,7 +1057,9 @@ class InjectFulltextSmokeTest(unittest.TestCase):
             return Path(env)
         cache = Path.home() / ".claude" / "plugins" / "cache" / "anthropic-agent-skills"
         if cache.is_dir():
-            cands = sorted(cache.glob("document-skills/*/skills/docx"), reverse=True)
+            # 按 mtime 取最新: commit hash 是十六进制, 反字典序 ≠ 最新
+            cands = sorted(cache.glob("document-skills/*/skills/docx"),
+                           key=lambda q: q.stat().st_mtime, reverse=True)
             if cands:
                 return cands[0]
         fallback = (cache / "document-skills" / "690f15cac7f7" / "skills" / "docx")
@@ -1217,9 +1222,6 @@ class RuleAnchorGuardTest(unittest.TestCase):
 
 class CrossBlockFlatStripTest(unittest.TestCase):
     """emit 层剥离 `flat` 省 token, 且不得让 X7 静默失效."""
-
-    CASE = Path("/Users/example/Desktop/Patent/夏晓贝/"
-                "X2607084基于边缘计算的喷胶机自适应控制方法及系统/docs")
 
     def test_flat_stripped_from_emitted_json(self):
         """emit 的 JSON 不含 flat (下游零消费, 实测占比 22.4%)."""
