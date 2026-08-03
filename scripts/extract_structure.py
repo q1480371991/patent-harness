@@ -28,6 +28,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+
+ASPECT_LEAD_RE = re.compile(r"^第[一二三四五六七八九十]+方面[，,]")
 import sys
 from pathlib import Path
 
@@ -197,11 +199,26 @@ def extract_steps(lines: list[str], sections: dict, errors: list[str]) -> tuple[
     return main, sub
 
 
+def _is_fmnr_block_end(t: str) -> bool:
+    """判断发明内容内某行是否终结当前"进一步地/第一方面"分句块.
+
+    终止锚点必须同时覆盖 L6-1 W05 规定的**正确**套话语序「第二方面，本发明提供……」
+    与历史稿件里的「本发明第二方面提供……」写法: 只认后者会导致按规则写对的稿件
+    抽不到块边界, 分句一路吃到"相比于现有技术"后的有益效果分项, X5 误报分句数超标.
+    """
+    return (
+        t.startswith("进一步地")
+        or t.startswith("本发明")
+        or t.startswith("相比于现有技术")
+        or bool(ASPECT_LEAD_RE.match(t))
+    )
+
+
 def extract_fmnr_deps(lines: list[str], sections: dict) -> list[dict]:
     """抽取发明内容"进一步地……包括："从权展开段：引导句 + 其后分号分句数.
 
     每段 = {lead, clause_count, inline_after, line}. clause_count = 引导句后到下一
-    "进一步地"/"本发明"/章末之间以 ；/。 结尾的分句行数; inline_after = "包括："后引导
+    "进一步地"/方面段/有益效果段/章末之间以 ；/。 结尾的分句行数; inline_after = "包括："后引导
     行是否还挤着子步骤 (逗号连缀). 供 check_cross_block X5 与权要方法从权 step_count 比对
     (L6-1 发明内容从权分号分段同构).
     """
@@ -224,7 +241,7 @@ def extract_fmnr_deps(lines: list[str], sections: dict) -> list[dict]:
             if not t:
                 j += 1
                 continue
-            if t.startswith("进一步地，") or t.startswith("本发明"):
+            if _is_fmnr_block_end(t):
                 break
             if t.endswith("；") or t.endswith("。"):
                 cc += 1
@@ -279,7 +296,7 @@ def extract_fmnr_main_clauses(lines: list[str], sections: dict) -> list[str]:
         t = body[j].strip()
         if not t:
             continue
-        if t.startswith("进一步地") or t.startswith("本发明"):
+        if _is_fmnr_block_end(t):
             break
         out.append(t.rstrip("；;。.，,"))
     return out

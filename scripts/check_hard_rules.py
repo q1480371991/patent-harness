@@ -650,6 +650,12 @@ def check_include_lead_not_inline(lines: list[str], sections: dict, report: Repo
     "，包括："(带全角冒号) 后同行还有非空文本 = 子步骤逗号连缀挤入引导行 (未分号分段).
     系统权"……系统，包括存储器、处理器……"用"包括"无冒号、不匹配, 不误报. 仅扫发明内容
     与具体实施方式两章.
+
+    例外: L8-1 收尾②号第二实施例系统套话的唯一出处原文即为**带冒号的单句**
+    "本发明第二实施例提供了一种〔发明名称〕系统，包括：存储器、处理器及……的步骤。",
+    与 L6-1 W05 发明内容侧(无冒号)写法不同源. 该固定套话不是子步骤展开段, 逗号连缀是
+    骨架本身, 按骨架写反被本规则误判, 故精确豁免(须同时命中"实施例提供了一种"与
+    "包括：存储器、处理器"), 不放宽对真正展开段的检查.
     """
     if stage != "full-draft":
         return
@@ -1540,6 +1546,10 @@ def check_negative_only_action(lines: list[str], sections: dict, report: Report,
     # 正向动作: 否定词之外另有实质动作产出.
     # (?<!不) 排除"不生成预警指令"中的"生成"—— 该动词本身正被否定, 不构成正向动作.
     pos_pat = re.compile(r"(?<!不)(得到|输出|生成|执行|计算|确定|记录|发出|写入|存储|标记)[^，。；]{1,}")
+    # 对比句模式 (W46 实判, 2026-08-02): "不新增/不引入/不另设/不使用…，而是…" 否定前导+对比结构.
+    # 王工口径更严: 即使"而是"后为正向动作, 句首否定前导也应删后直写动作 (X2607024: 划删
+    # "本实施方式不新增独立的风险判断阈值，而是"并批"直接写操作"). 该模式不适用 pos_pat 豁免.
+    contrast_pat = re.compile(r"不(新增|引入|另设|使用|设置|增加|采用|单独|重复)[^，。]{0,24}，而是")
     for label, start, end in _get_scan_ranges(lines, sections, stage):
         code = normalize_section(label)
         if code in ("L1", "L2", "L3"):
@@ -1547,10 +1557,11 @@ def check_negative_only_action(lines: list[str], sections: dict, report: Report,
         owner = suspect_owner_for_section(code)
         for i in range(start, end):
             ln = lines[i]
-            if not neg_pat.search(ln):
+            if not (neg_pat.search(ln) or contrast_pat.search(ln)):
                 continue
-            if pos_pat.search(ln):
-                continue  # 同句已有正向动作, 属合法否定分支
+            contrast_hit = bool(contrast_pat.search(ln))
+            if pos_pat.search(ln) and not contrast_hit:
+                continue  # 同句已有正向动作且非对比句, 属合法否定分支
             if owner is None:
                 report.add(
                     "G3-1", f"{label} 第{i + 1}行", ln.strip()[:60],
@@ -1558,10 +1569,16 @@ def check_negative_only_action(lines: list[str], sections: dict, report: Report,
                     "请先修复章节结构后重跑(设计稿 §7); 本条不广播给多路 auditor",
                 )
                 continue
+            msg = (
+                "疑似'不X，而是Y'否定前导+对比结构; 即使'而是'后为正向动作, 否定前导"
+                "也应删除后直写正向动作, 不适用正向豁免 (W46 实判, X2607024)"
+                if contrast_hit else
+                "疑似纯否定表述(否定谓语收束、未给正向动作或输出); 按 G3-1 改写为"
+                "'对X做Y得到Z'(W46). 合法否定分支(触发条件/范围限定)可豁免, 须给上下文证据"
+            )
             report.add_suspect(
                 "G3-1", f"{label} 第{i + 1}行", ln.strip()[:60],
-                "疑似纯否定表述(否定谓语收束、未给正向动作或输出); 按 G3-1 改写为"
-                "'对X做Y得到Z'(W46). 合法否定分支(触发条件/范围限定)可豁免, 须给上下文证据",
+                msg,
                 suspect_id="S-W46-negative-only", section=code, owner=owner,
                 missing_dimensions=["正向动作或输出"],
             )
