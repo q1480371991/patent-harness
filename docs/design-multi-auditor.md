@@ -66,7 +66,7 @@
 
 > **2026-07-30 起 codex 分支已删除、`docs/porting.md` 已随之移除,仅维护 claude 单宿主**;本节与 §8、§9 中的 codex/porting 条目仅作设计沿革记录。
 
-- **Claude(claude 分支 SKILL.md)**:`Workflow` 工具一次编排本阶段全部 auditor(每路一个 `agent()`,物理隔离;降级顺序 Workflow → Agent 逐路派发 → 分轮自查,唯一出处 `SKILL.md`「审查闸门通用规则」降级兜底条,本行为设计稿沿革记录)。
+- **Claude(claude 分支 SKILL.md)**:`Workflow` 工具一次编排本阶段全部 auditor(每路一个 `agent()`,物理隔离;降级顺序 Workflow → Agent 逐路派发 →(Workflow 与 Agent 派发共享计数器,累计 3 次失败)主 agent 串行审查,唯一出处 `SKILL.md`「审查闸门通用规则」降级兜底条,本行为设计稿沿革记录)。
 - **Codex(codex 分支 SKILL.md,已删除)**:无原生 subagent,按同一组契约**分轮自查**——每轮只带一路规则包,获得同等注意力集中收益;仍无独立性,完工报告标注,硬防线以脚本闸门为准。
 
 ## 8. 分支纪律变更(已失效: codex 分支与 docs/porting.md 已删, 见 §7 沿革说明)
