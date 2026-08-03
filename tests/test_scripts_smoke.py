@@ -632,6 +632,78 @@ class PatentScriptSmokeTests(unittest.TestCase):
         # suspect 不进 exit code / 不计 FAIL
         self.assertNotIn("suspect", " ".join(v["message"] for v in data["violations"]))
 
+    def test_check_hard_rules_w46_contrast_pattern(self):
+        import json
+
+        # 对比句模式 (W46 实判, 2026-08-02): "不新增…而是…" 否定前导+对比结构,
+        # 即使"而是"后为正向动作 (构建映射关系) 也出 S-W46 suspect.
+        md = (
+            "## 具体实施方式\n\n"
+            "需要说明的是，本实施方式不新增独立的风险判断阈值，而是以现有波动指标阈值为尺度"
+            "构建波动超限值与预设风险等级标识之间的映射关系。\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(md, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json"
+            )
+            data = json.loads(result.stdout)
+        w46 = [s for s in all_suspects(data) if s.get("suspect_id") == "S-W46-negative-only"]
+        self.assertEqual(len(w46), 1)
+        self.assertIn("否定前导", w46[0]["message"])
+        self.assertEqual(w46[0]["section"], "L8")  # 具体实施方式 → impl 路
+
+        # 合法否定分支 (触发条件否定) 仍豁免: 否定词 + 正向动作、非"不X，而是Y"对比句, 不报.
+        ok_md = (
+            "## 具体实施方式\n\n"
+            "当未检出异常时，不生成预警指令，而是记录当前状态。\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = Path(tmp) / "全文稿.md"
+            md_path.write_text(ok_md, encoding="utf-8")
+            result = run_script_allow_fail(
+                "check_hard_rules.py", "--md", md_path, "--stage", "full-draft", "--json"
+            )
+            data = json.loads(result.stdout)
+        w46_ok = [s for s in all_suspects(data) if s.get("suspect_id") == "S-W46-negative-only"]
+        self.assertEqual(w46_ok, [])
+
+    def test_w04_title_format_mechanical_check(self):
+        import shutil
+        import zipfile
+
+        REF = Path("/Users/example/Desktop/Patent/夏晓贝/Done/H2606029一种基于线性传感器的智能锁芯控制方法及系统/"
+                   "H2606029-全文1稿-夏晓贝-一种基于线性传感器的智能锁芯控制方法及系统.docx")
+        if not REF.exists():
+            self.skipTest("G8-0b 基准稿 H2606029 全文1稿不在本机，跳过 W04 发明名称段机械校验测试")
+        with tempfile.TemporaryDirectory() as tmp:
+            # 正例: 基准稿自身 (期望值来源=同一文件) 发明名称段六属性全 PASS
+            res = run_script_allow_fail("verify_docx_skeleton.py", REF, "--stage", "全文")
+            self.assertIn("[PASS] 发明名称段·字号(三号)", res.stdout)
+            self.assertIn("[PASS] 发明名称段·首行缩进0", res.stdout)
+            # 反例: 复制基准稿, 发明名称段 sz 32→28 → 字号 FAIL (其余属性仍 PASS)
+            bad = Path(tmp) / "bad.docx"
+            shutil.copy(REF, bad)
+            with zipfile.ZipFile(REF, "r") as zin:
+                items = zin.infolist()
+                contents = {it.filename: zin.read(it.filename) for it in items}
+            doc = contents["word/document.xml"].decode("utf-8")
+            paras = re.findall(r'<w:p[ >].*?</w:p>', doc, re.S)
+            for p in paras:
+                txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p)).strip()
+                if txt == "一种基于线性传感器的智能锁芯控制方法及系统":
+                    # 发明名称段格式在 pPr rPr 与 run rPr 各写一份 (各含 w:sz 32), 需全量替换
+                    doc = doc.replace(p, p.replace('<w:sz w:val="32"/>', '<w:sz w:val="28"/>'), 1)
+                    break
+            contents["word/document.xml"] = doc.encode("utf-8")
+            with zipfile.ZipFile(bad, "w", zipfile.ZIP_DEFLATED) as zout:
+                for it in items:
+                    zout.writestr(it, contents[it.filename])
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad, "--stage", "全文")
+            self.assertIn("[FAIL] 发明名称段·字号(三号)", res.stdout)
+            self.assertIn("期望='32' 实得='28'", res.stdout)
+
     def test_check_cross_block_x7_dep_quote_verbatim(self):
         import json
 
