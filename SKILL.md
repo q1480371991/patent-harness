@@ -99,7 +99,7 @@ python3 scripts/check_env.py --json
 - **通过判定**（合并口径唯一出处 `scoring.md` 计分方法）：global-auditor 完整性 PASS + 各路 1 级均 100% + 合并 2 级分（Σ各路通过 ÷ Σ各路适用）≥90%。
 - **合并落盘**：主 agent 合并各路报告落盘一份 `docs/审查报告-<稿次>.md`（合并结论在前、各路原始报告附后；同位置同规则去重，跨路冲突按 `rules.md` 冲突处理原则裁决）。未达标不得进入 DOCX。
 - **回修重审**：按合并后的最短回修清单改 md 后重审——**本阶段全部机械脚本必重跑**（权要稿：check_hard_rules + check_cross_block；全文稿：check_hard_rules + check_cross_block + verify_claims_alignment）；上轮有 FAIL 的路（专审路与 global-auditor 均适用）**以增量复核模式重调**（重审轮重新调用一次 Workflow，仅编排上轮 FAIL 的路）：额外传 `reaudit_context`（上轮该路报告的失败项 + 主 agent 列出的本轮改动块清单），各路契约中标注"完整性级"或"恒全文复核"的项仍全量复核，其余上轮 PASS 且不涉改动块的项沿用上轮结论并标注"沿用"；上轮全 PASS 的专审路不重调。
-- **降级兜底**：任一路两次失败（无契约结构或报告"输入不完整"）时，仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效，但脚本闸门必须通过。若 `Workflow` 工具本身不可用或整次运行连续两次失败（脚本报错、全部路无返回），**首先回退到 Agent 工具逐路并行派发**（每路一个 subagent，prompt 与输入字段同调用机制条，保留物理隔离与并行独立性），在完工报告标注"Workflow 未生效，已 Agent 派发"；Agent 工具亦不可用时，才整级降级为主 agent 按各路契约**分轮自查**（每轮只带一路规则包），标注"已分轮自查"。任何降级级别下脚本闸门都必须通过；降级不得静默——完工报告校验清单首行必须写明本次审查的实际执行方式（Workflow 编排 / Agent 派发 / 分轮自查）。
+- **降级兜底**：任一路两次失败（无契约结构或报告"输入不完整"）时，仅该路降级为主 agent 按其契约自查并在完工报告标注"<路名> 未生效"，其余路照常生效，但脚本闸门必须通过。整次编排的降级链为**按次计数、自动切换**：第 1 次尝试 `Workflow` 工具编排（一次编完全部 auditor），失败（工具不可用/脚本报错/全部路无返回）即切第 2 次尝试 **Agent 工具逐路并行派发**（每路一个 subagent，prompt 与输入字段同调用机制条，保留物理隔离与并行独立性）；第 2 次失败再切回 `Workflow` 第 3 次重试；**Workflow 与 Agent 派发共享一个计数器，累计 3 次失败即自动切换为主 agent 串行审查**——主 agent 按各路契约逐路串行自查（每轮只带一路规则包、一轮一审不并行），完工报告标注"主 agent 串行审查（累计 3 次编排失败自动切换）"。切换后本审查流程内锁死串行，不再回退 Workflow/Agent；回修重审轮是新流程，重新从 `Workflow` 编排开始尝试。任何降级级别下脚本闸门都必须通过；降级不得静默——完工报告校验清单首行必须写明本次审查的实际执行方式（Workflow 编排 / Agent 派发 / 主 agent 串行审查）。
 
 ## 权要一稿
 
@@ -121,7 +121,7 @@ python3 scripts/check_env.py --json
 9. 由 `docx` 执行层把内置模板 `assets/docx/专利撰写模板.docx` 拷贝到案件文件夹（用户明确指定其他模板时除外），重命名遵循 G1 + 「默认立场」新稿留空规则（作者/案件号缺则写 `待补`，发明题名缺则从权 1 保护主题提取占位），不追问、不停顿。
 10. 由 `docx` 执行层采用 unpack → edit XML → pack 流程填充当前稿次可见章节，就地替换、只控制最终可见文本和当前稿次页眉显示。模板骨架保护（sectPr/header/headerReference 全保留、不清空 body 重建）与各分节应填内容的唯一出处是 `references/rules/docx-template.md` G8-0、G8-0b、G8-1。
 11. 权要一稿的可见范围按 G8-0 对照表"权要稿"列与 G8-1 可见性规则执行（章节清单唯一出处为 G8-0 表，本步不复列）；后续阶段槽位保留不删。
-12. 完成后由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（分节3、分节4 内容落位）、G8-0b（发明名称与章节标题格式）、G8-1（骨架、可见性、案例性术语清理、权要1字数、分号断行）逐项验收。验收通过后，把 `docs/权要稿.md` 复制为 `docs/history/权要1稿.md`（快照留档，命名见 G1）。
+12. 完成后由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（分节3、分节4 内容落位）、G8-0b（发明名称段六属性由 `verify_docx_skeleton.py` 机械校验、五个章节标题格式人工核对）、G8-1（骨架、可见性、案例性术语清理、权要1字数、分号断行）逐项验收。验收通过后，把 `docs/权要稿.md` 复制为 `docs/history/权要1稿.md`（快照留档，命名见 G1）。
 13. 仅报告：输出 DOCX 路径、`docs/交底书.md` 路径、`docs/权要稿.md` 路径、按"完工报告"的**校验清单**格式逐规则打 ✅/❌/➖，以及任何需要用户关注的问题。不出独立的撰写检查报告。
 
 ## Word 批注修订（留痕返修）
@@ -175,7 +175,7 @@ python3 scripts/check_env.py --json
 9. **闸门通过 → 直接写入 DOCX**（不等待用户确认/Enter）：确认已显式调用官方 `document-skills:docx`（即 docx）skill（首次进入执行层时调用一次即可，后续 step 复用）。**交付文件名命名规则**：`<案件号>-全文N稿-<作者>-<发明题目全称>.docx`（唯一出处 G1）。**缺元数据时的留空规则**（本 step 不追问、不停顿）：①**作者**未提供时，文件名作者位写 `待补`（如 `待补-全文1稿-待补-…docx`，案件号也缺则前缀整段省略或同样写 `待补`），完工后由用户自行改名；②**发明题名**未提供时，从权 1 保护主题自动提取作为文件名题名位（如"一种基于边缘计算的喷胶机自适应控制方法及系统"），但 `check_hard_rules.py --invention-name` 的正式题名**不得用自动提取值冒充**（G8-0b 信源纪律：正式题名须案件元数据确认；提取值仅用于文件名占位），此时该脚本传空、题名校验报 `S-W35-name-input-missing` suspect、记入待补清单。**所有留空/占位项一律记入完工报告「待补清单」**，由用户在收稿后补齐（含：案件号、正式发明题名全称、作者署名）。
 10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文N稿-作者-发明题目全称.docx`（命名唯一出处 G1）。
 11. 由 `docx` 执行层采用 unpack → edit XML → pack：**直接在 step 10 前向拷贝出的 `案件号-全文N稿-作者-发明题目全称.docx` 上就地操作**——**不得改用空白模板另存**（模板内没有本案权利要求书/技术领域/背景技术，权要三章正是靠 step 10 的前向拷贝带过来的；用模板会交出一份权要三章为模板占位内容的废稿）。随后跑 `python3 scripts/inject_fulltext_docx.py <unpack目录> --md <案件文件夹>/docs/全文稿.md`（默认一次性注入摘要+发明内容+附图说明+具体实施方式四章，可选 `--block` 分块调试），把全文稿就地注入分节1（摘要）与分节4（L6–L8）。骨架保护与分节落位唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；权要三章（权利要求书/技术领域/背景技术）由 step 10 前向拷贝保留，不在本脚本范围。正文注入完成后、最终 pack 前，运行 `python3 scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png` 把图 1 注入分节 2（摘要附图）与分节 5（说明书附图，含"图1"图题），再 pack。pack 后跑 `python3 scripts/verify_docx_injection.py <案件文件夹>/案件号-全文N稿-作者-发明题目全称.docx --md <案件文件夹>/docs/全文稿.md` + `python3 scripts/omml_formulas.py check <docx>`（必要时 `fix-settings`）+ `python3 scripts/verify_docx_skeleton.py <docx> --stage 全文` 三件套收尾验收。
-12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`（快照留档，命名见 G1）；完工报告按“完工报告”的**校验清单**格式逐规则打 ✅/❌/➖。
+12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称段六属性由 `verify_docx_skeleton.py` 机械校验、五个章节标题格式人工核对）、G8-1（骨架与可见性）逐项验收；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`（快照留档，命名见 G1）；完工报告按“完工报告”的**校验清单**格式逐规则打 ✅/❌/➖。
 
 ## 直写全文稿（有经验撰写者）
 
@@ -190,7 +190,7 @@ python3 scripts/check_env.py --json
 7. 生成图 1（摘要附图 = 方法主流程图）：`python3 scripts/render_patent_figure.py --claims-md <案件文件夹>/docs/权要稿.md --output <案件文件夹>/docs/figures/figure-1.png`（规则唯一出处 `figures.md` L9，同全文一稿 step 7）。
 8. **跑全文闸门（full-draft，此时仍无任何 Word 产物）**：**先跑基准时序前置守卫**——`python3 scripts/timestamp_guard.py --case <案件文件夹>`（直写模式无 `审核*.docx` 时 exit 0，安全不触发）与 `python3 scripts/fingerprint_claims.py --check --fulltext <案件文件夹>/docs/全文稿.md --claims <案件文件夹>/docs/权要稿.md`（验权要稿自 step 5 `--gen` 后未改动，sha1 不一致即 exit 3 硬停，回 step 5 处理）；两守卫 FAIL 不得进入下述脚本闸门；**随后直接依次跑机械化脚本**：`check_hard_rules.py --md <案件文件夹>/docs/全文稿.md --stage full-draft --claims-md <案件文件夹>/docs/权要稿.md --invention-name "<正式题名全称>" --json`（`--invention-name` 必传，口径同全文一稿 step 8） → `check_cross_block.py --md <案件文件夹>/docs/全文稿.md --stage full-draft --claims-md <案件文件夹>/docs/权要稿.md` → `verify_claims_alignment.py --md <案件文件夹>/docs/全文稿.md --claims-md <案件文件夹>/docs/权要稿.md --stage full-draft`（`--claims-md` 传入同会话刚写完的权要稿，守卫不检查"已审批/冻结"标记，只看磁盘内容）。任一 FAIL 定点回修 `全文稿.md` 重跑；结构抽取失败按 `extraction_errors` 规范化写法后重跑。三脚本全 PASS 后按「审查闸门通用规则」用 `Workflow` 工具编排 content-auditor + impl-auditor + global-auditor 三路并行语义复核（`stage=full-draft`，`claims_md_path=docs/权要稿.md` 传给三路，编排细节同全文一稿 step 8）。通过判定、合并落盘（`docs/审查报告-全文1稿.md`）、回修重审同「审查闸门通用规则」。
 9. **两闸门均 PASS → 一次性写入 Word**（不等待用户确认/Enter）：进入 DOCX 执行层，确认已显式调用官方 `document-skills:docx` skill（首次进入执行层调用一次即可）。由 `docx` 执行层把内置模板 `assets/docx/专利撰写模板.docx`（用户明确指定其他模板时除外）拷贝到案件文件夹，重命名遵循 G1 + 「默认立场」新稿留空规则：作者缺则作者位写 `待补`，发明题名缺则从权 1 保护主题提取作文件名占位，案件号缺则前缀省略或 `待补`；采用 unpack → edit XML → pack：按 `docx-template.md` G8-0/G8-0b/G8-1 骨架与分节落位，**权要三章（权利要求书/技术领域/背景技术）由 docx 执行层手填**，全文章节（L4 摘要 + L6 发明内容 + L7 附图说明 + L8 具体实施方式）由 `python3 scripts/inject_fulltext_docx.py <unpack目录> --md <案件文件夹>/docs/全文稿.md` 一次性注入（就地下笔、不清空 body、不删 sectPr，段落成段与块/行内公式编译由脚本保证；可选 `--block` 分块调试）。正文注入完成后、最终 pack 前，运行 `python3 scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png` 注入图 1 至分节 2/5，再 pack。pack 后跑 `python3 scripts/verify_docx_injection.py <案件文件夹>/<交付文件名>.docx --md <案件文件夹>/docs/全文稿.md` + `python3 scripts/omml_formulas.py check <docx>`（必要时 `fix-settings`）+ `python3 scripts/verify_docx_skeleton.py <docx> --stage 全文` 三件套收尾验收。
-10. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称与五个章节标题格式）、G8-1（骨架与可见性）逐项验收；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`、`docs/权要稿.md` 复制为 `docs/history/权要1稿.md`（权要虽未单独出 Word，仍留 md 快照，命名见 G1）；完工报告按“完工报告”的**校验清单**格式逐规则打 ✅/❌/➖，**并注明本稿为直写模式、未出独立 `权要1稿.docx`**；**所有留空/占位项（案件号、正式发明题名、作者署名等）汇总进完工报告「待补清单」**，由用户收稿后补齐或改名。
+10. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，再由 `patent` 按 `docx-template.md` G8-0（逐分节内容落位）、G8-0b（发明名称段六属性由 `verify_docx_skeleton.py` 机械校验、五个章节标题格式人工核对）、G8-1（骨架与可见性）逐项验收；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`、`docs/权要稿.md` 复制为 `docs/history/权要1稿.md`（权要虽未单独出 Word，仍留 md 快照，命名见 G1）；完工报告按“完工报告”的**校验清单**格式逐规则打 ✅/❌/➖，**并注明本稿为直写模式、未出独立 `权要1稿.docx`**；**所有留空/占位项（案件号、正式发明题名、作者署名等）汇总进完工报告「待补清单」**，由用户收稿后补齐或改名。
 
 ## DOCX 处理注意事项
 
@@ -239,7 +239,7 @@ python3 scripts/check_env.py --json
   校验清单：
 
   【审查执行】
-  ✅ 审查执行方式：Workflow 编排 / Agent 派发 / 分轮自查（写实际方式；降级须注明原因）
+  ✅ 审查执行方式：Workflow 编排 / Agent 派发 / 主 agent 串行审查（写实际方式；降级须注明原因）
 
   【脚本闸门】
   ✅ check_hard_rules.py 硬规则脚本 PASS
