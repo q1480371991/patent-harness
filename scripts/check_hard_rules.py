@@ -659,6 +659,8 @@ def check_include_lead_not_inline(lines: list[str], sections: dict, report: Repo
             continue
         for i, line in enumerate(body):
             s = line.strip()
+            if "实施例提供了一种" in s and "包括：存储器、处理器" in s:
+                continue  # L8-1 ②号固定套话骨架, 见 docstring 例外
             m = re.search(r"，包括：(.*)$", s)
             if m and m.group(1).strip():
                 report.add(
@@ -1525,6 +1527,8 @@ def check_negative_only_action(lines: list[str], sections: dict, report: Report,
 
     否定谓语 (不执行/不生成/不参与/不判断/不再等) 收束且句内无正向动作或输出时
     出线索. 合法否定分支 (作触发条件、作范围限定) 由 auditor 豁免.
+    另含对比句模式 (W46 实判, 2026-08-02): "不新增/不引入/不另设/不使用…，而是…"
+    否定前导即使后接正向动作也出线索, 不适用正向豁免.
 
     唯一按章节互斥路由的 suspect (设计稿 §3.2): section=L8 → impl; 其他说明书块
     (L4/L5/L6/L7) → global. 未知章节 → 报结构抽取/路由错误 (add), **不广播给多路
