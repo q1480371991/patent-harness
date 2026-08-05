@@ -14,14 +14,14 @@
 
 **最小侵入挂载步骤**（只动三个文件，不新建部件、不新增关系）：
 
-1. `word/comments.xml`：在 `</w:comments>` 前追加回复评论块，作者署名 `<署名>`，每条给唯一 `w:id`（取现有最大 id 之上）和唯一 8 位十六进制 `w14:paraId`；评论段格式（`pStyle`、`rPr`）复制原有评论块以保持一致。
+1. `word/comments.xml`：在 `</w:comments>` 前追加回复评论块，作者署名 `<署名>`，每条给唯一 `w:id`（取现有最大 id 之上）和唯一 8 位十六进制 `w14:paraId`；评论段格式（`pStyle`、`rPr`）复制原有评论块以保持一致。**每条回复的 `w:date` 必须各不相同**——本轮全部回复批注与 `w:ins`/`w:del` 痕迹合并计数，一次性由 `python3 scripts/gen_comment_timestamps.py --count <总条数>` 取一条递增随机间隔序列，按注入顺序逐条取用（口径唯一出处 `SKILL.md`「留痕注入法」时间戳条）。
 2. `word/commentsExtended.xml`：在 `</w15:commentsEx>` 前为每条回复追加
    `<w15:commentEx w15:paraId="<回复paraId>" w15:paraIdParent="<父批注paraId>" w15:done="0"/>`，
    其中父批注 paraId 取自 `comments.xml` 中父评论 `<w:p w14:paraId="...">`（这是回复嵌套显示的关键）。
 3. `word/document.xml`：在父批注的 `commentReference` run 之后插入回复的
    `<w:r><w:commentReference w:id="<回复id>"/></w:r>`。点锚点批注（只有 `commentReference`、无 `commentRangeStart/End`）也按此处理。
 
-**校验**：作者集合含 `<署名>`；老板原批注条数与 `delText` 字数不减；`commentReference` 总数 = 原批注数 + 回复数；`docx` skill `validate` 无新增错误。
+**校验**：作者集合含 `<署名>`；老板原批注条数与 `delText` 字数不减；`commentReference` 总数 = 原批注数 + 回复数；**本轮 `<署名>` 名下 `w:date` 取值互不重复且单调递增**（≥2 条时；同值即为时间戳退化，重取序列重注）；`docx` skill `validate` 无新增错误。
 
 **注意**：老板原批注、原修订痕迹一律原样保留，不动。
 
