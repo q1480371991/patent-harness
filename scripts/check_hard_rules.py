@@ -1678,6 +1678,137 @@ def check_negative_only_action(lines: list[str], sections: dict, report: Report,
             )
 
 
+
+def check_cross_step_numeric_selfconsistency(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 39 (suspect): 跨公式/跨步骤数值自洽线索 (G6-1, W53).
+
+    ① 示例值代入验算: 对披露了具体示例值的除法/减法等简单关系, 尝试两两做粗略
+    一致性判读 (如 b 与 q 已给示例、且 |q-b| 与 r 亦给示例时, 校验 |q-b|/b ≈ r).
+    ② 量级一致性: 同一特征向量/数据集内不同来源分量的数值量级差悬殊 (如均值分量
+    与方差分量相差 >=3 个数量级) 且附近无"标准化/归一化"说明时出线索.
+    ③ 稀疏/全量口径冲突: 同一链上出现"仅含异常事件/仅记录偏差/稀疏"与
+    "逐帧/全部帧/完整序列/每帧"类同现且无"完整序列作为共同切分对象"式澄清时出线索.
+    仅 full-draft. 三子项均只报线索, 由 auditor 判是否 FAIL.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    # ③ 稀疏×全量口径冲突 (本项目实例: S11 稀疏刷新率序列 vs S13 逐帧统计)
+    sparse_pat = re.compile(r"仅(将|记录|含|对|只).{0,14}(异常|稀疏|偏差|延迟|部分)|稀疏[^，。；]{0,8}序列|只记录异常")
+    full_pat = re.compile(r"逐帧|全部帧|完整[^，。；]{0,8}(帧|序列|数据)|所有帧|每一帧|每帧")
+    exempt_pat = re.compile(r"完整[^，。；]{0,16}(作为|作为时序|共同(切分|统计)?对象)|完整[^，。；]{0,16}共同对象|以[^，。；]{0,20}完整[^，。；]{0,10}作为")
+    full_text_body = "\n".join(body)
+    # 全文级豁免: 写稿者已明确"以完整帧序列作为时序切分与色彩统计的共同对象"则稀疏说明自洽
+    global_exempt = bool(re.search(r"完整[^，。；]{0,16}作为[^，。；]{0,8}共同[^，。；]{0,6}(切分|统计)?对象|共同[^，。；]{0,6}(切分|统计)?对象", full_text_body))
+    for i, ln in enumerate(body):
+        if not sparse_pat.search(ln):
+            continue
+        lo, hi = max(0, i - 2), min(len(body), i + 3)
+        window_lines = body[lo:hi]
+        window = "\n".join(window_lines)
+        if exempt_pat.search(window) or global_exempt:
+            continue
+        if full_pat.search(window):
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                "疑似稀疏(仅异常事件)切分对象与逐帧/完整序列消费对象发生冲突; 跨步骤数据流"
+                "粒度/口径须自洽, 明确以完整帧序列作为时序切分与色彩统计的共同对象(W53③). "
+                "已写明完整序列作为共同切分对象可豁免",
+                suspect_id="S-W53-numeric", section="L8", owner="impl",
+                missing_dimensions=["跨步骤数据流口径一致"],
+            )
+            break  # 同一链只报一次
+    # ② 量级一致性: 均值分量与方差分量同现且量级差悬殊, 附近无标准化说明
+    mean_pat = re.compile(r"均值(特征向量|分量|.*)|色彩均值")
+    var_pat = re.compile(r"方差(特征向量|分量|.*)|色彩方差")
+    norm_pat = re.compile(r"标准化|归一化|Z-score|零均值|单位方差")
+    for i, ln in enumerate(body):
+        if not (mean_pat.search(ln) and var_pat.search(ln)):
+            continue
+        lo, hi = max(0, i - 1), min(len(body), i + 4)
+        window = "\n".join(body[lo:hi])
+        if norm_pat.search(window):
+            continue
+        # 量级证据: 均值分量示例量级(计数级) vs 方差分量示例量级(计数平方级)
+        if re.search(r"像素总数的平方|像素频次平方|平方量级|量级差(异|悬)", "\n".join(body[max(0,i-3):min(len(body),i+4)])):
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                "均值分量与方差分量数值量级差悬殊(计数级 vs 计数平方级)且未说明是否标准化/归一化; "
+                "拼接后直接做后续分析会使方差分量主导判别, 须补标准化/归一化说明(W53②)",
+                suspect_id="S-W53-numeric", section="L8", owner="impl",
+                missing_dimensions=["量级一致性/标准化说明"],
+            )
+            break
+
+
+def check_category_label_consistency(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 40 (suspect): 类别/标签前后一致线索 (G6-1, W54).
+
+    同一处理链上训练标签、中间类别、输出类别须逐字一致. 检测"训练样本(标记|标注)为
+    X 和 Y" 与 "位于超平面正向→上升趋势/负向→下降趋势" 类跨段类别名漂移.
+    仅 full-draft."""
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    train_pat = re.compile(r"训练(样本|过程|阶段)[^，。；]{0,30}(标记|标注|分为|为)")
+    out_pat = re.compile(r"正向(一侧|侧)|负向(一侧|侧)|上升趋势|下降趋势")
+    for i, ln in enumerate(body):
+        m = train_pat.search(ln)
+        if not m:
+            continue
+        train_labels = ln[m.end():m.end() + 40]
+        lo, hi = i, min(len(body), i + 6)
+        window = "\n".join(body[lo:hi])
+        if re.search(r"上升趋势|下降趋势", window) and not re.search(r"上升趋势样本|下降趋势样本", window):
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                f"训练标签 '{train_labels.strip()[:20]}' 与输出类别(上升/下降趋势)疑似类别名不一致; "
+                "训练标签、中间类别、输出类别须同一套名称、逐字一致, 否则下游判定口径冲突(W54)",
+                suspect_id="S-W54-label", section="L8", owner="impl",
+                missing_dimensions=["类别/标签前后一致"],
+            )
+            break
+
+
+def check_function_noun_first_definition(lines: list[str], sections: dict, report: Report, stage: str, claims_text: str = "") -> None:
+    """规则 41 (suspect): 自造功能名词首现定义线索 (G6-1, W55).
+
+    解释段承担判据/功能作用的非权要非交底书名词短语(如"频次分布特征向量""分类得分
+    (绝对值)"), 若仅在判定句中作为判据出现、而全文无其定义/生成来源, 出线索.
+    仅在同时出现"以…为标志/作为…判定/用…判定/取…作为阈值"等判据句式时触发, 避免误报.
+    仅 full-draft."""
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    judge_pat = re.compile(r"以[^，。；]{2,14}(为标志|作为|判定|确定)|取[^，。；]{2,14}作为|作为[^，。；]{2,14}判定依据|用[^，。；]{2,14}判定")
+    # 疑似自造的判据名词: 含"向量/特征/矩阵/值"且非"特征偏移量集合/量化记录数值/色彩均值/色彩方差"等白名单
+    suspicious_noun = re.compile(r"(频次分布特征向量|分类得分|得分绝对值|偏移量变化幅度|波动特征向量|异常度|置信得分)")
+    for i, ln in enumerate(body):
+        if not judge_pat.search(ln):
+            continue
+        sm = suspicious_noun.search(ln)
+        if not sm:
+            continue
+        noun = sm.group(1)
+        # 全文是否已有该名词的生成/定义来源(在前文出现"得到/计算/构建…名词"或"名词, 即")
+        full_text = "\n".join(body)
+        defined = bool(re.search(r"(得到|计算|构建|提取|生成|确定)[^，。；]{0,20}" + re.escape(noun) + r"|" + re.escape(noun) + r"[^，。；]{0,8}(为|指|即|由)", full_text))
+        if not defined:
+            report.add_suspect(
+                "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
+                f"判据名词 '{noun}' 在判定句中作为判据出现, 但全文未见其定义/生成来源; "
+                "须补充首现定义或改写为已有术语(W55). 已在前文定义可豁免",
+                suspect_id="S-W55-function-noun", section="L8", owner="impl",
+                missing_dimensions=["首现定义"],
+            )
+            break
+
 # -----------------------------------------------------------------------------
 # 主流程
 # -----------------------------------------------------------------------------
@@ -1749,6 +1880,9 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_multisource_schema(lines, sections, report, stage)           # W20
     check_trivial_arithmetic_formula(lines, sections, report, stage)   # W26
     check_negative_only_action(lines, sections, report, stage)         # W46
+    check_cross_step_numeric_selfconsistency(lines, sections, report, stage)  # W53
+    check_category_label_consistency(lines, sections, report, stage)             # W54
+    check_function_noun_first_definition(lines, sections, report, stage, claims_text)  # W55
 
     return report
 
