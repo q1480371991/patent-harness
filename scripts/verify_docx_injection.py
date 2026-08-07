@@ -11,6 +11,7 @@ inject_fulltext_docx.py 注入 + insert_figures_docx.py 注图 + pack 之后、�
   - 行内 `m:oMath` 数（总 oMath − oMathPara）== md `$...$` 实例数
   - `<w:sectPr>` 数 == 5（不破坏骨架，G8-0/G8-1）
   - 无 `$` 残留、无裸 LaTeX 源码残留（`\frac`/`\sum`/`\gamma` 等出现在 `<w:t>` 内）
+  - 无中西文间空格（汉字与西文数字/字母间不得留空白，W-SPACE）
   - 章节标题齐全（发明内容/附图说明/具体实施方式 各 ≥1 段含 `<w:b/>`，且顶格 firstLine=0）
   - 套话锚点齐全（综上所述 / 本发明第二实施例 / 并不用于限定）
   - 图1 已注入（分节2 摘要附图 + 分节5 说明书附图各 ≥1 个 `<w:drawing>`）
@@ -85,6 +86,15 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
     results.append((f"$残留={dollar}", dollar == 0, f"$ 数={dollar}"))
     results.append((f"裸LaTeX残留={len(latex_cmds)}", len(latex_cmds) == 0,
                     f"命中：{latex_cmds[:5]}" if latex_cmds else "无"))
+
+    # 3b) 中西文间空格（W-SPACE）：汉字/中文标点 与 数字/西文字母 之间不得留空白。
+    # 症状来源三处：① md 撰写时手敲空格；② pandoc 编译公式边界带出空格；
+    # ③ 在 WPS/Word 内手工编辑后回存。均在此处一次性兜住（zipfile 直读磁盘真相）。
+    _CJK = r"一-鿿　-〿＀-￯"
+    sp_hits = (re.findall(rf"[{_CJK}] +[0-9A-Za-z$\\]", all_t)
+               + re.findall(rf"[0-9A-Za-z%$\\] +[{_CJK}]", all_t))
+    results.append((f"中西文间空格={len(sp_hits)}", len(sp_hits) == 0,
+                    f"命中样例：{sp_hits[:5]}" if sp_hits else "无"))
 
     # 4) 章节标题齐全（含 <w:b/> + 顶格 firstLine=0）
     for title in ("发明内容", "附图说明", "具体实施方式"):

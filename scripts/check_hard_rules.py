@@ -145,6 +145,36 @@ def count_chars_incl_punct(text: str) -> int:
     return sum(1 for ch in text if not ch.isspace())
 
 
+def count_word_caliber(text: str) -> int:
+    """Word「字数」口径: 汉字逐字各 1 + 连续英文单词各 1 + 连续数字串各 1 + 标点各 1.
+
+    与 Word 状态栏「字数」(非「字符数」) 一致, 也是老板批注给字数区间时的口径。
+    与 count_chars_incl_punct (字符数, 逐字符计) 的区别: 英文单词与数字串整体计 1,
+    故 "PID" 计 1 而非 3。行内公式须在调用前剔除 —— DOCX 侧公式落在 OMML (m:t),
+    不计入 Word 字数, md 侧的 `$..$` 若不剔除会虚高。
+    """
+    return (len(re.findall(r"[一-鿿]", text))
+            + len(re.findall(r"[a-zA-Z]+", text))
+            + len(re.findall(r"\d+", text))
+            + len(re.findall(r"[^\w\s一-鿿]", text)))
+
+
+def strip_for_word_count(text: str) -> str:
+    """剔除不进 DOCX 正文字数的 md 构件: front-matter、md 标题行、行内/块公式.
+
+    md 的 `## 章节名` 在 DOCX 里是章节标题段 (确实计入 Word 字数), 但各案标题集合
+    固定 (五个章节共约 22 字), 剔除后总数系统性偏低约 20 字, 远小于区间余量; 保留
+    则需区分 md 结构性标题与正文, 得不偿失。实测本案: 剔除后 md 合计 17554 字,
+    DOCX 接受修订后实测 17486 字, 差 68 字 (0.4%)。
+    """
+    if text.startswith("---"):
+        end = text.find("\n---\n", 4)
+        if end >= 0:
+            text = text[end + 5:]
+    text = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    return re.sub(r"\$[^$]*\$", "", text)
+
+
 def load_md(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8").splitlines()
 
@@ -790,6 +820,70 @@ def check_full_draft_length(lines: list[str], sections: dict, report: Report, st
             f"纯汉字字数 = {n}",
             f"全文稿纯汉字字数不足 (< 13000, 实际 {n}); 补足 S11–S15 解释段"
             "数据来源/工况/标定/示例细节至 ≥ 13000 字 (不引权外特征)",
+        )
+
+
+DRAFT_ROUND_BUDGET: dict[int, tuple[int, int]] = {
+    1: (15000, 17000),          # 全文1稿: 双向区间, 留出返修补写余量
+    2: (0, 20000),              # 全文2/3/4稿: 仅上限 (下限由纯汉字 13000 条守)
+    3: (0, 20000),
+    4: (0, 20000),
+}
+
+
+def check_full_draft_word_budget(md_path: Path, claims_md: Path | None, report: Report,
+                                 stage: str, draft_round: int | None) -> None:
+    """规则 (L8-1): 全文稿字数分稿次区间 —— 1稿 15000-17000, 2/3/4稿 <= 20000.
+
+    口径 = Word「字数」(count_word_caliber), 统计范围 = 全文稿.md + 权要稿.md 合并。
+    合并的理由: 交付 DOCX 同时含说明书与权利要求书三章 (技术领域/背景技术存放在
+    权要稿.md), 老板在 Word 状态栏读到的是两者之和; 只按全文稿.md 判会系统性低估
+    约 2600 字, 出现"md 达标而 DOCX 超标"。
+
+    与既有纯汉字 13000 下限条 (check_full_draft_length) 分工: 那条守"写得够不够",
+    只看说明书本体; 本条守"交付件是否落在老板给的区间", 按稿次给上限。
+
+    draft_round 缺失时不判 (走 suspect), 与 --invention-name 同一处置口径: 该状态
+    无法通过改稿消除, 计 violation 会致闸门死锁。
+    """
+    if stage != "full-draft":
+        return
+    body = strip_for_word_count(md_path.read_text(encoding="utf-8"))
+    n_full = count_word_caliber(body)
+    # 豁免: 非真实全文稿的短样例 (单元测试 fixture / 半成品草稿), 与下限条同口径.
+    if n_full < 1000:
+        return
+    if draft_round is None:
+        report.add_suspect(
+            "L8-1", "全文稿", f"全文稿.md Word 口径字数 = {n_full}",
+            "未传 --draft-round, 稿次字数区间校验未执行 (1稿 15000-17000 / "
+            "2-4稿 <=20000); 该项记为未执行, 不得据此认为字数合规",
+            suspect_id="S-L8-1-draft-round-missing", section="全文稿", owner="impl",
+        )
+        return
+    if claims_md is None:
+        report.add_suspect(
+            "L8-1", "全文稿", f"全文稿.md Word 口径字数 = {n_full}",
+            "未传 --claims-md, 无法合并权利要求书三章字数, 稿次字数区间校验未执行 "
+            f"(仅说明书本体 {n_full} 字, 交付 DOCX 另含权要三章约 2600 字)",
+            suspect_id="S-L8-1-claims-md-missing", section="全文稿", owner="impl",
+        )
+        return
+    n_claims = count_word_caliber(strip_for_word_count(claims_md.read_text(encoding="utf-8")))
+    total = n_full + n_claims
+    lo, hi = DRAFT_ROUND_BUDGET.get(draft_round, (0, 20000))
+    ev = f"Word 口径合计 = {total} (说明书 {n_full} + 权要三章 {n_claims})"
+    if total > hi:
+        report.add(
+            "L8-1", f"全文{draft_round}稿", ev,
+            f"交付字数超上限 (> {hi}, 实际 {total}); 按 L8-1 精简 S11-S15 解释段"
+            "冗余展开/合并同源段落, 不得删可实施细节与权要步骤对应展开",
+        )
+    elif lo and total < lo:
+        report.add(
+            "L8-1", f"全文{draft_round}稿", ev,
+            f"交付字数不足下限 (< {lo}, 实际 {total}); 补足 S11-S15 数据来源/工况/"
+            "标定/示例细节 (不引权外特征)",
         )
 
 
@@ -1590,7 +1684,8 @@ def check_negative_only_action(lines: list[str], sections: dict, report: Report,
 
 
 def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
-               invention_name: str | None = None) -> Report:
+               invention_name: str | None = None,
+               draft_round: int | None = None) -> Report:
     lines = load_md(md_path)
     sections = split_sections(lines)
     claims_text = claims_md.read_text(encoding="utf-8") if claims_md else ""
@@ -1632,6 +1727,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_full_draft_forbidden_quantifiers(lines, sections, report, stage, claims_text)
     check_abstract_length(lines, sections, report, stage)
     check_full_draft_length(lines, sections, report, stage)
+    check_full_draft_word_budget(md_path, claims_md, report, stage, draft_round)
     check_figure_numbering(lines, sections, report, stage)
     check_closing_boilerplate(lines, sections, report, stage)
     check_benefit_enumeration(lines, sections, report, stage)
@@ -1692,6 +1788,12 @@ def main() -> int:
              "不计 violation、不阻断闸门(该状态无法通过改稿消除, 计入会致闸门死锁), "
              "该项校验记为未执行、不得据此认为题名合规; 不从权 1 推导(设计稿 §5.3)",
     )
+    parser.add_argument(
+        "--draft-round", type=int, default=None,
+        choices=[1, 2, 3, 4],
+        help="当前全文稿稿次 (1/2/3/4)；不传则稿次字数区间校验不执行。"
+             "1稿 = 双向区间 15000-17000 (Word 口径)，2-4稿 = 仅上限 20000",
+    )
     args = parser.parse_args()
 
     md_path = Path(args.md)
@@ -1704,7 +1806,7 @@ def main() -> int:
         print(f"[check_hard_rules] ERROR claims-md not found: {claims_path}", file=sys.stderr)
         return 2
 
-    report = run_checks(md_path, args.stage, claims_path, args.invention_name)
+    report = run_checks(md_path, args.stage, claims_path, args.invention_name, args.draft_round)
 
     if args.json:
         # 注: 不输出顶层 `suspects` —— 它与 `suspect_manifest` 同源 (后者是按 owner
