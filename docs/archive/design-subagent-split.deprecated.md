@@ -1,4 +1,4 @@
-> **已被取代（历史设计，2026-07 归档）**：disclosure-analyst 已废弃，`scoring_rules_content` 等字段名已改为 `*_path` 路径传递；现行方案见 `docs/design-multi-auditor.md` 与 `agents/*-auditor.md`。本文仅作历史备查。
+> **已被取代（历史设计，2026-07 归档）**：disclosure-analyst 已废弃，`scoring_rules_content` 等字段名已改为 `*_path` 路径传递；现行方案见 `agents/*-auditor.md` 运行契约与 `SKILL.md`「审查闸门通用规则」。本文仅作历史备查。
 
 # patent skill subagent 拆分方案 — 修正稿
 
