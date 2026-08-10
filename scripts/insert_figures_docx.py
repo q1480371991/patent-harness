@@ -181,7 +181,11 @@ def main() -> int:
     # ---- 分节5（先处理文末，避免位置偏移影响分节2） ----
     sect4_p_start, sect4_p_end = find_paragraph_span(doc, sect_positions[3])
     final_sect_start = doc.rfind("<w:sectPr>")
-    line_start = doc.rfind("\n", 0, final_sect_start) + 1
+    # document.xml 为单行 XML（仅 XML 声明后一个换行），rfind("\n") 会误命中
+    # 声明后的换行，把 new_content 插到根元素之前、吞掉结构；且分节5 sectPr
+    # 通常是 body-final 裸 sectPr（不在段内），find_paragraph_span 无法定位。
+    # 分节5 内容区间的末尾 = 分节5 sectPr 前最近一个段落（含闭合标签）的结束。
+    line_start = doc.rfind("</w:p>", 0, final_sect_start) + len("</w:p>")
     section5 = doc[sect4_p_end:line_start]
 
     drawing_iter = [m for m in re.finditer(r"<w:drawing>", section5)]

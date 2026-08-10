@@ -68,9 +68,27 @@ SUBJECT_RE = re.compile(r"(一种[^，。；]{2,40}?(?:方法|系统|装置|存�
 # -----------------------------------------------------------------------------
 
 
+def _merge_supplemental_clauses(steps: list[str]) -> list[str]:
+    """把以"其中"开头的列举补充句并入前一个动作分句.
+
+    权 1 中"……；其中，……；"式的补充句（如"其中，所述物理层参数包括接收信号
+    强度指示值、……"）是前一个动作步骤的补充说明，不是独立动作步骤：不占
+    主步骤位、不计入步骤数、不占图 1 节点。并入时去掉"其中，"前缀，以逗号
+    连接前句，使主步骤数 = 权 1 动作分句数（L8-0 补充句并入口径）。
+    """
+    merged: list[str] = []
+    for step in steps:
+        if step.startswith("其中") and merged:
+            supp = step[len("其中"):].lstrip("，, ")
+            merged[-1] = f"{merged[-1]}，{supp}"
+        else:
+            merged.append(step)
+    return merged
+
+
 def _split_claim_steps(text: str) -> list[str] | None:
     """
-    从单条权要正文抽分号分句 (步骤).
+    从单条权要正文抽分号分句 (步骤), 已并入"其中"补充句 -> 动作分句.
 
     A/B 标准: `N.一种...，其特征在于，(所述...)包括：分句1；分句2；...；分句M。`
     锚点优先级: "其特征在于"之后的第一个"包括：" > "其特征在于，"直接后文.
@@ -90,7 +108,9 @@ def _split_claim_steps(text: str) -> list[str] | None:
         return None
     steps = [s.strip().rstrip("。").strip() for s in body.split("；")]
     steps = [s for s in steps if s]
-    return steps or None
+    if not steps:
+        return None
+    return _merge_supplemental_clauses(steps)
 
 
 def extract_claims(lines: list[str], sections: dict, errors: list[str]) -> dict | None:

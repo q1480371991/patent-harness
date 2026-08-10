@@ -47,6 +47,22 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", "", strip_tail_punct(text))
 
 
+def merge_supplemental(clauses: list[str]) -> list[str]:
+    """把"其中，…"列举补充句并入前一个动作分句（与 extract_structure 同口径）。
+
+    权 1 中"……；其中，所述物理层参数包括……；"式补充句是前一步骤的补充说明，
+    不占节点位；并入时去掉"其中，"前缀、逗号连接前句，使图 1 节点数 = 动作分句数。
+    """
+    merged: list[str] = []
+    for c in clauses:
+        if c.startswith("其中") and merged:
+            supp = c[len("其中"):].lstrip("，, ")
+            merged[-1] = f"{merged[-1]}，{supp}"
+        else:
+            merged.append(c)
+    return merged
+
+
 def extract_claim_clauses(claims_md: Path, claim_number: int) -> list[str]:
     """从权要稿.md 提取第 claim_number 条权要"其特征在于…："后的分号分句。"""
     text = claims_md.read_text(encoding="utf-8")
@@ -61,6 +77,7 @@ def extract_claim_clauses(claims_md: Path, claim_number: int) -> list[str]:
     tail = body[marker.end():] if marker else body
     clauses = [normalize(c) for c in tail.split("；")]
     clauses = [c for c in clauses if c]
+    clauses = merge_supplemental(clauses)
     if len(clauses) < 2:
         raise SystemExit(
             f"ERROR\t权利要求 {claim_number} 仅提取到 {len(clauses)} 个分句，"

@@ -462,6 +462,39 @@ def check_no_formula_in_claims(lines: list[str], sections: dict, report: Report)
                 break
 
 
+def check_no_specific_values_in_claims(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 8b: 权要正文禁写具体技术数值 (L1-1, 王工口径 X2608024).
+
+    限缩保护范围的具体数值——度量值+单位、标准编号、比例/百分比、数量/计数限定
+    (含"最近N个"式窗口)——一律上位化为"预设xx"或下沉说明书实施例.
+    权利要求编号与从属引用不属违规, 先剔除再检测.
+    """
+    blocks = extract_claim_blocks(lines, sections)
+    # 合法剔除: 行首编号、从属引用 (权利要求1至8 / 权利要求1所述 / 根据权利要求1所述)
+    legal_re = re.compile(
+        r"^\s*\d+\s*\.|权利要求\s*\d+\s*至\s*\d+|权利要求\s*\d+\s*所述|根据权利要求\s*\d+\s*所述"
+    )
+    # 技术数值: 数字+单位/量词/百分号、"最近N个"式窗口、标准编号前缀
+    value_re = re.compile(
+        r"\d+(?:\.\d+)?\s*(?:dBm|mV|kV|mA|mW|kHz|MHz|GHz|Mbps|Gbps|Kbps|μs|ms|ns|dB|V|A|W|Hz|%|秒|分钟|小时|天|月|年|米|mm|cm|nm|km|次|帧|芯|路|个|bit|Byte|字节)"
+        r"|最近\s*[0-9Nn]\s*个"
+        r"|(?:IEEE|TIA|EIA|Cat|ISO|GB|ITU)\s*[/A-Za-z-]*\s*\d+(?:\.\d+)*"
+    )
+    for num, (start, end) in blocks.items():
+        for i in range(start, end):
+            line = legal_re.sub("", lines[i])
+            if not line.strip():
+                continue
+            m = value_re.search(line)
+            if m:
+                report.add(
+                    "L1-1", f"第{i + 1}行", lines[i].strip()[:80],
+                    f"权要 {num} 内出现疑似具体技术数值 '{m.group(0)}' —— 权要禁写限缩保护范围的具体数值"
+                    f"(王工口径 X2608024), 改为'预设xx'上位表达或下沉说明书实施例",
+                )
+                break
+
+
 def check_forbidden_words(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 9: G5-1 禁用措辞黑名单."""
     scan_range = _get_scan_ranges(lines, sections, stage)
@@ -1838,6 +1871,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
         check_dependent_claim_no_yizhong(lines, sections, report)
         check_dependent_claim_reference(lines, sections, report)
         check_no_formula_in_claims(lines, sections, report)
+        check_no_specific_values_in_claims(lines, sections, report)
 
     check_forbidden_words(lines, sections, report, stage)
     check_case_terms(lines, sections, report)

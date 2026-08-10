@@ -90,9 +90,16 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
     # 3b) 中西文间空格（W-SPACE）：汉字/中文标点 与 数字/西文字母 之间不得留空白。
     # 症状来源三处：① md 撰写时手敲空格；② pandoc 编译公式边界带出空格；
     # ③ 在 WPS/Word 内手工编辑后回存。均在此处一次性兜住（zipfile 直读磁盘真相）。
+    # ④ 形态盲区（本案实测）：pandoc 把行内公式 $...$ 的两侧各注入一个独立空格
+    #    run（"最近 $N$ 个"→"最近 " + <m:oMath> + " 个"）。all_t 只拼 w:t 文本、
+    #    oMath 文本缺失，公式占位处拼成"汉字+空格+空格+汉字"，前两个正则
+    #    （要求空格一侧为西文字母/数字）均不命中 → 漏检。故补第三类：
+    #    汉字/中文标点 与 汉字/中文标点 之间不得留空白（专利正文无空格约定，
+    #    中文间空格即异常；公式内 m:t 空格为数学排版间距，不在 all_t 不误伤）。
     _CJK = r"一-鿿　-〿＀-￯"
     sp_hits = (re.findall(rf"[{_CJK}] +[0-9A-Za-z$\\]", all_t)
-               + re.findall(rf"[0-9A-Za-z%$\\] +[{_CJK}]", all_t))
+               + re.findall(rf"[0-9A-Za-z%$\\] +[{_CJK}]", all_t)
+               + re.findall(rf"[{_CJK}] +[{_CJK}]", all_t))
     results.append((f"中西文间空格={len(sp_hits)}", len(sp_hits) == 0,
                     f"命中样例：{sp_hits[:5]}" if sp_hits else "无"))
 
