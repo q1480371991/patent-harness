@@ -255,7 +255,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
 
     def test_claims_format_guidance_is_bundled_not_external_path(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-        claims_text = (SKILL_DIR / "references" / "rules" / "claims.md").read_text(encoding="utf-8")
+        claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
         reference_path = SKILL_DIR / "references" / "cases" / "claims-format-standard.md"
 
         self.assertTrue(reference_path.exists())
@@ -278,8 +278,11 @@ class PatentScriptSmokeTests(unittest.TestCase):
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
         rule_files = [
             "global.md",
-            "claims.md",
-            "full-draft.md",
+            "claims-requirements.md",
+            "claims-field-background.md",
+            "abstract-figures.md",
+            "invention-content.md",
+            "implementation.md",
             "revision.md",
             "docx-template.md",
             "figures.md",
@@ -307,15 +310,15 @@ class PatentScriptSmokeTests(unittest.TestCase):
 
         self.assertNotIn("必须阅读本目录下的 `rules.md`。它是本工作流的强制写作规范。", skill_text)
         self.assertIn("references/rules/global.md", skill_text)
-        self.assertIn("references/rules/claims.md", skill_text)
-        self.assertIn("references/rules/full-draft.md", skill_text)
+        self.assertIn("references/rules/claims-requirements.md", skill_text)
+        self.assertIn("references/rules/implementation.md", skill_text)
         self.assertIn("references/rules/revision.md", skill_text)
         self.assertIn("references/rules/docx-template.md", skill_text)
         self.assertIn("references/rules/figures.md", skill_text)
 
     def test_split_rules_preserve_critical_constraints(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
-        claims_text = (SKILL_DIR / "references" / "rules" / "claims.md").read_text(encoding="utf-8")
+        claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
         full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
@@ -355,7 +358,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
-        claims_text = (SKILL_DIR / "references" / "rules" / "claims.md").read_text(encoding="utf-8")
+        claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
         full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
@@ -401,7 +404,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
     def test_second_reaudit_alignment_fixes_are_preserved(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
-        claims_text = (SKILL_DIR / "references" / "rules" / "claims.md").read_text(encoding="utf-8")
+        claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
         full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")

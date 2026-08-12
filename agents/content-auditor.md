@@ -22,7 +22,7 @@ tools: Read, Bash
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出(含权要分句结构数据),直接嵌入 prompt。 |
 | `scoring_excerpt_path` | `references/rules/scoring-content.md` 的绝对路径（`scoring.md` 的本路静态摘录：评分前置纪律 + 本路评分项 + 判定要求）。自行 Read。 |
-| `content_rules_path` | `references/rules/full-draft.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## L6\. /,/^## L7\. /p' <content_rules_path>` 提取 L6 节(L6-1 / L6-2 / L6-3),再用 `sed -n '/^### L8-0 /,/^### L8-1 /p' <content_rules_path>` 提取 L8-0 反向断言条(发明内容/有益效果的反向实体名词差集判定依据),**只执行这两段**,其余节不在本路范围。 |
+| `content_rules_path` | `references/rules/implementation.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## L6\. /,/^## L7\. /p' <content_rules_path>` 提取 L6 节(L6-1 / L6-2 / L6-3),再用 `sed -n '/^### L8-0 /,/^### L8-1 /p' <content_rules_path>` 提取 L8-0 反向断言条(发明内容/有益效果的反向实体名词差集判定依据),**只执行这两段**,其余节不在本路范围。 |
 | `alignment_check_result` | **可选,仅 full-draft 传入**:`scripts/verify_claims_alignment.py` 的完整 JSON 输出,直接嵌入 prompt。传入时必须逐条处置其中涉及发明内容/有益效果的 `suspect` 项(确认为违规或给出豁免理由),未逐条处置视为未检查。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单;无则写"无"。 |
 | `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单。传入即进入增量复核模式:**第 1 项(发明内容逐条权要覆盖,完整性级)恒全量复核**;其余条目中,上轮失败项与改动块所涉条目定点复核,上轮 PASS 且不涉改动块的沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |
