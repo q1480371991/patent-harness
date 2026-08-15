@@ -21,7 +21,7 @@ tools: Read, Bash
 | `mechanical_check_result` | `scripts/check_hard_rules.py` 的 JSON 输出,直接嵌入 prompt。 |
 | `structure_check_result` | `scripts/check_cross_block.py` 的 JSON 输出(含权要分句、依附邻接表等结构数据),直接嵌入 prompt。 |
 | `scoring_excerpt_path` | `references/rules/scoring-claims.md` 的绝对路径（`scoring.md` 的本路静态摘录：评分前置纪律 + 本路评分项 + 判定要求）。自行 Read。 |
-| `claims_rules_path` | `references/rules/claims-requirements.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## L1\. /,/^## L2\. /p' <claims_rules_path>` 定向提取并**只执行其中 L1 节**(L1-1 / L1-2 / L1-3),其余节不在本路范围。 |
+| `claims_rules_path` | `references/rules/claims-requirements.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## L1\. /,/^<!-- EOF sentinel: claims-requirements -->/p' <claims_rules_path>` 定向提取并**只执行其中 L1 节**(L1-1 / L1-2 / L1-3),其余节不在本路范围。 |
 | `claims_format_standard_path` | `references/cases/claims-format-standard.md` 的绝对路径。自行 Read。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单;无则写"无"。 |
 | `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单。传入即进入增量复核模式:上轮失败项与改动块所涉条目定点复核,其余上轮 PASS 且不涉改动块的条目沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |

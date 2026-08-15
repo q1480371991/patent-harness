@@ -295,7 +295,7 @@ def check_claim1_length(lines: list[str], sections: dict, report: Report) -> Non
 
 
 def check_claim1_step_count(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 1b: 权要 1 主步骤最多不超过 6 个 (L1-1 硬上限; 3-5 个为宜属建议口径不在此报).
+    """规则 1b: 权要 1 主步骤最多不超过 5 个 (L1-1 硬上限; 3-5 个为宜属建议口径不在此报).
 
     主步骤数 = 权要 1 块内非空行数 - 1 (扣除编号头行"1.一种...包括:");
     与 claims-format-standard 的"每个分号步骤独立成段"口径一致,
@@ -309,11 +309,11 @@ def check_claim1_step_count(lines: list[str], sections: dict, report: Report) ->
     if len(body_lines) < 2:
         return  # 未按分段格式撰写, 由断行检查项报
     n_steps = len(body_lines) - 1
-    if n_steps > 6:
+    if n_steps > 5:
         report.add(
             "L1-1", f"权利要求书 第{start + 1}行起",
             f"权要 1 主步骤数 = {n_steps}",
-            f"权要 1 主步骤超过硬上限 6 个 (实际 {n_steps}), 应合并同一技术链上的连续动作或将细节下沉从属权要",
+            f"权要 1 主步骤超过硬上限 5 个 (实际 {n_steps}), 应合并同一技术链上的连续动作或将细节下沉从属权要",
         )
 
 
@@ -1077,7 +1077,7 @@ def check_judgment_sentence_pattern(lines: list[str], sections: dict, report: Re
 def check_substep_numbering(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 24: 子步骤禁 SXX1/步骤Sxxx 式编号 (L8-2, 原 impl-auditor 语义项 14 的编号半边).
 
-    主步骤编号为 S11..S16 (权 1 分句数硬上限 6, 两位数字); 具体实施方式出现
+    主步骤编号为 S11..S15 (权 1 分句数硬上限 5, 两位数字); 具体实施方式出现
     S+三位及以上数字即子步骤编号残留 (子步骤一律在"包括："后无编号分号列举)。
     LaTeX 公式中的下标写作 S_{11} 带下划线, 不匹配。仅 full-draft。
     """

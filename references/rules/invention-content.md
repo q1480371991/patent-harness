@@ -41,3 +41,5 @@
 
 ---
 
+<!-- EOF sentinel: invention-content -->
+

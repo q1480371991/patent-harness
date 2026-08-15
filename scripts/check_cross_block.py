@@ -169,6 +169,21 @@ def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None
         if not it.get("dependent"):
             continue
         flat = it.get("flat") or ""
+        # 从权缺"其特征在于" = 结构错误(L1-1), 显式 FAIL 而非让 X7 静默跳过
+        # (X7 引用句提取锚点即"其特征在于"; 缺之引用句校验失效, 是 X2608047 王工
+        # 批注"权2至权8从权缺'其特征在于'"已复盘的静默失效根因)
+        if "其特征在于" not in flat:
+            violations.append({
+                "rule_id": "L1-1",
+                "check": "X7",
+                "location": f"权要 {it['num']} (md 第{it['start_line']}行起)",
+                "evidence": f"从权 flat 缺'其特征在于': {flat[:60]}…"
+                           if len(flat) > 60 else f"从权 flat 缺'其特征在于': {flat}",
+                "message": f"从权 {it['num']} 缺少'其特征在于'衔接保护主题与特征部分 "
+                           "(L1-1); 引用句逐字校验(X7)依赖该锚点, 缺之会静默失效。"
+                           f"标准结构: N.根据权利要求M所述的…，其特征在于，所述…，包括：",
+            })
+            continue
         m = quote_re.search(flat)
         if not m:
             continue

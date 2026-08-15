@@ -76,3 +76,5 @@
 
 ---
 
+<!-- EOF sentinel: abstract-figures -->
+
