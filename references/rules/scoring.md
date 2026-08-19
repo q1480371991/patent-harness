@@ -41,7 +41,7 @@
 - **Sxx 框架同构校验**（L8-0）：步骤**数量**由 `check_cross_block.py` X1 终判，框架句**文字层**由 impl-auditor 以 `claims_md_path` 为基准逐字比对后回传（该 md 基准与最新已审权要 DOCX 的一致性由主 agent 在全文一稿 step 1 回写保证，并经 `timestamp_guard.py`/`fingerprint_claims.py --check` 守卫）；global-auditor 只汇总二者结论，不自行从 DOCX 提取。数量不等或文字不同 = FAIL。
 - **反向特征校验（同构三节）**（L8-0）：提取具体实施方式、发明内容、有益效果三节框架句/对应句的实体名词与判断条件集合，与权利要求书特征集合做差集；差集非空 = FAIL，逐项列出多出的特征（功能性换述与白名单豁免项不计入）。
 - **步骤集差集校验**（L8-1）：权 1 分句与各从权分句的步骤短语集 vs 三节步骤短语集做差集；缺任一权要步骤 = FAIL，多出步骤逐项列出。具体实施方式 Sxx 顺序须与权 1 分句顺序一致（顺序局部同构）。
-- 权利要求书未被擅自改动（全文阶段权要冻结，`implementation.md` 权要冻结条）：以主 agent 传入的 `fingerprint_claims.py --check` 结果（`fingerprint_check_result`）PASS 为判据，global-auditor 汇总；结果缺失时报告”冻结校验缺失”，不得凭 md 目测放行。
+- 权利要求书未被擅自改动（分离式工作流＝全文阶段权要冻结、直写全文稿＝会话内基准自锁，适用边界唯一出处 `implementation.md`「阶段映射与权要冻结」节）：以主 agent 传入的 `fingerprint_claims.py --check` 结果（`fingerprint_check_result`）PASS 为判据，global-auditor 汇总；结果缺失时报告”冻结/自锁校验缺失”，不得凭 md 目测放行。返修阶段入口不跑 `--check`，本项据实标 ➖。
 
 > 第一闸专抓"内容缺斤少两"。分数高但缺块，仍判 FAIL。
 

@@ -24,7 +24,7 @@
 - 反向特征校验（同构三节：具体实施方式+发明内容+有益效果）（L8-0；由 content/impl-auditor 专审发现后回传）。
 - 步骤集差集校验 + 顺序局部同构（L8-1；由 impl-auditor 专审发现后回传）。
 - 权要基准无撞名（L1-1 / L8-0 撞名复校；撞名则退回权要侧改名）。
-- 权利要求书未被擅自改动（全文阶段权要冻结）：以主 agent 传入的 `fingerprint_check_result`（`fingerprint_claims.py --check` 结果）PASS 为判据；结果缺失时报告“冻结校验缺失”，不得凭 md 目测放行。
+- 权利要求书未被擅自改动：**分离式工作流为「全文阶段权要冻结」、直写全文稿为「会话内基准自锁」**（适用边界唯一出处 `implementation.md`「阶段映射与权要冻结」节），两者判据同为主 agent 传入的 `fingerprint_check_result`（`fingerprint_claims.py --check` 结果）PASS；结果缺失时报告“冻结/自锁校验缺失”，不得凭 md 目测放行。返修阶段入口不跑 `--check`，本项据实标 ➖。
 
 ## 本路 1 级硬规则（零容忍，任一 FAIL → 整体不通过）
 

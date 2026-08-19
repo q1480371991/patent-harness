@@ -2,7 +2,7 @@ name: experience-path-guard
 # 非维护者 PR 只允许改动一个经验档案文件，且该文件头部登记的 github 用户名必须等于 PR 作者（自助注册制）。
 on:
   pull_request:
-    branches: [claude]
+    branches: [claude, main]
 jobs:
   guard:
     runs-on: ubuntu-latest

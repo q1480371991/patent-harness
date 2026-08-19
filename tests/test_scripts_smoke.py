@@ -256,6 +256,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
     def test_claims_format_guidance_is_bundled_not_external_path(self):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
+        field_bg_text = (SKILL_DIR / "references" / "rules" / "claims-field-background.md").read_text(encoding="utf-8")
         reference_path = SKILL_DIR / "references" / "cases" / "claims-format-standard.md"
 
         self.assertTrue(reference_path.exists())
@@ -319,7 +320,10 @@ class PatentScriptSmokeTests(unittest.TestCase):
     def test_split_rules_preserve_critical_constraints(self):
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
         claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
-        full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
+        field_bg_text = (SKILL_DIR / "references" / "rules" / "claims-field-background.md").read_text(encoding="utf-8")
+        abstract_text = (SKILL_DIR / "references" / "rules" / "abstract-figures.md").read_text(encoding="utf-8")
+        content_text = (SKILL_DIR / "references" / "rules" / "invention-content.md").read_text(encoding="utf-8")
+        impl_text = (SKILL_DIR / "references" / "rules" / "implementation.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
         figures_text = (SKILL_DIR / "references" / "rules" / "figures.md").read_text(encoding="utf-8")
@@ -329,15 +333,15 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("公式、模型、阈值", global_text)
 
         self.assertIn("权利要求书规则", claims_text)
-        self.assertIn("技术领域规则", claims_text)
-        self.assertIn("背景技术规则", claims_text)
+        self.assertIn("技术领域规则", field_bg_text)
+        self.assertIn("背景技术规则", field_bg_text)
         self.assertIn("references/cases/claims-format-standard.md", claims_text)
         self.assertNotIn("说明书摘要规则", claims_text)
         self.assertNotIn("具体实施方式规则", claims_text)
 
-        self.assertIn("说明书摘要规则", full_text)
-        self.assertIn("发明内容规则", full_text)
-        self.assertIn("具体实施方式规则", full_text)
+        self.assertIn("说明书摘要规则", abstract_text)
+        self.assertIn("发明内容规则", content_text)
+        self.assertIn("具体实施方式规则", impl_text)
 
         self.assertIn("权要返修", revision_text)
         self.assertIn("全文返修", revision_text)
@@ -359,7 +363,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
         claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
-        full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
+        field_bg_text = (SKILL_DIR / "references" / "rules" / "claims-field-background.md").read_text(encoding="utf-8")
+        full_text = (SKILL_DIR / "references" / "rules" / "abstract-figures.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
         figures_text = (SKILL_DIR / "references" / "rules" / "figures.md").read_text(encoding="utf-8")
@@ -375,24 +380,26 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("使用阶段的当前输入", global_text)
         self.assertIn("交底书 DOCX 转出的带批注 Markdown 统一命名", global_text)
 
-        self.assertIn("背景技术默认写成 2–3 个自然段", claims_text)
-        self.assertIn("第一段", claims_text)
-        self.assertIn("第二段", claims_text)
-        self.assertIn("第三段", claims_text)
+        self.assertIn("背景技术默认写成 2–3 个自然段", field_bg_text)
+        self.assertIn("第一段", field_bg_text)
+        self.assertIn("第二段", field_bg_text)
+        self.assertIn("第三段", field_bg_text)
         self.assertIn("两个相对独立且均有技术贡献", claims_text)
         self.assertIn("功能模块式系统/装置权", claims_text)
-        self.assertIn("不得展开技术效果、实施步骤或背景缺陷", claims_text)
+        self.assertIn("不得展开技术效果、实施步骤或背景缺陷", field_bg_text)
 
-        self.assertIn("只控制最终可见文本", skill_text)
         self.assertIn("不删除、不重建非当前阶段分节锚点", docx_text)
+        self.assertIn("不得删除整节", docx_text)
         self.assertIn("非当前阶段模板槽位", docx_text)
         self.assertIn("后续阶段内容不得因权要一稿被全局清空", docx_text)
         self.assertIn("权要一稿/二稿/三稿最终 DOCX 可见页眉仅为", docx_text)
+        self.assertIn("可见页眉文本符合阶段要求", docx_text)
         self.assertIn("仍保留包内全部 `word/header*.xml`", docx_text)
         self.assertIn("案例性术语清理", skill_text)
         self.assertIn("后续阶段槽位保留不删", skill_text)
 
-        self.assertIn("全文终稿**目标**约 1.5–2 万字", full_text)
+        self.assertIn("全文终稿**目标**约 1.5–2 万字",
+                      (SKILL_DIR / "references" / "rules" / "implementation.md").read_text(encoding="utf-8"))
         self.assertIn("render_patent_figure.py", figures_text)
         self.assertIn("insert_figures_docx.py", figures_text)
         self.assertIn("子流程图默认不画", figures_text)
@@ -405,7 +412,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
         claims_text = (SKILL_DIR / "references" / "rules" / "claims-requirements.md").read_text(encoding="utf-8")
-        full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
+        field_bg_text = (SKILL_DIR / "references" / "rules" / "claims-field-background.md").read_text(encoding="utf-8")
+        full_text = (SKILL_DIR / "references" / "rules" / "implementation.md").read_text(encoding="utf-8")
         revision_text = (SKILL_DIR / "references" / "rules" / "revision.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
         figures_text = (SKILL_DIR / "references" / "rules" / "figures.md").read_text(encoding="utf-8")
@@ -452,14 +460,16 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("document-skills:docx", skill_text)
         self.assertIn("docx` skill", docx_text)
 
-        self.assertIn("未来槽位锚点仍可定位", docx_text)
         self.assertIn("保留 XML 锚点", docx_text)
         self.assertIn("不得删除整节", docx_text)
         self.assertIn("不得全局清空 body", docx_text)
 
-        self.assertIn("无方法独立权要", full_text)
-        self.assertIn("主要保护主题", full_text)
-        self.assertIn("附图说明一致", full_text)
+        self.assertIn("无方法独立权要",
+                      (SKILL_DIR / "references" / "rules" / "abstract-figures.md").read_text(encoding="utf-8"))
+        self.assertIn("主要保护主题",
+                      (SKILL_DIR / "references" / "rules" / "abstract-figures.md").read_text(encoding="utf-8"))
+        self.assertIn("附图说明一致",
+                      (SKILL_DIR / "references" / "rules" / "abstract-figures.md").read_text(encoding="utf-8"))
         self.assertIn("句末标点", figures_text)
         self.assertIn("分号分句", figures_text)
 
@@ -467,7 +477,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
         global_text = (SKILL_DIR / "references" / "rules" / "global.md").read_text(encoding="utf-8")
-        full_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
+        full_text = (SKILL_DIR / "references" / "rules" / "implementation.md").read_text(encoding="utf-8")
         docx_text = (SKILL_DIR / "references" / "rules" / "docx-template.md").read_text(encoding="utf-8")
         figures_text = (SKILL_DIR / "references" / "rules" / "figures.md").read_text(encoding="utf-8")
 
@@ -491,7 +501,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("五个章节标题", docx_text)
 
         # 摘要附图唯一出处对齐 full-draft L5
-        self.assertIn("full-draft.md` L5", figures_text)
+        self.assertIn("abstract-figures.md` L5", figures_text)
         self.assertNotIn("摘要附图默认 = 图 1", figures_text)
 
         # 公式 LaTeX 源码交付
@@ -768,7 +778,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
     def test_split_workflow_full_draft_uses_claims_md(self):
         import json
 
-        # 真实工作流: 全文稿.md 不含权利要求书 (冻结在权要稿.md)
+        # 真实工作流: 全文稿.md 不含权利要求书 (权要写在权要稿.md, 已在权要闸门过闸)
         idx = GOOD_FULL_DRAFT_MD.index("## 技术领域")
         claims_part = GOOD_FULL_DRAFT_MD[:idx]
         full_part = GOOD_FULL_DRAFT_MD[idx:]
@@ -883,10 +893,11 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertIn("不得加 `-留痕` 等状态后缀", global_text)
         skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("案件号-权要1稿-作者-发明题目全称.docx", skill_text)
+        self.assertIn("案件号-全文1稿-作者-发明题目全称.docx", skill_text)
 
     def test_a_paradigm_anchor_matches_extractor(self):
         """L8-0 展开段入口句锚点与 extract_structure.py 的主步骤正则互相匹配(防规则句面与脚本漂移)。"""
-        full_draft_text = (SKILL_DIR / "references" / "rules" / "full-draft.md").read_text(encoding="utf-8")
+        full_draft_text = (SKILL_DIR / "references" / "rules" / "implementation.md").read_text(encoding="utf-8")
         self.assertIn("在步骤Sxx中，〔复述权1第xx分句原文〕，包括：", full_draft_text)
         extractor_src = (SKILL_DIR / "scripts" / "extract_structure.py").read_text(encoding="utf-8")
         self.assertIn("在步骤S", extractor_src)
@@ -922,8 +933,41 @@ class PatentScriptSmokeTests(unittest.TestCase):
 
         # 5) 闸门命令带 --md；权要基准回写条款存在
         self.assertNotIn("check_hard_rules.py <", skill_text)
+        self.assertIn("同步回写 `docs/权要稿.md`", skill_text)
         self.assertIn("回写更新 `docs/权要稿.md`", skill_text)
         self.assertIn("权要联动回写", skill_text)
+
+    def test_four_workflows_are_preserved(self):
+        """四流程架构守卫: 权要一稿/权要二稿三稿/全文一稿/全文二稿三稿 + 直写全文稿变体。
+
+        本 skill 的业务流程是四条(权要与全文各含一稿与返修), "直写全文稿"是
+        全文一稿的执行变体而非替代。历史上曾被收口成"全文一稿 + 全文返修"两条,
+        导致权要阶段规则、权要冻结、权要稿 DOCX 交付全部消失。本测试钉死四流程
+        在三份编排文件中同时在场, 防止再次被抹平。
+        """
+        skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        rules_text = (SKILL_DIR / "rules.md").read_text(encoding="utf-8")
+        flow_text = (SKILL_DIR / "docs" / "规则读取流程.md").read_text(encoding="utf-8")
+
+        # 1) 四个流程名在三份编排文件中均在场
+        for name, text in (("SKILL.md", skill_text), ("rules.md", rules_text),
+                           ("规则读取流程.md", flow_text)):
+            for flow in ("权要一稿", "权要二稿/三稿", "全文一稿", "全文二稿/三稿"):
+                self.assertIn(flow, text, f"{name} 缺流程「{flow}」(四流程被收口?)")
+
+        # 2) 直写全文稿仍在, 且定位为全文一稿的变体而非唯一工作流
+        self.assertIn("直写全文稿", skill_text)
+        self.assertIn("直写全文稿", rules_text)
+
+        # 3) main 分支的单一工作流收口措辞不得成为 claude 的架构
+        for banned in ("本 skill 唯一撰写工作流", "无权要冻结", "权要返修在全文稿内"):
+            self.assertNotIn(banned, skill_text, f"SKILL.md 混入收口措辞「{banned}」")
+            self.assertNotIn(banned, rules_text, f"rules.md 混入收口措辞「{banned}」")
+
+        # 4) 权要冻结的唯一出处节在场(SKILL.md 三处指针依赖它)
+        impl_text = (SKILL_DIR / "references" / "rules" / "implementation.md").read_text(encoding="utf-8")
+        self.assertIn("## 阶段映射与权要冻结", impl_text)
+        self.assertIn("阶段映射与权要冻结", skill_text)
 
 
     def test_check_env_runs_stdlib_only_and_reports_deps(self):
@@ -1121,39 +1165,25 @@ class InjectFulltextSmokeTest(unittest.TestCase):
         "应当理解，以上所述仅为本发明的具体实施例而已，并不用于限定本发明的保护范围。\n"
     )
 
-    def _docx_skill_dir(self):
-        """探测 document-skills:docx skill 目录，避免硬编码 commit hash 路径。
-
-        优先级：环境变量 DOCX_SKILL_DIR → ~/.claude/plugins/cache 下最新 document-skills
-        commit → 兜底硬编码本机当前 hash。他机/CI 用 DOCX_SKILL_DIR 覆盖即可。
-        """
-        env = os.environ.get("DOCX_SKILL_DIR")
-        if env and Path(env).is_dir():
-            return Path(env)
-        cache = Path.home() / ".claude" / "plugins" / "cache" / "anthropic-agent-skills"
-        if cache.is_dir():
-            # 按 mtime 取最新: commit hash 是十六进制, 反字典序 ≠ 最新
-            cands = sorted(cache.glob("document-skills/*/skills/docx"),
-                           key=lambda q: q.stat().st_mtime, reverse=True)
-            if cands:
-                return cands[0]
-        fallback = (cache / "document-skills" / "690f15cac7f7" / "skills" / "docx")
-        return fallback
-
     def _unpack_template(self, dest: Path):
+        """把模板 docx 解包成目录（纯 zip 操作）。
+
+        不再调用 `document-skills:docx` 插件的 scripts/office/unpack.py——上游新版
+        已移除 unpack.py/pack.py，改为在其 SKILL.md 里直接用 `unzip`/`zip`。本测试
+        的被测对象是 `inject_fulltext_docx.py`，只需要一个解包目录，故用标准库
+        自给自足，不再被插件目录结构变动带崩。
+        """
         tpl = SKILL_DIR / "assets" / "docx" / "专利撰写模板.docx"
-        subprocess.run(
-            [sys.executable, str(self._docx_skill_dir() / "scripts" / "office" / "unpack.py"),
-             str(tpl), str(dest)],
-            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
+        dest.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(tpl) as z:
+            z.extractall(dest)
 
     def _pack(self, unpacked: Path, out: Path):
-        subprocess.run(
-            [sys.executable, str(self._docx_skill_dir() / "scripts" / "office" / "pack.py"),
-             str(unpacked), str(out)],
-            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
+        """目录回打包成 docx（等价于 docx skill 的 `zip -Xr out.docx .`）。"""
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in sorted(unpacked.rglob("*")):
+                if f.is_file():
+                    z.write(f, f.relative_to(unpacked).as_posix())
 
     @unittest.skipUnless(PANDOC_AVAILABLE, "pandoc 不可用, 跳过全文稿注入测试")
     def test_inject_fulltext_then_verify(self):
@@ -1238,7 +1268,7 @@ class RuleAnchorGuardTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             root = self._fake_skill(tmp)
-            fd = root / "references" / "rules" / "full-draft.md"
+            fd = root / "references" / "rules" / "implementation.md"
             lines = fd.read_text(encoding="utf-8").splitlines()
             for i, l in enumerate(lines):
                 if l.startswith("## L8. "):
@@ -1280,7 +1310,7 @@ class RuleAnchorGuardTest(unittest.TestCase):
         """洞4: --update-baseline 在塌缩状态下必须拒绝, 不把错误固化为基线."""
         with tempfile.TemporaryDirectory() as tmp:
             root = self._fake_skill(tmp)
-            fd = root / "references" / "rules" / "full-draft.md"
+            fd = root / "references" / "rules" / "implementation.md"
             lines = fd.read_text(encoding="utf-8").splitlines()
             for i, l in enumerate(lines):
                 if l.startswith("## L8. "):
@@ -1525,7 +1555,7 @@ class InventionNameSlotTest(unittest.TestCase):
         """回归: 收尾"综上所述，本发明公开了一种〔权1保护主题〕"属 B 类, 写方法名不得报违规.
 
         真实稿 X2607084 曾被误报: 该段句式的唯一出处是 docx-template.md G8-2 与
-        full-draft.md L8-1 收尾条 (骨架为"〔发明名称〕方法"分体式), 在此写入含
+        implementation.md L8-1 收尾条 (骨架为"〔发明名称〕方法"分体式), 在此写入含
         "及系统"的正式全称反而产出"……方法及系统方法"式重复拼接.
         """
         # A 类三处全部写全称, 收尾段写方法名 (BASE 固定如此) → 应 0 违规

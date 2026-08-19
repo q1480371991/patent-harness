@@ -81,7 +81,7 @@ def run(fulltext: Path, reviews: list[Path]) -> int:
           f"早于以下审核稿, 可能基于过期权要:", file=sys.stderr)
     for p, m in newer:
         print(f"    · {p.name}  ({_fmt(m)})", file=sys.stderr)
-    print("  → 不得静默沿用. 按 full-draft.md L8-0 / revision.md 权要变更跨阶段联动: "
+    print("  → 不得静默沿用. 按 implementation.md L8-0 / revision.md 权要变更跨阶段联动: "
           "先跑 fingerprint_claims.py --check 确认权要是否实际变更, 变则做 "
           "新旧权要 diff → 说明书同步清单 → 逐项落实 (硬停)", file=sys.stderr)
     return 3

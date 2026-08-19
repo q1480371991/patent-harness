@@ -42,13 +42,15 @@ CASE_TERMS = [
     "本方法能够实现",
 ]
 
-# 权要一稿禁写章节 (SKILL.md 权要一稿 step 5)
+# 权要稿禁写章节 (SKILL.md 权要一稿 step 5: 权要稿.md 只写权要三章;
+# 直写全文稿在同轮产出 权要稿.md 时同守此界)
 CLAIMS_DRAFT_FORBIDDEN_SECTIONS = [
     "说明书摘要", "摘要附图", "发明内容", "附图说明",
     "具体实施方式", "说明书附图",
 ]
 
-# 全文稿正文章节顺序 (full-draft.md L4-L8; 权利要求书/技术领域/背景技术冻结在权要稿.md, 不在全文稿)
+# 全文稿正文章节顺序 (L4/L7 abstract-figures.md, L6 invention-content.md, L8 implementation.md;
+# 权利要求书/技术领域/背景技术写在权要稿.md, 不在全文稿)
 FULL_DRAFT_REQUIRED_SECTIONS_ORDER = [
     "说明书摘要", "摘要附图", "发明内容", "附图说明", "具体实施方式",
 ]
@@ -332,7 +334,7 @@ def check_each_claim_one_period(lines: list[str], sections: dict, report: Report
 
 
 def check_system_media_claim_no_debuzou(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 2b: 系统/装置独权、存储介质权末尾不写'的步骤'三字 (L1-1, claims.md 系统/介质权收尾口径).
+    """规则 2b: 系统/装置独权、存储介质权末尾不写'的步骤'三字 (L1-1, claims-requirements.md 系统/介质权收尾口径).
 
     系统/介质权末尾一律以句号收口, 即'……所述的〔方法权发明名称全称〕。',
     不写'……所述的〔方法权发明名称全称〕的步骤。'。
@@ -393,7 +395,7 @@ def check_claim_numbering(lines: list[str], sections: dict, report: Report) -> N
 
 
 def check_total_claim_count(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 6: 权要总数必须 = 10 (L1-1, claims.md '必须写满十条')."""
+    """规则 6: 权要总数必须 = 10 (L1-1, claims-requirements.md '必须写满十条')."""
     blocks = extract_claim_blocks(lines, sections)
     n = len(blocks)
     if n != 10:
@@ -621,7 +623,7 @@ def check_section_order(lines: list[str], sections: dict, report: Report, stage:
 
 
 def check_claims_draft_forbidden_sections(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 14: 权要一稿禁写章节 (SKILL.md 权要一稿 step 5)."""
+    """规则 14: 权要稿禁写章节 (SKILL.md 权要一稿 step 5)."""
     if stage != "claims-draft":
         return
     for title in sections:
@@ -630,7 +632,7 @@ def check_claims_draft_forbidden_sections(lines: list[str], sections: dict, repo
                 report.add(
                     "SKILL 权要一稿", "章节",
                     title,
-                    f"权要一稿不得写入章节: {forbidden}",
+                    f"权要稿.md 不得写入章节: {forbidden}",
                 )
 
 
@@ -1234,7 +1236,7 @@ SPEC_FORBIDDEN_CLAIM_WORDINGS: list[tuple[str, str]] = [
      "删除该取舍元叙述, 直接写技术内容 (与 G5-1 AI 元叙述条同源, 本规则先命中不重复报)"),
     ("权利要求",
      "说明书不写'权利要求1至N所述的……'式引用; 系统/介质段改用说明书专用套话"
-     "(唯一出处 full-draft.md L8-1 收尾条), 方法名用发明名称全称"),
+     "(唯一出处 implementation.md L8-1 收尾条), 方法名用发明名称全称"),
     ("其特征在于",
      "说明书不写'其特征在于'(权要专用体例); 直接陈述特征内容"),
 ]
@@ -1282,7 +1284,7 @@ def check_second_aspect_boilerplate(lines: list[str], sections: dict, report: Re
     所述方法"式简称(线索级, 交 content-auditor 语义复核).
 
     **不检查"的步骤"**: 说明书侧第二方面段固定套话本身带"的步骤"(与 L8-1 收尾套话②
-    骨架一致); claims.md L1-1 的"不写'的步骤'"只约束权利要求书的系统/介质权收尾,
+    骨架一致); claims-requirements.md L1-1 的"不写'的步骤'"只约束权利要求书的系统/介质权收尾,
     由规则 2b 负责, 两侧口径不同源、勿交叉迁移.
 
     适用边界(避免对未采用该体例的稿件误判): 仅当发明内容**已出现"第二方面"
@@ -1324,7 +1326,7 @@ def check_second_aspect_boilerplate(lines: list[str], sections: dict, report: Re
             "存储器上并可在所述处理器上运行的计算机程序，所述处理器执行所述计算机程序时实现…'",
         )
     # 注: 说明书侧的第二方面段固定套话**本身带"的步骤"**(与 L8-1 收尾套话②骨架一致),
-    # 不校验该三字。claims.md L1-1 的"不写'的步骤'"只约束权利要求书的系统/介质权收尾
+    # 不校验该三字。claims-requirements.md L1-1 的"不写'的步骤'"只约束权利要求书的系统/介质权收尾
     # (由规则 2b check_system_media_claim_no_debuzou 负责), 两侧口径不同源、勿交叉迁移。
     # ②方法名简称 → 线索级, 交 content-auditor 语义复核
     if re.search(r"(第一方面所述方法|如上所述的方法(?!名))", chunk):
@@ -1356,7 +1358,7 @@ def _get_scan_ranges(lines: list[str], sections: dict, stage: str) -> list[tuple
 # 规则 31 槽位表唯一出处: docx-template.md G8-0b 的 **A 类槽位**(须写正式题名全称,
 # 含"及系统/及装置"后缀; 这四处代表整件发明). B 类槽位(权要各条、第一/第二方面复述、
 # 实施例引入句、图1附图说明、收尾"综上所述"段、第二实施例系统段、介质段)按保护主题
-# 分别写方法名/系统名, 句式出处见 docx-template.md G8-2 与 full-draft.md L8-1 收尾条
+# 分别写方法名/系统名, 句式出处见 docx-template.md G8-2 与 implementation.md L8-1 收尾条
 # —— 在 B 类写入含"及系统"的全称反而产出"……方法及系统方法"式重复拼接, 故不入本表.
 # 分节4首段发明名称属 DOCX 可见层, 由 verify_docx_injection.py 后验, 不在 md 层.
 INVENTION_NAME_SLOTS: list[tuple[str, str]] = [
@@ -1842,6 +1844,48 @@ def check_function_noun_first_definition(lines: list[str], sections: dict, repor
             )
             break
 
+# 规则 42 判据 (implementation.md L8-1 解释段段落行数上限): 四号宋体 1.5 倍行距、
+# 正文宽 ≈16.9cm 换行折算 ≈34 字/行, 7 行 ≈ 238 字, 取 240 为界.
+# 豁免段前缀: Sxx 框架句/展开段入口句 (按权 1/从权分句逐字, 行数跟随分句)、
+# 收尾"综上所述"方法与三段法律套话、图导引句.
+_IMPL_PARA_EXEMPT_PREFIX = (
+    "综上所述", "以下所述", "以上所述", "本发明第二实施例", "第二方面", "第三方面",
+    "图1为", "图1为本", "如图1", "下面将结合", "需要说明的是，本发明实施例还提供",
+)
+_IMPL_PARA_ENTRY_RE = re.compile(r"^(在步骤S\d+中|在一个实施方式中|在一种实施方式中).*，包括：$")
+
+
+def check_impl_para_lines(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 42 (1级 hard): 解释段段落行数上限 (L8-1).
+
+    具体实施方式章节内正文段 (v2 基线每行一段) 纯汉字 >240 字 (≈34字/行×7行)
+    即直接 hard FAIL、阻断闸门 —— 段落行数属确定性可判规则, 豁免段 (Sxx 框架
+    句/展开段入口句/收尾套话/图导引句) 已在探测器内预过滤, 无歧义, 不交 auditor
+    复核. 说明书摘要受 L4 ≤300 字约束、不在本规则范围. 仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    for i, ln in enumerate(body):
+        stripped = ln.strip()
+        if not stripped:
+            continue
+        if re.search(r"^S\d+，", stripped) or _IMPL_PARA_ENTRY_RE.search(stripped):
+            continue  # Sxx 框架句 / 展开段入口句 (按分句逐字, 行数跟随分句)
+        if stripped.startswith(_IMPL_PARA_EXEMPT_PREFIX):
+            continue
+        cjk = len(re.findall(r"[一-鿿]", stripped))
+        if cjk > 240:
+            report.add(
+                "L8-1", f"具体实施方式 第{offset + i + 1}行", stripped[:60],
+                "解释段单段纯汉字 >240 字(≈34字/行×7行上界), 超 ≤7 行上限; "
+                "按语义自然断点(对图像通路/对文本通路、随后/最后等动作或对象切换处)"
+                "拆分为多个 ≤7 行独立段, 或精简冗余展开(L8-1 解释段段落行数上限)",
+            )
+
+
 # -----------------------------------------------------------------------------
 # 主流程
 # -----------------------------------------------------------------------------
@@ -1858,6 +1902,9 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     # 权要类检查仅在权利要求书章节存在时执行.
     # 分离式工作流的全文稿.md 不含权要 (冻结在权要稿.md, 已在 claims-draft 阶段过闸),
     # 此时跳过而非误报; 权要稿 (claims-draft) 必含该章节, 缺失照常报错.
+    # 注: 返修轮 (权要二稿/三稿、全文二稿/三稿) 改动了权要时必须另跑一次
+    #     --stage claims-draft --md 权要稿.md, 否则本段 L1 机械规则全部跳过
+    #     (SKILL.md 返修工作流 step 4 已定为无条件跑两套).
     has_claims_section = any("权利要求书" in t for t in sections)
     if stage == "claims-draft" or has_claims_section:
         # Phase 1a: 字符/正则/字数类 (权要部分)
@@ -1917,6 +1964,8 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_cross_step_numeric_selfconsistency(lines, sections, report, stage)  # W53
     check_category_label_consistency(lines, sections, report, stage)             # W54
     check_function_noun_first_definition(lines, sections, report, stage, claims_text)  # W55
+    # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
+    check_impl_para_lines(lines, sections, report, stage)
 
     return report
 

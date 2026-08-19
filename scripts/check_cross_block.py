@@ -126,7 +126,7 @@ def check_x4_no_merged_steps(structure: dict, violations: list[dict]) -> None:
 
 
 def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None:
-    """X7: 从权引用句逐字一致 (claims.md L1-1, 审批人硬要求).
+    """X7: 从权引用句逐字一致 (claims-requirements.md L1-1, 审批人硬要求).
 
     从权 preamble `其特征在于，所述〔引用句〕，包括：` 的引用句, 去掉句首"所述"与
     连接词(并/再/然后)后, 必须逐字命中其依附链(含传递依附)上某条权要原文的连续
@@ -202,7 +202,7 @@ def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None
                 "evidence": f"引用句='{q[:60]}…'" if len(q) > 60 else f"引用句='{q}'",
                 "message": f"权要 {it['num']} 的引用句未逐字命中依附链权要 "
                            f"{sorted(chain)} 原文; 引用的步骤须与前面的步骤完全一致"
-                           "(不得改动词、不得附加限定, claims.md L1-1)",
+                           "(不得改动词、不得附加限定, claims-requirements.md L1-1)",
             })
 
 

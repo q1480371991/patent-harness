@@ -14,7 +14,7 @@
 
 sha1 覆盖"全部权要的全部分号分句规范化序列"——权要一旦发生分句增删或文字改动,
 sha1 即变. `--check` 在撰写/注入前重算当前权要基准 sha1 与 front-matter 比对,
-不一致即**硬停** (exit 3), 提示按 full-draft.md L8-0 先做 diff→同步→重构.
+不一致即**硬停** (exit 3), 提示按 implementation.md L8-0 先做 diff→同步→重构.
 
 用法:
     # 生成/更新指纹 (按当前权要基准写入全文稿.md 头)
@@ -113,7 +113,7 @@ def do_check(fulltext: Path, claims_md: Path) -> int:
         print(f"  记录: {recorded.get('sha1','')[:12]}… (基准权要={recorded.get('基准权要')}, "
               f"权1分句={recorded.get('分句数')})", file=sys.stderr)
         print(f"  当前: {cur_sha1[:12]}… (权1分句={n_c1})", file=sys.stderr)
-        print("  → 按 full-draft.md L8-0: 先做 新旧权要 diff → 说明书同步清单 → "
+        print("  → 按 implementation.md L8-0: 先做 新旧权要 diff → 说明书同步清单 → "
               "逐项落实, 重构受影响章节并 --gen 更新指纹后再继续 (硬停)", file=sys.stderr)
         return 3
     print(f"[fingerprint] CHECK PASS 权要基准未变 sha1={cur_sha1[:12]}… "

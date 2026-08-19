@@ -4,7 +4,7 @@
 承担全文稿章节（L4 摘要 + L6 发明内容 + L7 附图说明 + L8 具体实施方式）的 DOCX
 就地下笔，根治两类手写即兴 bug：① 行内 `$...$` 公式漏编译成原生 OMML；② md 单换行
 分隔的子步骤被挤进同一段。权要三章（权利要求书 / 技术领域 / 背景技术）仍由 docx
-执行层手填（SKILL.md 权要一稿 step 10 不动）。
+执行层手填（SKILL.md 权要一稿 step 10 不动；直写全文稿在 step 9 同轮手填）。
 
 设计约束（规则出处 docx-template.md G8-0/G8-0b/G8-1、global.md G6-1、案例 C-DOCX-7/8）：
 - 不用 paraId 定位（WPS 再保存重排 paraId），改用 5 个 `<w:sectPr>` 序数 + 段内文本
@@ -212,15 +212,22 @@ def render_blocks(blocks: list[dict], block_table: dict, inline_table: dict,
 
 
 def split_by_section(blocks: list[dict]) -> dict[str, list[dict]]:
-    """按章节分组 Block（标题段归该章节）。摘要附图章节正文已被 parse 跳过。"""
+    """按章节分组 Block（标题段归该章节）。摘要附图章节正文已被 parse 跳过。
+
+    「说明书摘要」的标题段不产出：分节1 主章节标题由页眉承载（docx-template.md G8-0
+    对照表，header1.xml = 说明书摘要），body 只要摘要正文、「说明书摘要」粗体标题段
+    一律不注入，避免正文与页眉重复显示章节名。
+    """
     by_sec: dict[str, list[dict]] = {}
     cur = None
     for b in blocks:
         if b["kind"] == "heading" and b["section"] in SECTION_TITLES:
             cur = b["section"]
-            by_sec.setdefault(cur, []).append(b)
+            by_sec.setdefault(cur, [])          # 建 key（即使标题段不产出）
+            if b["section"] != "说明书摘要":
+                by_sec[cur].append(b)
         elif cur is not None:
-            by_sec[cur].append(b)
+            by_sec.setdefault(cur, []).append(b)
     return by_sec
 
 
