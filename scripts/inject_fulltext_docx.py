@@ -243,6 +243,29 @@ _PLACEHOLDER_PATTERNS = (
 )
 
 
+def _is_blank_placeholder(seg: str) -> bool:
+    """判定某 <w:p> 是否为模板预置的**纯空占位段**（正文注入后应清理）。
+
+    王工 X2608107 全文审核v1 点名"内容段之间有莫名其妙的换行"（尤以发明内容标题
+    与上一段之间为甚）。实测该批空段来自 `assets/docx/专利撰写模板.docx` 自身
+    （14 段中 11 段为空），历轮稿件沿用未清；G8-1 只规定"不得删 header、不清空
+    body"，未覆盖"占位空段在正文注入后应清理"，故补此判定。
+
+    只清理**无任何实体内容**的段，凡含下列之一即保留（属骨架或有效内容）：
+      - sectPr（分节属性，删则破坏 5 分节骨架）
+      - drawing / object / pict（图片，分节2/5 的图1）
+      - bookmarkStart / commentRangeStart（书签与批注锚点）
+      - 任何非空 w:t / m:t 文本
+    """
+    if "<w:sectPr" in seg:
+        return False
+    if any(k in seg for k in ("<w:drawing", "<w:object", "<w:pict",
+                              "<w:bookmarkStart", "<w:commentRangeStart")):
+        return False
+    txt = "".join(re.findall(r"<(?:w|m):t[^>]*>([^<]*)</(?:w|m):t>", seg))
+    return not txt.strip()
+
+
 def _section_sectpr_positions(doc: str) -> list[int]:
     """5 个 <w:sectPr> 起始位置（升序）。"""
     return [m.start() for m in _SECTPR_RE.finditer(doc)]
@@ -291,6 +314,9 @@ def inject(unpacked_dir: Path, rendered_by_section: dict[str, list[str]],
             if _PLACEHOLDER_QMARK in txt or any(p in txt for p in _PLACEHOLDER_PATTERNS):
                 stats["placeholders_removed"] += 1
                 return ""
+            if _is_blank_placeholder(seg):
+                stats["blank_paras_removed"] += 1
+                return ""
             return seg
         region = re.sub(r"<w:p\b[^>]*>.*?</w:p>", _drop_placeholder, region, flags=re.S)
         doc = region + "".join(body_paras) + doc[p4_start:]
@@ -337,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         "abstract_paragraphs": 0,
         "body_paragraphs": 0,
         "placeholders_removed": 0,
+        "blank_paras_removed": 0,
         "sectpr_kept": 0,
         "fallback": fallback,
     }
@@ -346,7 +373,8 @@ def main(argv: list[str] | None = None) -> int:
     pandoc_note = "pandoc 缺失，公式回退纯文本（G6-1，完工报告须注明）" if fallback else "pandoc 编译原生 OMML"
     print(f"OK\t{mode} · {stats['paragraphs']} 段 · "
           f"块公式 {stats['block_omml']} · 行内公式 {stats['inline_omath']} · "
-          f"删占位套话 {stats['placeholders_removed']} · sectPr={stats['sectpr_kept']}")
+          f"删占位套话 {stats['placeholders_removed']} · "
+          f"删空占位段 {stats['blank_paras_removed']} · sectPr={stats['sectpr_kept']}")
     print(f"   · {pandoc_note}")
     if fallback:
         return 3
