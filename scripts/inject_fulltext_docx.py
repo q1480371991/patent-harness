@@ -271,6 +271,41 @@ def _section_sectpr_positions(doc: str) -> list[int]:
     return [m.start() for m in _SECTPR_RE.finditer(doc)]
 
 
+# 分节 4 里由**前向拷贝**带过来的章节标题（不由本脚本生成，故不走 _HEADING_PPR）
+_CARRIED_HEADINGS = ("技术领域", "背景技术")
+
+
+def _normalize_carried_headings(region: str, stats: dict) -> str:
+    """把前向拷贝带过来的章节标题段的缩进归一为顶格（G8-0b 标题段格式）。
+
+    ★ 根因（H2608165 全文审核v1，王工批注 5「模板这里是顶格」）：**分离式工作流特有缺陷**。
+    step 10 从**权要 DOCX** 前向拷贝，「技术领域」「背景技术」两段随权要三章一起带过来
+    （权要稿里它们本就是 firstLine=0，正确）；而本脚本只对**自己生成**的章节标题套
+    `_HEADING_PPR`（firstLine=0），对带过来的这两段不做处理 —— 交付稿实测 firstLine=562
+    （缩进两字），被王工点名。
+
+    修法：注入前把分节 4 区域内文本恰为 `_CARRIED_HEADINGS` 的段的 `<w:ind>` 改写为顶格。
+    只动 `<w:ind>`，不动字体/加粗/行距（那些在权要稿里已正确），最小侵入。
+    """
+    def _fix(m: re.Match) -> str:
+        seg = m.group(0)
+        txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", seg)).strip()
+        if txt not in _CARRIED_HEADINGS:
+            return seg
+        top = '<w:ind w:left="0" w:leftChars="0" w:firstLine="0" w:firstLineChars="0"/>'
+        if re.search(r"<w:ind\b[^>]*/>", seg):
+            new = re.sub(r"<w:ind\b[^>]*/>", top, seg, count=1)
+        elif "<w:pPr>" in seg:
+            new = seg.replace("<w:pPr>", "<w:pPr>" + top, 1)
+        else:
+            return seg
+        if new != seg:
+            stats["carried_headings_topped"] += 1
+        return new
+
+    return re.sub(r"<w:p\b[^>]*>.*?</w:p>", _fix, region, flags=re.S)
+
+
 def inject(unpacked_dir: Path, rendered_by_section: dict[str, list[str]],
            stats: dict) -> dict:
     """就地注入：摘要→分节1；发明内容/附图说明/具体实施方式→分节4末 sectPr 前。
@@ -319,6 +354,7 @@ def inject(unpacked_dir: Path, rendered_by_section: dict[str, list[str]],
                 return ""
             return seg
         region = re.sub(r"<w:p\b[^>]*>.*?</w:p>", _drop_placeholder, region, flags=re.S)
+        region = _normalize_carried_headings(region, stats)
         doc = region + "".join(body_paras) + doc[p4_start:]
         stats["body_paragraphs"] = len(body_paras)
 
@@ -364,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         "body_paragraphs": 0,
         "placeholders_removed": 0,
         "blank_paras_removed": 0,
+        "carried_headings_topped": 0,
         "sectpr_kept": 0,
         "fallback": fallback,
     }
@@ -374,7 +411,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"OK\t{mode} · {stats['paragraphs']} 段 · "
           f"块公式 {stats['block_omml']} · 行内公式 {stats['inline_omath']} · "
           f"删占位套话 {stats['placeholders_removed']} · "
-          f"删空占位段 {stats['blank_paras_removed']} · sectPr={stats['sectpr_kept']}")
+          f"删空占位段 {stats['blank_paras_removed']} · "
+          f"标题归顶格 {stats['carried_headings_topped']} · sectPr={stats['sectpr_kept']}")
     print(f"   · {pandoc_note}")
     if fallback:
         return 3

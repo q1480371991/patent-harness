@@ -1157,7 +1157,11 @@ def check_closing_boilerplate(lines: list[str], sections: dict, report: Report, 
         return
     anchors = [
         ("综上所述总结段(第一实施例=方法收口)", re.compile(r"综上所述，本发明公开了一种")),
-        ("第二实施例系统段", re.compile(r"第[一二三四五六七八九]实施例提供了一种")),
+        # ★ 锚点须同时锁"第二实施例"与"系统": 原正则只写 第[一二三…]实施例提供了一种,
+        # 宽到会命中方法侧入口句"本发明第一实施例提供了一种〔…〕方法"(H2608165 王工亲改
+        # 集中罗列段入口句为该形态), 且 next() 取首个命中行 → 方法入口句被误当系统段,
+        # 误报"系统段在总结段之前"顺序错误. 序数词仍放宽(容"第二/第三"), 但正文须落"系统".
+        ("第二实施例系统段", re.compile(r"第[二三四五六七八九]实施例提供了一种[^。]{0,60}?系统")),
         ("方法-系统对应段(因而不再赘述)", re.compile(r"因而不再赘述")),
         ("结束语(并不用于限定本发明的保护范围)", re.compile(r"并不用于限定本发明的保护范围")),
     ]
@@ -1220,6 +1224,180 @@ def check_benefit_enumeration(lines: list[str], sections: dict, report: Report, 
                     "L6-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
                     "有益效果/正文分项用了'其一/其二'式序数词; 应改全角括号数字'（1）（2）（3）'",
                 )
+
+
+# ---------------------------------------------------------------- 规则 47: 法律套话逐字断言
+#
+# 立项根因 (H2608165 全文审核v1, 王工三条批注 8/9/10「未按照模板套话来写」「不要改模板」
+# 「不要删减模板」): 分离式工作流从**权要 DOCX** 前向拷贝, 权要稿只含权利要求书+技术领域+
+# 背景技术, 开篇段/有益效果/收尾套话**全靠主 agent 从 md 生成** —— 套话原文第一次经过
+# 撰写者之手。而 `implementation.md` W08 条引用开篇段时用了省略号 (只引到"一部分实施例……"),
+# 主 agent 照该引文抄, 抄出 70 字残句 (母版原文 130 字, 缺后 47 字)。
+#
+# ★ 五案实测 (2026-09-01, 直读 docs/全文稿.md) —— 这是本规则只上两段的依据:
+#   开篇段:        五案全 130 字、逐字同 (仅"作出/做出"两种)  → 可逐字断言, 零误报
+#   方法-系统对应:  五案全同骨架, 只有发明名称在变            → 可逐字断言 (骨架)
+#   第二实施例系统: 五案骨架同, "存储在(所述)存储器上"两种     → 断言骨架, 放宽"所述"
+#   结束语:        五案**五种**写法 (142/141/121/86/81 字)   → **不做逐字**, 维持规则 21 锚点
+#   装置示意性说明: 五案**全缺**                              → 不进必查项
+#   优选实施例引入: 五案**全缺**                              → 不进必查项
+# ⚠️ 结束语若按母版 142 字做逐字, X2608107 定稿 (81 字) 与 H2608040 定稿 (121 字) 全判
+#    FAIL —— 那是闸门比审核人还严的误报形态 (外置根因: 假信号比漏检更坏), 故明确不做。
+#
+# 口径优先级 (用户 2026-09-01 定): **王工口头口径 > 母 skill > 新模板**。
+# ⚠️ `assets/docx/最新-申请文件模板.docx` 第 44/45/77 段仍写"所述的方法**的步骤**",
+#    属模板未同步王工 2026-08-28「'的步骤'三个字全文去掉」口径; 本规则按口头口径,
+#    与既有规则 2b/46 一致 (五案定稿实测「的步骤」全为 0)。
+_BOILER_OPENING = (
+    "下面将结合本发明实施例中的附图，对本发明实施例中的技术方案进行清楚、完整地描述，"
+    "显然，所描述的实施例仅仅是本发明一部分实施例，而不是全部的实施例。"
+    "基于本发明中的实施例，本领域普通技术人员在没有作出创造性劳动前提下"
+    "所获得的所有其他实施例，都属于本发明保护的范围。"
+)
+# "作出" 为母版与新模板原文; H2608040/X2608107 两定稿写"做出" —— 允许, 不报 FAIL。
+_BOILER_OPENING_VARIANT = _BOILER_OPENING.replace("作出创造性", "做出创造性")
+# 方法-系统对应段骨架 (发明名称为槽位, 不入断言)
+_BOILER_METHOD_SYSTEM = (
+    r"需要说明的是，本发明实施例提供的一种.{2,60}?系统用于执行上述实施例的一种"
+    r".{2,60}?方法的所有流程步骤，两者的工作原理和有益效果一一对应，因而不再赘述。"
+)
+# 第二实施例系统段骨架。★ 首版正则过紧, 五案实测误报 4 例, 已按下列三处自然差异放宽
+# (2026-09-01 回归 regress_boilerplate.py 抓出 —— 收紧型规则必须双向验证的实例):
+#   ① "包括：" / "包括" —— 冒号可有可无 (X2607043 无冒号)
+#   ② "存储在(所述)存储器上""可在(所述)处理器上" —— "所述"可有可无 (五案两种)
+#   ③ "执行所述程序时" / "执行所述计算机程序时" —— 两种都在定稿出现
+#   ④ 句末引用: "如上述所述的方法。"/"如上所述的方法。"/"上述〔全称〕方法。" 三种并存
+#      —— 王工 2026-08-28 定"所述的方法"为正确写法, 但**发明名称全称式不是违规**
+#      (X2607040/X2607134 定稿即全称式), 故句末只断言到"方法。"收口 + 不带"的步骤"。
+# 本规则的职责边界: 只拦"骨架被换掉/被删段"(如把存储器处理器那串删了、或整段改写),
+# 不拦上述四类同义变体 —— 后者由规则 46 (「的步骤」) 与规则 30 各自管辖, 不在此重复。
+_BOILER_SECOND_EMBODIMENT = (
+    r"本发明第二实施例提供了一种.{2,60}?系统，包括：?存储器、处理器及存储在(?:所述)?存储器上"
+    r"并可在(?:所述)?处理器上运行的计算机程序，所述处理器执行所述(?:计算机)?程序时实现"
+    r"(?:如上述所述的|如上所述的|上述)?.{0,40}?方法。"
+)
+
+
+def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
+                               stage: str) -> None:
+    """规则 47 (1级 hard): 三段法律套话逐字/骨架断言 (L8-1; 王工审核v1 批注 8/9/10).
+
+    与规则 21 (check_closing_boilerplate) 的分工: 规则 21 查**四锚点是否按序出现**
+    (结构层, 母 skill 已有, 本规则不动它); 本规则查**套话内容是否被改写或删减**
+    (内容层, 分离式工作流新增暴露面)。两者并存、不同维。
+
+    覆盖三段 (依据见上方五案实测表):
+      ① 开篇段 —— 逐字 (允许"作出/做出")
+      ② 方法-系统对应段 —— 骨架逐字, 发明名称填槽
+      ③ 第二实施例系统段 —— 骨架逐字, "所述"可选, 句末不得带"的步骤"
+    仅 full-draft。
+    """
+    if stage != "full-draft":
+        return
+    text = "\n".join(lines)
+    # 豁免: 非真实全文稿的短样例 (单元测试 fixture / 半成品草稿), 与 L8-1 字数条同口径。
+    # 真实全文稿必含"具体实施方式"且远超 1000 字; 不足者不适用套话断言 —— 否则
+    # 每个 fixture 都会被判"缺开篇段", 属误报 (2026-09-01 smoke 实测)。
+    if count_chinese(text) < 1000:
+        return
+
+    # ① 开篇段
+    if _BOILER_OPENING not in text and _BOILER_OPENING_VARIANT not in text:
+        hit = next((ln.strip() for ln in lines
+                    if ln.strip().startswith("下面将结合本发明实施例中的附图")), None)
+        if hit is None:
+            report.add(
+                "L8-1", "具体实施方式(开篇段)", "未检出开篇法律套话",
+                "缺开篇段法律套话; 须逐字照抄母版原文 130 字"
+                "(『下面将结合本发明实施例中的附图……都属于本发明保护的范围。』)",
+            )
+        else:
+            report.add(
+                "L8-1", "具体实施方式(开篇段)",
+                f"现为 {len(hit)} 字: {hit[:60]}…",
+                "开篇段法律套话被改写或删减 (母版原文 130 字, 允许『作出/做出』两种); "
+                "该段属纯法律套话, 一字不改照抄, 不得因压字数删减 —— "
+                "常见形态: 删末尾『基于本发明中的实施例，本领域普通技术人员在没有作出"
+                "创造性劳动前提下所获得的所有其他实施例，都属于本发明保护的范围。』47 字",
+            )
+
+    # ② 方法-系统对应段
+    if not re.search(_BOILER_METHOD_SYSTEM, text):
+        hit = next((ln.strip() for ln in lines
+                    if ln.strip().startswith("需要说明的是，本发明实施例提供的一种")), None)
+        report.add(
+            "L8-1", "具体实施方式(方法-系统对应段)",
+            (f"现为: {hit[:70]}…" if hit else "未检出该段"),
+            "方法-系统对应段套话骨架不符; 须为『需要说明的是，本发明实施例提供的一种"
+            "〔发明名称〕系统用于执行上述实施例的一种〔发明名称〕方法的所有流程步骤，"
+            "两者的工作原理和有益效果一一对应，因而不再赘述。』(只换发明名称)",
+        )
+
+    # ③ 第二实施例系统段
+    if not re.search(_BOILER_SECOND_EMBODIMENT, text):
+        hit = next((ln.strip() for ln in lines
+                    if ln.strip().startswith("本发明第二实施例提供了一种")), None)
+        extra = ""
+        if hit and "的步骤" in hit:
+            extra = " ⚠️ 本段含『的步骤』——按王工 2026-08-28「『的步骤』三个字全文去掉」删除"
+        report.add(
+            "L8-1", "具体实施方式(第二实施例系统段)",
+            (f"现为: {hit[:70]}…" if hit else "未检出该段"),
+            "第二实施例系统段套话骨架不符; 须为『本发明第二实施例提供了一种〔发明名称〕系统，"
+            "包括：存储器、处理器及存储在存储器上并可在处理器上运行的计算机程序，"
+            "所述处理器执行所述程序时实现如上述所述的方法。』"
+            "(『所述存储器/所述处理器』可写可不写; 句末到『方法。』收口)" + extra,
+        )
+
+
+# ---------------------------------------------------------------- 规则 48: 有益效果分项句式
+#
+# 立项根因 (H2608165 全文审核v1, 王工批注 9 原话「套话模板，本发明通过xx，这样做怎么xx，
+# 实现xx效果，不要改模板」): 既有规则只管"相比于现有技术 + 恰好 3 项 + 全角括号数字"
+# (invention-content.md L6-1 / 规则 22), **三条各自的句式规则此前不存在** —— 撰写侧遂自拟
+# 为「（1）补偿坐标序列既参与…，其技术原因在于…」, 把模板的"本发明通过"整个换掉。
+#
+# ★ 五案实测各条首句 (2026-09-01):
+#   X2608107  （1）本发明通过对初始表面图像提取…    ✓
+#   X2607043  （1）本发明从企业短信文本中提取…      ✓ (本发明+动词)
+#   X2607040  （1）本发明根据当前气体体积计算…      ✓ (本发明+动词)
+#   X2607134  （1）本发明将接缝区域掩码上采样为…    ✓ (本发明+动词)
+#   H2608040  （1）通过从宏观图像提取绿化特征区域…  ✓ (通过+动词, 省"本发明")
+#   H2608165  （1）补偿坐标序列既参与…              ✗ 唯一偏离形态
+# 故判据取**宽口径**: 每条须以"本发明"或"通过"起句 (五案全部满足), 不强求逐字"本发明通过"
+# —— 新模板第 47-49 段写的是"（1）本发明通过…", 但五案定稿有 4 种合法变体, 按母 skill
+# 优先于新模板的口径 (用户 2026-09-01), 只拦"既不以本发明起句、也不以通过起句"的形态。
+_BENEFIT_ITEM_RE = re.compile(r"^（[0-9１-９]）\s*(.*)$")
+_BENEFIT_OK_HEAD = re.compile(r"^(?:本发明|通过|采用)")
+
+
+def check_benefit_item_pattern(lines: list[str], sections: dict, report: Report,
+                               stage: str) -> None:
+    """规则 48 (1级 hard): 有益效果分项须按模板句式起句 (L6-1; 王工审核v1 批注 9).
+
+    模板句式『（N）本发明通过〔技术方案〕对〔作用对象〕，〔推导过程〕，实现〔有益效果〕。』
+    判据 (宽口径, 五案零误报): 每条以"本发明"/"通过"/"采用"起句。以技术特征名直接起句
+    (如"（1）补偿坐标序列既参与…") 即违规 —— 那是把套话骨架换掉, 属改模板。
+    仅 full-draft, 只扫发明内容章。
+    """
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "发明内容")
+    if offset < 0:
+        return
+    for i, line in enumerate(body):
+        m = _BENEFIT_ITEM_RE.match(line.strip())
+        if not m:
+            continue
+        rest = m.group(1).strip()
+        if not rest or _BENEFIT_OK_HEAD.match(rest):
+            continue
+        report.add(
+            "L6-1", f"发明内容 第{offset + i + 1}行", line.strip()[:70],
+            "有益效果分项未按模板句式起句; 须为『（N）本发明通过〔技术方案〕对〔作用对象〕，"
+            "〔推导过程〕，实现〔有益效果〕。』—— 以『本发明』或『通过』起句, "
+            "不得以技术特征名直接起句 (王工审核v1 批注『套话模板…不要改模板』)",
+        )
 
 
 def check_judgment_sentence_pattern(lines: list[str], sections: dict, report: Report, stage: str) -> None:
@@ -1643,6 +1821,61 @@ def check_invention_name_slots(lines: list[str], sections: dict, report: Report,
         )
 
 
+# 规则 31b: A 类槽位**存在性**。规则 31 只判"写了的地方写对没有", 不判"该写的地方
+# 有没有写" —— H2608165 实测: 发明内容首段整个漏掉「本发明的目的在于提供一种…以解决…」
+# 槽位(`目的在于` 全稿零命中), 规则 31 因 hits 为空而 `return`, 判 PASS。
+# 判据取"该槽位的引导串是否在场", 不比对题名(比对由规则 31 做), 两条互补不重复。
+# ★ 五案实测 (2026-09-01) 决定了本表只能用**宽口径**引导串:
+#   发明内容首段五案两种写法, 都合法 ——
+#     「本发明**提供了**一种〔题名〕，以解决……」  X2607040 / X2607043 / X2608107 / H2608040
+#     「本发明**的目的在于提供**一种〔题名〕，以解决……」  X2607134
+#   ⚠️ 首版只认后者, 五案误报 4 例。新模板第 38 段写的也是「本发明提供了一种…以解决」,
+#      即**前者才是模板原文**; 后者是 X2607134 的合法变体。
+#   ⚠️⚠️ 更要紧的是: H2608165 上一轮据 global-auditor「缺目的在于槽位」的提示**补写了
+#      「本发明的目的在于提供一种…」** —— 按本次实测, 原稿写「本发明提供一种…以解决…」
+#      本就合规, 那次"补槽位"属**照错误判据改稿**。本表的宽口径同时纠正该判据。
+#   技术领域: 五案「尤其涉及」与新模板/规则的「具体涉及」并存, 两者都收。
+_A_SLOT_PRESENCE: list[tuple[str, str, str]] = [
+    # (章节, 引导串正则, 缺失时的提示)
+    ("发明内容", r"本发明(?:的目的在于)?提供了?一种[^\n]{0,80}?以(?:解决|实现)",
+     "发明内容首段缺 A 类槽位『本发明提供了一种〔正式题名〕，以解决……的问题。』"
+     "(或『本发明的目的在于提供一种…以解决…』, 两种句式均合法)"),
+    ("技术领域", r"(?:具体涉及|尤其涉及)一种",
+     "技术领域段缺 A 类槽位『本发明涉及〔领域〕技术领域，具体涉及一种〔正式题名〕。』"),
+    ("说明书摘要", r"公开了一种",
+     "说明书摘要缺 A 类槽位『……公开了一种〔正式题名〕，……』"),
+]
+
+
+def check_a_slot_presence(lines: list[str], sections: dict, report: Report,
+                          stage: str) -> None:
+    """规则 31b (1级 hard): A 类槽位存在性 (G8-0b; 2026-09-01 补).
+
+    与规则 31 的分工: 规则 31 = 槽位**内容**逐字一致(写了的地方对不对);
+    本规则 = 槽位**存在性**(该写的地方在不在)。两条并存, 各报各的。
+
+    ⚠️ 技术领域/说明书摘要在分离式工作流下可能存放于 `权要稿.md`(不在 `全文稿.md`),
+    故本规则只在该章节**存在于本文件**时才判其槽位 —— 章节整体缺失属分节落位问题,
+    由 check_cross_block / verify_docx_skeleton 管, 不在此重复报。
+    仅 full-draft。
+    """
+    if stage != "full-draft":
+        return
+    text_all = "\n".join(lines)
+    if count_chinese(text_all) < 1000:
+        return  # fixture / 草稿豁免, 与 L8-1 字数条同口径
+    for sec, pat, msg in _A_SLOT_PRESENCE:
+        body, offset = get_section_lines(lines, sections, sec)
+        if offset < 0:
+            continue  # 该章节不在本文件(分离式存放于权要稿.md), 不判
+        if not re.search(pat, "\n".join(body)):
+            report.add(
+                "G8-0b", f"{sec}(A 类槽位缺失)", f"『{pat}』在该章节零命中",
+                msg + " —— 该槽位代表整件发明, 属 A 类必写(G8-0b); "
+                "规则 31 只校验已写槽位的题名逐字一致, 整段漏写由本规则拦",
+            )
+
+
 def _impl_body(lines: list[str], sections: dict) -> tuple[list[str], int]:
     """具体实施方式正文与其起始行号 (未找到返回 [], -1). 供 L8 类 suspect 复用."""
     return get_section_lines(lines, sections, "具体实施方式")
@@ -1730,10 +1963,14 @@ def check_qualitative_state_bounds(lines: list[str], sections: dict, report: Rep
 
 
 def check_calibration_sample_dims(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 34 (suspect): 标定样本四维度线索 (G6-1 标定样本四维度, W14).
+    """规则 34 (suspect): 标定工况线索 (G6-1 W14, 2026-09-02 起按档位判).
 
-    出现"标定/预先标定/历史数据确定"时, 须给全来源、纳排、数量、数量依据四项.
-    局部窗口 (命中行前后各 5 行) 四项齐全即豁免. 仅 full-draft.
+    旧口径"标定四维度全写(来源/纳排/数量/数量依据)"已废止(H2608165 王工定稿实践:
+    约十五个参数全套四维度是篇幅失控首要根因, 王工整类压成一句). 现行口径按
+    implementation.md L8-1 落笔预算条三档判: 第一档(权要点名预设)须有标定工况一句
+    (样本来源+样本数量); 数量依据/纳排条件属默认不写项, 审核人点名才补, 不再探测.
+    本探测器只探"触发了标定叙述却连标定工况(来源或数量)都没有"的线索, 豁免判据
+    由旧四项收敛为两项. 仅 full-draft.
     """
     if stage != "full-draft":
         return
@@ -1743,9 +1980,7 @@ def check_calibration_sample_dims(lines: list[str], sections: dict, report: Repo
     trig_pat = re.compile(r"标定|由[^，。；]{0,20}历史[^，。；]{0,10}(数据|样本)[^，。；]{0,10}确定")
     dims = [
         ("样本来源", re.compile(r"同型号|同一型号|同功率|工况|历史切换|出厂|采集自")),
-        ("纳排条件", re.compile(r"未记录|排除|剔除|经[^，。；]{0,10}检测|合格|完成[^，。；]{0,6}检测")),
         ("样本数量", re.compile(r"不少于\s*\d+|不低于\s*\d+|\d+\s*(次|组|个)(完整|历史|样本)?")),
-        ("数量依据", re.compile(r"依据|理由|以保证|为使|满足[^，。；]{0,10}(置信|统计|稳定)|足以")),
     ]
     reported_lines = set()
     for i, ln in enumerate(body):
@@ -1760,8 +1995,8 @@ def check_calibration_sample_dims(lines: list[str], sections: dict, report: Repo
             reported_lines.add(i)
             report.add_suspect(
                 "G6-1", f"具体实施方式 第{offset + i + 1}行", ln.strip()[:60],
-                f"标定过程疑似缺维度: {missing}; 须给全样本来源、纳排条件、样本数量、数量依据"
-                "四项方可复现(W14). 维度已在他处给出可豁免",
+                f"标定叙述疑似缺标定工况: {missing}; 第一档(权要点名预设)须给标定工况一句"
+                "(样本来源+数量). 数量依据/纳排条件默认不写(W14 按档位判, 2026-09-02)",
                 suspect_id="S-W14-calibration", section="L8", owner="impl",
                 missing_dimensions=missing,
             )
@@ -2150,7 +2385,9 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_full_draft_word_budget(md_path, claims_md, report, stage, draft_round)
     check_figure_numbering(lines, sections, report, stage)
     check_closing_boilerplate(lines, sections, report, stage)
+    check_boilerplate_verbatim(lines, sections, report, stage)
     check_benefit_enumeration(lines, sections, report, stage)
+    check_benefit_item_pattern(lines, sections, report, stage)
     check_judgment_sentence_pattern(lines, sections, report, stage)
     check_substep_numbering(lines, sections, report, stage)
     check_benefit_generic_phrases(lines, sections, report, stage)
@@ -2158,6 +2395,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_spec_no_claims_wording(lines, sections, report, stage)
     check_second_aspect_boilerplate(lines, sections, report, stage, claims_text)
     check_invention_name_slots(lines, sections, report, stage, invention_name)
+    check_a_slot_presence(lines, sections, report, stage)
     # suspect 线索级 (不计 FAIL, 回传 auditor 复核)
     check_tech_system_mixing(lines, sections, report, stage)
     check_model_detail_hints(lines, sections, report, stage)

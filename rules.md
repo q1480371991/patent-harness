@@ -16,13 +16,13 @@
 
 | 阶段 | 必读核心 | 触发式按需（命中才读） | 禁止默认读取 |
 |---|---|---|---|
-| 权要一稿 | `global.md`、`claims-requirements.md`、`claims-field-background.md`、`scoring.md`、`docx-template.md` | — | `abstract-figures.md`、`invention-content.md`、`implementation.md`、`figures.md`、`revision.md`、`cases/experience/*` |
+| 权要一稿 | `global.md`、`claims-requirements.md`、`claims-field-background.md`、`scoring.md`、`docx-template.md` | `docx-scripts.md`（写 DOCX/查脚本参数时） | `abstract-figures.md`、`invention-content.md`、`implementation.md`、`figures.md`、`revision.md`、`cases/experience/*` |
 | 权要二稿/三稿 | `global.md`、`claims-requirements.md`、`claims-field-background.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md` | `revision.md` A4-0 触发块（删除类/算法类/序号类）；`cases/INDEX.md`（挂回复批注、清痕等） | 未被批注涉及的全文块规则 |
-| 全文一稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块只读体检用，唯一出处 `implementation.md`「阶段映射与权要冻结」节；仅权要已单独定稿的工作流适用） | `claims-requirements.md`、`claims-field-background.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动；`cases/experience/*` |
-| 全文二稿/三稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块体检） | `claims-requirements.md`、`claims-field-background.md` 其余内容，除非批注涉及权要联动 |
-| 直写全文稿（有经验撰写者，用户指令"直接写完全文稿"触发） | `global.md`、`claims-requirements.md`、`claims-field-background.md`（**全量，不冻结**）、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `revision.md`（仅当存在批注）；`cases/INDEX.md` | `cases/experience/*` |
-| Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md`、`scoring.md`（触发返修定向审查闸门时必读，合并计分口径），并按批注内容读 `claims-requirements.md`/`claims-field-background.md`/`abstract-figures.md`/`invention-content.md`/`implementation.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
-| DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
+| 全文一稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块只读体检用，唯一出处 `implementation.md`「阶段映射与权要冻结」节；仅权要已单独定稿的工作流适用）；`docx-scripts.md`（写 DOCX/查脚本参数时） | `claims-requirements.md`、`claims-field-background.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动；`cases/experience/*` |
+| 全文二稿/三稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块体检）；`docx-scripts.md`（写 DOCX/查脚本参数时） | `claims-requirements.md`、`claims-field-background.md` 其余内容，除非批注涉及权要联动 |
+| 直写全文稿（有经验撰写者，用户指令"直接写完全文稿"触发） | `global.md`、`claims-requirements.md`、`claims-field-background.md`（**全量，不冻结**）、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `revision.md`（仅当存在批注）；`cases/INDEX.md`；`docx-scripts.md`（写 DOCX/查脚本参数时） | `cases/experience/*` |
+| Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、**`revision-docx.md`（留痕返修执行细则，含审核稿到手 XML 实测三件事）**、`docx-template.md`、`scoring.md`（触发返修定向审查闸门时必读，合并计分口径），并按批注内容读 `claims-requirements.md`/`claims-field-background.md`/`abstract-figures.md`/`invention-content.md`/`implementation.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
+| DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`、**`docx-scripts.md`（脚本参数与语义）**，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
 | 附图生成/替换 | `global.md`、`figures.md`，如需全文一致性再读 `claims-requirements.md`、`claims-field-background.md` 和 `abstract-figures.md`、`invention-content.md`、`implementation.md` | — | `revision.md`，除非存在批注返修 |
 
 > **docx-template.md 分层读取**：md 撰写阶段只读 G8-0 / G8-0b 及 md 层可判定条目；G8-1 XML 骨架与注入细节延后到进入 DOCX 执行层（权要一稿 step 8-12 / 全文一稿 step 9-12）时再读，避免前置占用撰写上下文。
@@ -46,6 +46,8 @@
 - `references/rules/invention-content.md` — 发明内容规则：L6 发明内容（含有益效果）的撰写要求与自检清单。
 - `references/rules/implementation.md` — 具体实施方式规则：L8 具体实施方式的 Sxx 框架同构、公开充分要求、阶段映射与权要冻结、全文公开充分自检。
 - `references/rules/revision.md` — 统一返修规则：通用返修原则、权要返修、全文返修、老板批注、DOCX 留痕返修和学习闭环。
+- `references/rules/revision-docx.md` — 返修 DOCX 执行细则（原 `SKILL.md`「Word 批注修订」节外置）：审核稿到手 XML 实测三件事、返修意见读取顺序、留痕最小侵入注入、校验项、权要联动回写、学习闭环升格三闸。**仅返修阶段读取。**
+- `references/rules/docx-scripts.md` — DOCX 辅助脚本清单（原 `SKILL.md`「DOCX 处理注意事项」节外置）：各 `scripts/*.py` 的参数与语义、安全文件操作纪律、历史脚本禁用项。**脚本的调用时点仍在 `SKILL.md` 各阶段 step 内，本文件只管"怎么调"。**
 - `references/rules/docx-template.md` — DOCX 模板和执行层规则：`docx` skill 边界、模板资产、分节↔页眉↔正文内容对照表（G8-0）、章节标题与正文格式（G8-0b）、`sectPr`、`header*.xml`、`headerReference`、案例性术语清理和 XML 骨架验收。
 - `references/rules/figures.md` — 附图规则：L9 图 1（摘要附图 = 方法主流程图）由 `scripts/render_patent_figure.py` 从权要 1 自动生成 PNG、由 `scripts/insert_figures_docx.py` 注入分节 2/5；遗留 OLE 附图返修边界。手画 Visio 指引与生图提示词规则已废止。
 - `references/rules/scoring.md` — md 审查评分卡：权要稿/全文稿写入 DOCX 前的"完整性一票否决 + 质量百分制"质量闸门；只规定评分机制，逐项引用 G/L 规则编号，不复述规则内容。
