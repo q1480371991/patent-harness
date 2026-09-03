@@ -2295,6 +2295,85 @@ _IMPL_PARA_EXEMPT_PREFIX = (
 _IMPL_PARA_ENTRY_RE = re.compile(r"^(在步骤S\d+中|在一个实施方式中|在一种实施方式中).*，包括：$")
 
 
+def check_dash_and_special_symbols(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 48 (1级): 破折号与特殊符号 (G5-1 形式标点条, 王工 H2608165 批注 5).
+
+    王工原话「全文不要使用破折号，以及其他特殊的符号」. 范围连接写「至」, 要解释
+    直接跟在句子后面. 全角破折号 —/—— 在专利正文无合法用途, 命中即 FAIL.
+    半角连字符-不查(公式LaTeX/英文连写字/日期合法), 顿号分句由 auditor 语义判
+    (机械正则无法区分名词列举与子句连接, 保零误报).
+    """
+    if stage != "full-draft":
+        return
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            if "—" in lines[i]:
+                report.add(
+                    "G5-1", f"{label} 第{i + 1}行", lines[i].strip()[:80],
+                    "出现破折号; 全文不用破折号与其他特殊符号, 范围连接写「至」,"
+                    "解释直接跟在句子后面 (王工 H2608165 批注 5)",
+                )
+
+
+# 冒号引导的举例/过程句式: 「过程为：」「具体如下：」「步骤如下：」等 (G5-1 形式
+# 标点条, 王工 H2608165 批注 9 原话「不要用'过程为：''具体如下：'等等带冒号的举例
+# 表述，直接讲具体过程是什么就好了」). 匹配句中任意位置的引导短语+中文冒号收尾,
+# 不限行首——批注 9 的实例即落在句中 (「其确定过程为：」).
+COLON_LEAD_PAT = re.compile(
+    r"(确定过程为|标定过程为|计算过程为|处理过程为|操作过程为|过程为|具体如下|步骤如下|如下式|表达如下)"
+    r"[：:]")
+
+
+def check_colon_lead_phrases(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 49 (1级): 冒号引导的举例/过程句式 (G5-1 形式标点条, 王工 H2608165 批注 9).
+
+    「过程为：」「具体如下：」等带冒号的举例表述一律改为直接陈述 (「其标定通过
+    在……」). ⚠️ 与规则 10 (名词冒号定义句式) 分工: 规则 10 查行首短名词+冒号,
+    本条查句中引导短语+冒号, 两正则不重叠. 扫描范围含权要三章外的全部章节
+    (形式标点条约束说明书摘要/发明内容/具体实施方式; 权要章节法定体例不适用,
+    但权要内出现「过程为：」同样违规, 一并扫).
+    """
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            m = COLON_LEAD_PAT.search(lines[i])
+            if m:
+                report.add(
+                    "G5-1", f"{label} 第{i + 1}行", lines[i].strip()[:80],
+                    f"冒号引导的举例/过程句式「{m.group(0)}」; 改为直接陈述具体过程,"
+                    "不带冒号引导 (王工 H2608165 批注 9)",
+                )
+
+
+def check_long_parenthetical(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 50 (suspect): 长括号插入语线索 (G5-1 形式标点条, 王工 H2608165 批注 20).
+
+    王工原话「长句解释直接跟在后面，不要用括号」——括号插入语改为「，当……时，」
+    「，即……，」接入主句. 判据: 括号内 ≥15 字的汉字内容属"长句解释"线索; 短括号
+    (单位标注、简称、数值单位) 不报. 只报线索由 auditor 复核——机械判据分不出
+    "可保留的公式符号说明"与"该改从句的长解释", 保零误报交人工.
+    仅 full-draft.
+    """
+    if stage != "full-draft":
+        return
+    pat = re.compile(r"（([^（）]{15,})）")
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            m = pat.search(lines[i])
+            if m:
+                inner = m.group(1)
+                # 括号内纯公式符号/单位说明特征 (LaTeX/单位/数字占比高) 不报:
+                # 保留公式五项「(单位: 米)」「(无量纲)」式合法短标注, 长度阈值已滤掉大部分
+                cjk = len(re.findall(r"[一-鿿]", inner))
+                if cjk < 10:
+                    continue
+                report.add_suspect(
+                    "G5-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
+                    f"疑似长括号插入语 ({len(m.group(0))} 字): 长句解释改为「，当……时，」"
+                    "或「，即……，」接入主句; 单位/符号短标注可豁免 (王工 H2608165 批注 20)",
+                    suspect_id="S-G5-long-parenthetical", section="L8", owner="impl",
+                )
+
+
 def check_impl_para_lines(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 42 (1级 hard): 解释段段落行数上限 (L8-1).
 
@@ -2396,6 +2475,10 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_second_aspect_boilerplate(lines, sections, report, stage, claims_text)
     check_invention_name_slots(lines, sections, report, stage, invention_name)
     check_a_slot_presence(lines, sections, report, stage)
+    # 形式标点 (G5-1 形式标点条, 王工 H2608165 批注 5/9/20; 破折号与冒号引导为
+    # 1级 hard, 长括号插入语为 suspect)
+    check_dash_and_special_symbols(lines, sections, report, stage)   # 规则 48
+    check_colon_lead_phrases(lines, sections, report, stage)          # 规则 49
     # suspect 线索级 (不计 FAIL, 回传 auditor 复核)
     check_tech_system_mixing(lines, sections, report, stage)
     check_model_detail_hints(lines, sections, report, stage)
@@ -2410,6 +2493,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_cross_step_numeric_selfconsistency(lines, sections, report, stage)  # W53
     check_category_label_consistency(lines, sections, report, stage)             # W54
     check_function_noun_first_definition(lines, sections, report, stage, claims_text)  # W55
+    check_long_parenthetical(lines, sections, report, stage)          # 规则 50 (suspect, 批注 20)
     # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
     check_impl_para_lines(lines, sections, report, stage)
 
