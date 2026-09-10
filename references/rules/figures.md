@@ -10,7 +10,7 @@
 - 不要使用交底书中提供的图作为申请图（可能与已撰写内容不对应）；图 1 一律由脚本从**权要基准 `docs/权要稿.md`**重新生成：
 
   ```bash
-  python3 scripts/render_patent_figure.py --claims-md <案件文件夹>/docs/权要稿.md \
+  python scripts/render_patent_figure.py --claims-md <案件文件夹>/docs/权要稿.md \
       --output <案件文件夹>/docs/figures/figure-1.png
   ```
 
@@ -19,7 +19,7 @@
 - 注入交付 DOCX 用注入脚本（在 docx skill 的 unpack 目录上运行，之后照常 pack）：
 
   ```bash
-  python3 scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png
+  python scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png
   ```
 
   自动完成：分节 2（摘要附图）居中嵌入图 1（默认宽 16.0cm）；分节 5（说明书附图）嵌入图 1 并确保其后有"图1"图题段（默认宽 12.3cm）；media/relationship/Content-Type 注册；两处已有图片时为**替换语义**（权要变更后重新生成、重新注入即完成附图更新）。分节 5 的其他既有附图不触碰。

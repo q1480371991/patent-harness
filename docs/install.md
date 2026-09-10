@@ -39,7 +39,7 @@ patent/
 skill 首次被接入时，AI 读到 `SKILL.md` 的"接入前环境自检"段后，会先跑：
 
 ```bash
-python3 scripts/check_env.py --json
+python scripts/check_env.py --json
 ```
 
 自检覆盖的依赖与处理方式：
@@ -47,18 +47,18 @@ python3 scripts/check_env.py --json
 | 依赖 | 类别 | 缺失时怎么办 |
 |---|---|---|
 | **python ≥ 3.9** | 系统级/必需 | 引导用户安装（macOS `brew install python@3.12`；Windows `winget install Python.Python.3.12`） |
-| **python-docx** | pip/必需 | **AI 直接 `python3 scripts/check_env.py --fix` 自动安装** |
+| **python-docx** | pip/必需 | **AI 直接 `python scripts/check_env.py --fix` 自动安装** |
 | **pandoc** | 系统级/**可选** | 缺失不阻断；真用到格式转换时再按提示装 |
 | **document-skills:docx** | Claude Code 插件/必需 | 脚本检测不到，AI 在会话中确认能否调用；不能则重启 Claude Code / 重装插件 |
 
 `missing_required=0` 即必需项就绪。也可手动跑查看人类可读报告：
 
 ```bash
-python3 scripts/check_env.py          # 只看报告
-python3 scripts/check_env.py --fix    # 顺带自动装 pip 类缺失项
+python scripts/check_env.py          # 只看报告
+python scripts/check_env.py --fix    # 顺带自动装 pip 类缺失项
 ```
 
-**Windows 注意**：若 `python3` 无响应，改用 `py`：
+**Windows 注意**：`python3` 多半是 Microsoft Store 的空壳（无输出、exit 49，但不报错），**一律用 `python`**；`python` 也不通时改用 `py`：
 
 ```powershell
 py --version
