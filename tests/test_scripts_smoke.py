@@ -705,40 +705,126 @@ class PatentScriptSmokeTests(unittest.TestCase):
         w46_ok = [s for s in all_suspects(data) if s.get("suspect_id") == "S-W46-negative-only"]
         self.assertEqual(w46_ok, [])
 
-    def test_w04_title_format_mechanical_check(self):
-        import shutil
-        import zipfile
+    def _claims_docx_from_template(self, tmp: Path, name: str) -> Path:
+        """用 inject_fulltext_docx.py 权要一稿模式从模板生成一份权要稿 DOCX（六属性/分节落位正例）。"""
+        cmd = tmp / "权要稿.md"
+        cmd.write_text(
+            "## 权利要求书\n\n1.一种测试控制方法，其特征在于，包括：\n获取输入数据；\n根据所述输入数据生成控制信号。\n\n"
+            "## 技术领域\n\n本发明涉及测试技术领域，尤其涉及一种测试控制方法及系统。\n\n"
+            "## 背景技术\n\n现有技术存在问题。\n", encoding="utf-8")
+        unpacked = tmp / "unpack"
+        with zipfile.ZipFile(SKILL_DIR / "assets" / "docx" / "专利撰写模板.docx") as z:
+            z.extractall(unpacked)
+        run_script("inject_fulltext_docx.py", unpacked, "--claims-md", cmd, "--invention-name", name)
+        out = tmp / "claims.docx"
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in sorted(unpacked.rglob("*")):
+                if f.is_file():
+                    z.write(f, f.relative_to(unpacked).as_posix())
+        return out
 
-        REF = Path("/Users/example/Desktop/Patent/夏晓贝/Done/H2606029一种基于线性传感器的智能锁芯控制方法及系统/"
-                   "H2606029-全文1稿-夏晓贝-一种基于线性传感器的智能锁芯控制方法及系统.docx")
-        if not REF.exists():
-            self.skipTest("G8-0b 基准稿 H2606029 全文1稿不在本机，跳过 W04 发明名称段机械校验测试")
-        with tempfile.TemporaryDirectory() as tmp:
-            # 正例: 基准稿自身 (期望值来源=同一文件) 发明名称段六属性全 PASS
-            res = run_script_allow_fail("verify_docx_skeleton.py", REF, "--stage", "全文")
-            self.assertIn("[PASS] 发明名称段·字号(三号)", res.stdout)
-            self.assertIn("[PASS] 发明名称段·首行缩进0", res.stdout)
-            # 反例: 复制基准稿, 发明名称段 sz 32→28 → 字号 FAIL (其余属性仍 PASS)
-            bad = Path(tmp) / "bad.docx"
-            shutil.copy(REF, bad)
-            with zipfile.ZipFile(REF, "r") as zin:
-                items = zin.infolist()
-                contents = {it.filename: zin.read(it.filename) for it in items}
-            doc = contents["word/document.xml"].decode("utf-8")
-            paras = re.findall(r'<w:p[ >].*?</w:p>', doc, re.S)
-            for p in paras:
-                txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p)).strip()
-                if txt == "一种基于线性传感器的智能锁芯控制方法及系统":
-                    # 发明名称段格式在 pPr rPr 与 run rPr 各写一份 (各含 w:sz 32), 需全量替换
-                    doc = doc.replace(p, p.replace('<w:sz w:val="32"/>', '<w:sz w:val="28"/>'), 1)
-                    break
-            contents["word/document.xml"] = doc.encode("utf-8")
-            with zipfile.ZipFile(bad, "w", zipfile.ZIP_DEFLATED) as zout:
-                for it in items:
-                    zout.writestr(it, contents[it.filename])
-            res = run_script_allow_fail("verify_docx_skeleton.py", bad, "--stage", "全文")
+    @staticmethod
+    def _mutate_docx(src: Path, dst: Path, fn):
+        with zipfile.ZipFile(src) as zin:
+            items = zin.infolist()
+            contents = {it.filename: zin.read(it.filename) for it in items}
+        contents["word/document.xml"] = fn(contents["word/document.xml"].decode("utf-8")).encode("utf-8")
+        with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+            for it in items:
+                zout.writestr(it, contents[it.filename])
+
+    def test_w04_title_format_mechanical_check(self):
+        """W04 六属性默认内置常量比对（不再依赖任何机器上的基准稿，H2608165 #17）。"""
+        name = "测试控制方法及系统"
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            good = self._claims_docx_from_template(tmp, name)
+            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "权要", "--invention-name", name)
+            self.assertEqual(res.returncode, 0, res.stdout)
+            for label in ("字体(宋体)", "字号(三号)", "加粗", "居中", "1.5倍行距", "首行缩进0"):
+                self.assertIn(f"[PASS] 发明名称段·{label}", res.stdout)
+            self.assertNotIn("校验未执行", res.stdout)
+
+            def _name_para(doc):
+                return next(p for p in re.findall(r"<w:p\b[^>]*>.*?</w:p>", doc, re.S)
+                            if "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p)).strip() == name)
+
+            # 反例 1: 发明名称段 sz 32→28 → 字号 FAIL
+            bad = tmp / "bad_sz.docx"
+            self._mutate_docx(good, bad, lambda d: d.replace(
+                _name_para(d), _name_para(d).replace('<w:sz w:val="32"/>', '<w:sz w:val="28"/>')))
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad, "--stage", "权要", "--invention-name", name)
+            self.assertEqual(res.returncode, 1)
             self.assertIn("[FAIL] 发明名称段·字号(三号)", res.stdout)
-            self.assertIn("期望='32' 实得='28'", res.stdout)
+            self.assertIn("期望='32'(内置常量) 实得='28'", res.stdout)
+            # 反例 2: 只写 firstLine=0 不写 firstLineChars=0 → 模板 Normal 的 firstLineChars=200 压过它,
+            # 首行缩进 FAIL（H2608165 审核v1 王工批注 5「模板这里是顶格」的机理）
+            bad2 = tmp / "bad_ind.docx"
+            self._mutate_docx(good, bad2, lambda d: d.replace(_name_para(d), _name_para(d).replace(
+                '<w:ind w:firstLine="0" w:firstLineChars="0"/>', '<w:ind w:firstLine="0"/>')))
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad2, "--stage", "权要", "--invention-name", name)
+            self.assertIn("[FAIL] 发明名称段·首行缩进0", res.stdout)
+
+    def test_skeleton_section_layout_and_name_checks(self):
+        """G8-0 分节落位 / 标题段 / 权要段行距 / 发明名称=给定名称 四项机械化（H2609029 审核v1 盲区）。"""
+        name = "测试控制方法及系统"
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            good = self._claims_docx_from_template(tmp, name)
+            # 正例（权要稿）
+            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "权要", "--invention-name", name)
+            self.assertEqual(res.returncode, 0, res.stdout)
+            for item in ("分节1·权要稿应留空", "分节2·权要稿应留空", "分节3·首段为权利要求 1", "分节3·无说明书内容混入",
+                         "分节3·权要段 1.5 倍行距（3/3 段）", "分节4·首段发明名称=给定名称",
+                         "分节4·章节标题段齐全（技术领域/背景技术）", "分节4·章节标题顺序",
+                         "分节4·发明名称段在技术领域标题之前且为首段", "分节4·标题「技术领域」加粗+顶格",
+                         "分节4·标题「背景技术」加粗+顶格", "分节4·权要稿无全文阶段标题段", "分节5·权要稿应留空"):
+                self.assertIn(f"[PASS] {item}", res.stdout)
+            # 缺 --invention-name → 名称项 WARN 未执行（不是 PASS）
+            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "权要")
+            self.assertIn("[WARN] 分节4·发明名称=给定名称·校验未执行", res.stdout)
+            # 反例 1: 名称不一致 → FAIL；稿里自行加「一种」→ 点明
+            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "权要",
+                                        "--invention-name", "测试控制方法及系统X")
+            self.assertIn("[FAIL] 分节4·首段发明名称=给定名称", res.stdout)
+            bad_name = tmp / "bad_name.docx"
+            self._mutate_docx(good, bad_name, lambda d: d.replace(f">{name}</w:t>", f">一种{name}</w:t>", 1))
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad_name, "--stage", "权要", "--invention-name", name)
+            self.assertIn("自行加了「一种」", res.stdout)
+            self.assertEqual(res.returncode, 1)
+            # 反例 2: 权要稿按全文稿校验 → 分节1/2/5 空、缺全文阶段标题段 → FAIL
+            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "全文", "--invention-name", name)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("[FAIL] 分节1·摘要正文段=0", res.stdout)
+            self.assertIn("[FAIL] 分节2·摘要附图有图", res.stdout)
+            self.assertIn("缺标题段: ['发明内容', '附图说明', '具体实施方式']", res.stdout)
+            self.assertIn("[FAIL] 分节5·说明书附图有图+「图1」图题", res.stdout)
+            # 反例 3: 权要段丢行距（模拟 H2609029 1稿手填）→ FAIL 并计数
+            bad_line = tmp / "bad_line.docx"
+            self._mutate_docx(good, bad_line, lambda d: d.replace(
+                '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr>'
+                '<w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr><w:t xml:space="preserve">1.',
+                '<w:p><w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr><w:t xml:space="preserve">1.', 1))
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad_line, "--stage", "权要", "--invention-name", name)
+            self.assertIn("[FAIL] 分节3·权要段 1.5 倍行距（2/3 段）", res.stdout)
+            # 反例 4: 三章头塞进分节3（模拟 H2609029 1稿分节错位）→ 混入 FAIL + 分节4 首段/标题段 FAIL
+            def _relocate(d):
+                paras = re.findall(r"<w:p\b[^>]*>.*?</w:p>", d, re.S)
+                sect_paras = [p for p in paras if "<w:sectPr" in p]
+                head_txt = (name, "技术领域", "背景技术",
+                            "本发明涉及测试技术领域，尤其涉及一种测试控制方法及系统。", "现有技术存在问题。")
+                head = [p for p in paras
+                        if "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p)).strip() in head_txt]
+                for p in head:
+                    d = d.replace(p, "", 1)
+                s3 = sect_paras[2]
+                return d.replace(s3, "".join(head) + s3, 1)
+            bad_sect = tmp / "bad_sect.docx"
+            self._mutate_docx(good, bad_sect, _relocate)
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad_sect, "--stage", "权要", "--invention-name", name)
+            self.assertIn("[FAIL] 分节3·无说明书内容混入", res.stdout)
+            self.assertIn("[FAIL] 分节4·首段发明名称=给定名称", res.stdout)
+            self.assertIn("[FAIL] 分节4·章节标题段齐全", res.stdout)
 
     def test_check_cross_block_x7_dep_quote_verbatim(self):
         import json
