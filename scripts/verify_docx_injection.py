@@ -108,7 +108,7 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
     # 4) 章节标题齐全（含 <w:b/> + 顶格 firstLine=0）
     for title in ("发明内容", "附图说明", "具体实施方式"):
         # 找文本==title 的段
-        paras = re.findall(r"<w:p\b[^>]*>.*?</w:p>", doc, re.S)
+        paras = re.findall(r"<w:p(?:\s[^>]*)?/>|<w:p(?:\s[^>]*)?>.*?</w:p>", doc, re.S)  # 含自闭合 <w:p/>
         hit = None
         for p in paras:
             ts = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p))

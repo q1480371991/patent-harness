@@ -1308,6 +1308,66 @@ def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
         )
 
 
+# ---------------------------------------------------------------- 规则 51: 权9/权10 模板句逐字
+#
+# 立项 (2026-09-10 模板句机械化盘点): 系统权/存储介质权整条都是套话 (L1-1 给了原句), 但此前只有
+# 规则 2b 查「的步骤」、规则 30 查发明内容第二方面骨架, 权要侧整条写法无人逐字核。
+# H2609029 交付稿实测: 权 9 把「其特征在于」挪到「包括存储器」之前、句末写成「如权利要求1至8中
+# 任一项」—— 两处均偏离 X2608107/H2608165 定稿逐字形态 (王工未点名, 但按「都按模板来」属应改)。
+# 原文唯一副本 boilerplate.CLAIM_TEMPLATES; {N} 须 = 系统权编号 − 1 (覆盖全部方法权)。
+
+def check_claim_boilerplate(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 51 (1级 hard): 系统权 / 存储介质权整条逐字 (L1-1; 唯一副本 boilerplate.py)."""
+    body, offset = get_section_lines(lines, sections, "权利要求书")
+    if offset < 0:
+        return
+    claim_lines = [ln.strip() for ln in body if ln.strip()]
+    for v in boilerplate.check_claims(claim_lines):
+        report.add(
+            "L1-1", f"权利要求书(模板句·{v['label'].split('·', 1)[-1]})",
+            v["evidence"][:160],
+            v["message"] + " —— 系统权/介质权是填空题: 只填系统名与 N, 其余一字不改",
+        )
+
+
+# ---------------------------------------------------------------- 规则 52: 有益效果分项数与字数
+#
+# invention-content.md L6-1「有益效果字数与分项数 (1级)」: 恰好 3 项 / 400–450 字 (含标点)。
+# 此前无机械校验。五案定稿实测 (2026-09-10): 项数 3/3/3/3 (X2607134 旧稿 4); 字数 415/429/430/496
+# —— 字数区间在王工亲改后的 H2608165 定稿也破线 (496), 故**项数 hard、字数 suspect** (由
+# content-auditor 判是否确属灌水/过短), 不做假红灯。
+
+def check_benefit_count_and_length(lines: list[str], sections: dict, report: Report,
+                                   stage: str) -> None:
+    """规则 52: 有益效果恰 3 项 (hard) + 400–450 字 (suspect S-L6-benefit-length)。仅 full-draft。"""
+    if stage != "full-draft":
+        return
+    body, offset = get_section_lines(lines, sections, "发明内容")
+    if offset < 0:
+        return
+    start = next((i for i, ln in enumerate(body) if ln.strip().startswith("相比于现有技术")), -1)
+    if start < 0:
+        return  # 引入句缺失由规则 47 报
+    seg = [ln.strip() for ln in body[start:] if ln.strip()]
+    items = [ln for ln in seg[1:] if _BENEFIT_ITEM_RE.match(ln)]
+    if len(items) != 3:
+        report.add(
+            "L6-1", f"发明内容 第{offset + start + 1}行起",
+            f"有益效果分项数 = {len(items)}",
+            f"有益效果必须恰好 3 项 (（1）（2）（3）), 实际 {len(items)} 项 (L6-1 1级)",
+        )
+    n_chars = sum(len(ln) for ln in seg)
+    if not 400 <= n_chars <= 450:
+        report.add_suspect(
+            "L6-1", f"发明内容 第{offset + start + 1}行起",
+            f"有益效果部分 {n_chars} 字 (含引入句与标点)",
+            f"有益效果字数 {n_chars} 不在 400–450 区间 (L6-1); 请判是否灌水/过短后回修或豁免 "
+            "(H2608165 王工定稿 496 字, 区间非绝对红线)",
+            suspect_id="S-L6-benefit-length", section="L6", owner="content",
+            missing_dimensions=["字数区间"],
+        )
+
+
 # ---------------------------------------------------------------- 规则 48: 有益效果分项句式
 #
 # 立项根因 (H2608165 全文审核v1, 王工批注 9 原话「套话模板，本发明通过xx，这样做怎么xx，
@@ -2398,6 +2458,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
         check_no_specific_values_in_claims(lines, sections, report)
         check_claims_preset_budget(lines, sections, report)      # 规则 43 (外置 2.4a)
         check_claim_wording_seven(lines, sections, report)        # 规则 44 (外置 2.6.1)
+        check_claim_boilerplate(lines, sections, report)           # 规则 51 (权9/权10 模板句逐字, boilerplate.py)
 
     check_forbidden_words(lines, sections, report, stage)
     check_spec_no_debuzou(lines, sections, report, stage)      # 规则 46 (王工全文口径)
@@ -2425,6 +2486,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_boilerplate_verbatim(lines, sections, report, stage, claims_text)   # 规则 47 (模板句逐字, boilerplate.py)
     check_benefit_enumeration(lines, sections, report, stage)
     check_benefit_item_pattern(lines, sections, report, stage)
+    check_benefit_count_and_length(lines, sections, report, stage)   # 规则 52 (恰 3 项 hard / 字数 suspect)
     check_judgment_sentence_pattern(lines, sections, report, stage)
     check_substep_numbering(lines, sections, report, stage)
     check_benefit_generic_phrases(lines, sections, report, stage)

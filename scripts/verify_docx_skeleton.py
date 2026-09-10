@@ -46,7 +46,7 @@ BODY_LINE = "360"
 SPEC_HEADINGS_ALL = ("技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式")
 SPEC_HEADINGS_CLAIMS = SPEC_HEADINGS_ALL[:2]
 
-_PARA_RE = re.compile(r"<w:p\b[^>]*>.*?</w:p>", re.S)
+_PARA_RE = re.compile(r"<w:p(?:\s[^>]*)?/>|<w:p(?:\s[^>]*)?>.*?</w:p>", re.S)  # 含自闭合 <w:p/>（留痕删段常留空壳）
 
 
 def _read(zf, name):
@@ -420,6 +420,17 @@ def check_section_layout(doc: str, stage: str, invention_name, trace_total: int,
         extra = [h for h in SPEC_HEADINGS_ALL[2:] if idx[h]]
         results.append(("FAIL", "分节4·权要稿无全文阶段标题段", not extra,
                         f"出现 {extra}" if extra else ""))
+
+    # ---- 空段（王工 X2608107 全文审核v1 点名「内容段之间有莫名其妙的换行」）----
+    # 分节1/3/4 为纯文本分节, 干净稿不应残留无文本无图的空段 (模板自带空占位段由注入脚本清理);
+    # 分节2/5 承载图片、模板结构自带空段, 不计。留痕稿的整段删除会留下空壳段, 降 WARN。
+    # 权要稿分节1 按设计留空 (模板自带 2 个空占位段, 全文阶段才被摘要替换), 不计。
+    scope = (("分节1", s1), ("分节3", s3), ("分节4", s4)) if full else (("分节3", s3), ("分节4", s4))
+    blanks = {label: sum(1 for p in sec if "<w:sectPr" not in p and _is_blank(p)) for label, sec in scope}
+    n_blank = sum(blanks.values())
+    scope_lbl = "/".join(l[2:] for l, _ in scope)
+    results.append(("WARN" if trace_total else "FAIL", f"分节{scope_lbl}·无空段（{n_blank} 个）", n_blank == 0,
+                    f"空段分布 {blanks}（无文本无图的 <w:p>；干净稿应为 0）" if n_blank else ""))
 
     # ---- 分节5 说明书附图 ----
     g5 = any(_has_graphic(p) for p in s5)

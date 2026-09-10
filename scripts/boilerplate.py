@@ -32,6 +32,8 @@ W08 条 2026-09-01 口径：省略号摘引会被照残句抄）。两个用法�
   - 方法—系统对应段：L8-1 收尾条③（五案逐字同）
   - 存储介质段：可选段（L8-1 ④，默认不写）；写了就须为 H2608165 定稿形态
   - 示意性说明段 / 结束语：`docx-template.md` G8-2 嵌入的王工批注 21 定版原文
+  - 权利要求书侧 系统权 / 存储介质权整条：`claims-requirements.md` L1-1（X2608107/H2608165 定稿逐字同；
+    `check_claims`，由 check_hard_rules.py 规则 51 在 claims-draft 阶段调用）
 """
 from __future__ import annotations
 
@@ -129,6 +131,21 @@ TEMPLATES: tuple[Template, ...] = (
 )
 # 收尾固定顺序（L8-1 收尾条）：综上所述 → 第二实施例 → 方法—系统对应 → [存储介质] → 示意性说明 → 结束语
 CLOSING_ORDER = ("summary", "embod2", "correspond", "medium_spec", "indicative", "closing")
+
+# ---- 权利要求书侧模板句（claims-requirements.md L1-1；X2608107 / H2608165 定稿逐字同）----
+# 编号头「N.」不入模板；{系统名} 含「系统/装置」后缀；{N} = 末条方法权编号（= 系统权编号 − 1）。
+# 王工 2026-08-28 口径：句末「所述的方法」，不写全称、不写「的步骤」。
+CLAIM_TEMPLATES: tuple[Template, ...] = (
+    Template("claim_system", "权利要求书", "包括存储器、处理器",
+             "一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+             "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至{N}任一项所述的方法。",
+             "system", "权利要求书·系统权（计算机设备式）", anchor_mode="contains"),
+    Template("claim_medium", "权利要求书", "一种计算机可读存储介质",
+             "一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
+             "所述计算机程序被处理器执行时实现权利要求1至{N}任一项所述的方法。",
+             "medium", "权利要求书·存储介质权", anchor_mode="contains"),
+)
+_SLOT_RE["N"] = r"(?P<N>\d{1,2})"
 
 _SLOT_TOKEN_RE = re.compile(r"\{([^{}]+)\}")
 
@@ -268,6 +285,40 @@ def check_paragraphs(paragraphs: list[str], has_system: bool, has_medium: bool,
     return vio
 
 
+def check_claims(claim_lines: list[str]) -> list[dict]:
+    """权利要求书侧：系统权 / 存储介质权整条逐字（编号头剥离后比对；{N} 须 = 系统权编号 − 1）。
+
+    claim_lines = 权利要求书章的非空行（编号头行含正文；计算机设备式权与介质权各为单行）。
+    """
+    vio: list[dict] = []
+    heads = [(i, int(m.group(1)), m.group(2).strip())
+             for i, ln in enumerate(claim_lines)
+             for m in [re.match(r"^\s*(\d+)\s*[\.．]\s*(.*)$", ln)] if m]
+    if not heads:
+        return vio
+    sys_idx = [(num, body) for _, num, body in heads if "包括存储器、处理器" in body
+               or re.match(r"^一种[^，。；]{2,40}(?:系统|装置)，", body)]
+    med_idx = [(num, body) for _, num, body in heads if body.startswith("一种计算机可读存储介质")]
+    expect_n = (sys_idx[0][0] - 1) if sys_idx else None
+    for t, hits in ((CLAIM_TEMPLATES[0], sys_idx), (CLAIM_TEMPLATES[1], med_idx)):
+        if not hits:
+            continue
+        num, body = hits[0]
+        m = template_regex(t).match(body)
+        if not m:
+            vio.append({"key": t.key, "label": t.label, "section": "权利要求书", "kind": "mismatch",
+                        "message": f"权{num} {t.label}偏离模板——须逐字为『{t.text}』（编号头外只填槽位；"
+                                   f"「其特征在于」位置、「权利要求1至N任一项」写法均不得改）",
+                        "evidence": _mismatch_detail(t, body)})
+            continue
+        n = int(m.group("N"))
+        if expect_n is not None and n != expect_n:
+            vio.append({"key": t.key, "label": t.label, "section": "权利要求书", "kind": "mismatch",
+                        "message": f"权{num} 引用范围「权利要求1至{n}」应为「1至{expect_n}」（= 系统权编号 − 1，覆盖全部方法权）",
+                        "evidence": body[-40:]})
+    return vio
+
+
 # ---------------------------------------------------------------- 输入适配
 
 def md_paragraphs(md_path: Path) -> tuple[list[str], dict[int, str]]:
@@ -295,7 +346,7 @@ def docx_paragraphs(document_xml: str) -> tuple[list[str], dict[int, str]]:
     """DOCX document.xml → (接受修订态段落文本列表, {段索引: 章节名})。章节名按分节4 标题段推断。"""
     paras, secs = [], {}
     cur = None
-    for p in re.findall(r"<w:p\b[^>]*>.*?</w:p>", document_xml, re.S):
+    for p in re.findall(r"<w:p(?:\s[^>]*)?/>|<w:p(?:\s[^>]*)?>.*?</w:p>", document_xml, re.S):  # 含自闭合 <w:p/>
         q = re.sub(r"<w:del\b.*?</w:del>", "", p, flags=re.S)
         t = "".join(re.findall(r"<w:t\b[^>]*>([^<]*)</w:t>", q)).strip()
         if not t:
@@ -346,6 +397,9 @@ def main(argv: list[str] | None = None) -> int:
         claims_text = args.md.read_text(encoding="utf-8")
     has_system, has_medium = detect_subjects(claims_text)
     vio = check_paragraphs(paras, has_system, has_medium, secs)
+    if args.claims_md and args.claims_md.exists():
+        cl, _ = md_paragraphs(args.claims_md)
+        vio += check_claims(cl)
     if args.json:
         import json
         print(json.dumps({"has_system": has_system, "has_medium": has_medium, "violations": vio},

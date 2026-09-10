@@ -1330,9 +1330,12 @@ class BoilerplateTest(unittest.TestCase):
                 lines.append(s)
             md = Path(td) / "全文稿.md"
             claims = Path(td) / "权要稿.md"
-            claims.write_text("## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据。\n\n"
-                              "9.一种测试系统，其特征在于，包括存储器。\n\n"
-                              "10.一种计算机可读存储介质，其上存储有计算机程序。\n", encoding="utf-8")
+            claims.write_text(
+                "## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据。\n\n"
+                "9.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+                "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。\n\n"
+                "10.一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
+                "所述计算机程序被处理器执行时实现权利要求1至8任一项所述的方法。\n", encoding="utf-8")
             md.write_text("\n\n".join(lines) + "\n", encoding="utf-8")
             res = run_script_allow_fail("boilerplate.py", "check", "--md", md, "--claims-md", claims)
             self.assertEqual(res.returncode, 0, res.stdout)
@@ -1342,6 +1345,90 @@ class BoilerplateTest(unittest.TestCase):
             res = run_script_allow_fail("boilerplate.py", "check", "--md", md, "--claims-md", claims)
             self.assertEqual(res.returncode, 1)
             self.assertIn("第一方面句", res.stdout)
+
+
+    def test_claim_templates_rule51(self):
+        """规则 51：权9/权10 整条逐字；H2609029 交付稿形态（其特征在于前移 + 「如…中任一项」）FAIL；N 须 = 系统权编号−1。"""
+        import json
+        good = ("## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据；\n生成信号。\n\n"
+                "9.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+                "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。\n\n"
+                "10.一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
+                "所述计算机程序被处理器执行时实现权利要求1至8任一项所述的方法。\n")
+
+        def run(md_text):
+            with tempfile.TemporaryDirectory() as tmp:
+                md = Path(tmp) / "权要稿.md"
+                md.write_text(md_text, encoding="utf-8")
+                res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "claims-draft", "--json")
+                data = json.loads(res.stdout)
+                return [v for v in data["violations"] if "模板句" in v["location"]]
+
+        self.assertEqual(run(good), [])
+        h2609029 = good.replace(
+            "9.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+            "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。",
+            "9.一种测试系统，其特征在于，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+            "所述处理器执行所述计算机程序时实现如权利要求1至8中任一项所述的方法。")
+        hits = run(h2609029)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("系统权", hits[0]["location"])
+        wrong_n = good.replace("被处理器执行时实现权利要求1至8", "被处理器执行时实现权利要求1至7")
+        hits = run(wrong_n)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("应为「1至8」", hits[0]["message"])
+
+    def test_benefit_count_rule52(self):
+        """规则 52：有益效果恰 3 项 hard；字数出 400–450 区间只出 suspect S-L6-benefit-length。"""
+        import json
+        bp = self._mod()
+        paras, _ = self._canonical(bp)
+        sec_of = {tp.key: tp.section for tp in bp.TEMPLATES}
+        keys = [tp.key for tp, _ in bp.render("测试方法", "测试系统", True)]
+        item = "（{n}）本发明通过对输入数据滤波，抑制了噪声干扰，实现了误报率的降低。"
+        filler = "在步骤S11中，获取输入数据并进行滤波处理得到滤波结果。\n\n" * 60
+
+        def build(n_items):
+            lines, cur = [], None
+            for k, s in zip(keys, paras):
+                if sec_of[k] != cur:
+                    cur = sec_of[k]
+                    lines.append(f"## {cur}")
+                lines.append(s)
+                if k == "benefit_intro":
+                    lines.extend(item.format(n=i) for i in range(1, n_items + 1))
+            return "\n\n".join(lines) + "\n\n" + filler
+
+        def run(md_text):
+            with tempfile.TemporaryDirectory() as tmp:
+                md = Path(tmp) / "全文稿.md"
+                md.write_text(md_text, encoding="utf-8")
+                res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "full-draft", "--json")
+                return json.loads(res.stdout)
+
+        d = run(build(3))
+        self.assertEqual([v for v in d["violations"] if "有益效果分项数" in v["evidence"]], [])
+        self.assertTrue(any(s.get("suspect_id") == "S-L6-benefit-length" for s in all_suspects(d)))
+        d = run(build(4))
+        self.assertTrue(any("恰好 3 项" in v["message"] and "实际 4 项" in v["message"] for v in d["violations"]))
+
+    def test_skeleton_blank_paragraph_check(self):
+        """空段：干净稿分节3/4 出现无文本无图的 <w:p> → FAIL；权要稿分节1 的模板空占位不计。"""
+        name = "测试控制方法及系统"
+        helper = PatentScriptSmokeTests()
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            good = helper._claims_docx_from_template(tmp, name)
+            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "权要", "--invention-name", name)
+            self.assertIn("[PASS] 分节3/4·无空段（0 个）", res.stdout)
+            bad = tmp / "blank.docx"
+            title = ('<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/>'
+                     '<w:ind w:firstLine="0" w:firstLineChars="0"/><w:rPr><w:b/></w:rPr></w:pPr>'
+                     '<w:r><w:rPr><w:rFonts w:hint="eastAsia"/><w:b/></w:rPr>'
+                     '<w:t xml:space="preserve">背景技术</w:t></w:r></w:p>')
+            helper._mutate_docx(good, bad, lambda d: d.replace(title, "<w:p/>" + title, 1))
+            res = run_script_allow_fail("verify_docx_skeleton.py", bad, "--stage", "权要", "--invention-name", name)
+            self.assertIn("[FAIL] 分节3/4·无空段（1 个）", res.stdout)
 
 
 class InjectFulltextSmokeTest(unittest.TestCase):
