@@ -622,6 +622,27 @@ class PatentScriptSmokeTests(unittest.TestCase):
             "## 发明内容\n\n本发明提供一种方法，以解决现有技术无法自适应过滤、导致误报率高的问题。\n",
             ["标准收口", "必须唯一", "逐字包含", "以解决"]), [])
 
+    def test_check_hard_rules_claim1_step_cap_is_six(self):
+        """规则 1b: 权 1 主步骤硬上限 6 (王工 2026-09-10 H2609029 口径), 6 步放行、7 步 FAIL。"""
+        import json
+
+        def run_case(n_steps):
+            steps = "\n".join(f"步骤{i}处理数据；" for i in range(1, n_steps + 1))
+            md = "## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n" + steps + "\n"
+            with tempfile.TemporaryDirectory() as tmp:
+                md_path = Path(tmp) / "权要稿.md"
+                md_path.write_text(md, encoding="utf-8")
+                result = run_script_allow_fail(
+                    "check_hard_rules.py", "--md", md_path, "--stage", "claims-draft", "--json"
+                )
+                data = json.loads(result.stdout)
+                return [v for v in data["violations"] if "主步骤超过硬上限" in v["message"]]
+
+        self.assertEqual(run_case(6), [])
+        hits = run_case(7)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("硬上限 6 个 (实际 7)", hits[0]["message"])
+
     def test_check_hard_rules_suspect_channel(self):
         import json
 

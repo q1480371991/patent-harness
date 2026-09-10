@@ -58,6 +58,9 @@ FULL_DRAFT_REQUIRED_SECTIONS_ORDER = [
 # 说明书禁用数量词 (G6-1)
 FULL_DRAFT_FORBIDDEN_QUANTIFIERS = ["若干个", "多个"]
 
+# 权要 1 主步骤硬上限 (L1-1; 规则 1b)。王工 2026-09-10 H2609029 口径「最多 6 步」。
+CLAIM1_MAX_MAIN_STEPS = 6
+
 # 收尾装置/系统示意性说明段锚点 (docx-template.md G8-2 模板固定套话)
 # 「需要说明的是，以上所描述的…实施例仅仅是示意性的，其中所述作为分离部件说明的
 # 单元可以是或者也可以不是物理上分开的，…分布到多个网络单元上。…」
@@ -306,7 +309,11 @@ def check_claim1_length(lines: list[str], sections: dict, report: Report) -> Non
 
 
 def check_claim1_step_count(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 1b: 权要 1 主步骤最多不超过 5 个 (L1-1 硬上限; 3-5 个为宜属建议口径不在此报).
+    """规则 1b: 权要 1 主步骤最多不超过 6 个 (L1-1 硬上限; 3-5 个为宜属建议口径不在此报).
+
+    上限史: 初版 6 → 2026-08-15 收紧为 5 → 2026-09-10 按王工 H2609029 口径「最多 6 步」放回 6
+    (该案权 1 末步一步串 7 个子动作被判臃肿, 王工指示拆成第 6 步; 上限不是越紧越好,
+    过紧会把多个子动作挤进一步)。
 
     主步骤数 = 权要 1 块内非空行数 - 1 (扣除编号头行"1.一种...包括:");
     与 claims-format-standard 的"每个分号步骤独立成段"口径一致,
@@ -320,11 +327,11 @@ def check_claim1_step_count(lines: list[str], sections: dict, report: Report) ->
     if len(body_lines) < 2:
         return  # 未按分段格式撰写, 由断行检查项报
     n_steps = len(body_lines) - 1
-    if n_steps > 5:
+    if n_steps > CLAIM1_MAX_MAIN_STEPS:
         report.add(
             "L1-1", f"权利要求书 第{start + 1}行起",
             f"权要 1 主步骤数 = {n_steps}",
-            f"权要 1 主步骤超过硬上限 5 个 (实际 {n_steps}), 应合并同一技术链上的连续动作或将细节下沉从属权要",
+            f"权要 1 主步骤超过硬上限 {CLAIM1_MAX_MAIN_STEPS} 个 (实际 {n_steps}), 应合并同一技术链上的连续动作或将细节下沉从属权要",
         )
 
 
@@ -1467,7 +1474,7 @@ def check_judgment_sentence_pattern(lines: list[str], sections: dict, report: Re
 def check_substep_numbering(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 24: 子步骤禁 SXX1/步骤Sxxx 式编号 (L8-2, 原 impl-auditor 语义项 14 的编号半边).
 
-    主步骤编号为 S11..S15 (权 1 分句数硬上限 5, 两位数字); 具体实施方式出现
+    主步骤编号为 S11..S16 (权 1 分句数硬上限 6, 两位数字); 具体实施方式出现
     S+三位及以上数字即子步骤编号残留 (子步骤一律在"包括："后无编号分号列举)。
     LaTeX 公式中的下标写作 S_{11} 带下划线, 不匹配。仅 full-draft。
     """
