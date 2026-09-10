@@ -229,4 +229,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows GBK 控制台: 输出含全角字符, 裸跑 UnicodeEncodeError (H2609029 实测, 2026-09-10)。强制 UTF-8。
+    import sys as _sys
+    for _s in (_sys.stdout, _sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     raise SystemExit(main())

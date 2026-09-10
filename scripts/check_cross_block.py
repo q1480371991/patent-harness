@@ -191,6 +191,15 @@ def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None
         for prefix in ("所述", "并", "再", "然后"):
             if q.startswith(prefix):
                 q = q[len(prefix):]
+        # form③ 补充步骤包装剥离 (H2609029 实测盲区, 2026-09-08): 从权第三种合法形式
+        # "其特征在于，在所述〔步骤〕之后/之前，所述方法还包括：" 的引用句被
+        # "在所述…之后" 包装, quote_re 提取出的 q 含包装词导致逐字匹配必失败.
+        # 剥掉包装后须满足其一: 内层步骤句逐字命中依附链原文 (合法 form③), 否则报错.
+        m3 = _re.match(r"在所述(.+?)(之后|之前)，所述方法还", q)
+        if m3:
+            q = m3.group(1)
+            if q.startswith("所述"):
+                q = q[len("所述"):]
         if len(q) < 8:
             continue
         chain = ancestors(it["num"])
@@ -445,4 +454,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows GBK 控制台: 输出含 GBK 外字符时裸跑 UnicodeEncodeError (H2609029 实测, 2026-09-10)。强制 UTF-8。
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     sys.exit(main())

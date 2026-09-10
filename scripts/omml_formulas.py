@@ -330,4 +330,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Windows GBK 控制台: OMML XML 含全角空格等 GBK 外字符, 裸跑会 UnicodeEncodeError
+    # 且 stdout 为空, json 消费方解析失败 (H2609029 实测, 2026-09-10)。强制 UTF-8。
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     sys.exit(main())

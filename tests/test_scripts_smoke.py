@@ -21,6 +21,7 @@ def run_script(script_name, *args):
     return subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / script_name), *map(str, args)],
         text=True,
+        encoding="utf-8",  # 脚本入口已 reconfigure UTF-8 (Windows GBK 实测), 两侧契约一致
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=True,
@@ -44,6 +45,7 @@ def run_script_allow_fail(script_name, *args):
     return subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / script_name), *map(str, args)],
         text=True,
+        encoding="utf-8",  # 同 run_script: 与脚本侧 UTF-8 输出契约一致
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
@@ -981,7 +983,7 @@ class PatentScriptSmokeTests(unittest.TestCase):
         env.pop("PYTHONPATH", None)
         proc = subprocess.run(
             [sys.executable, "-S", str(SCRIPTS_DIR / "check_env.py"), "--json"],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=env, check=False,
         )
         # 脚本本身不能因为 import 第三方失败而崩溃: returncode 只应是
@@ -1251,7 +1253,7 @@ class RuleAnchorGuardTest(unittest.TestCase):
     def _run_guard(self, root, *extra):
         return subprocess.run(
             [sys.executable, str(root / "scripts" / "verify_rule_anchors.py"), *extra],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
         )
 
     def test_baseline_clean_state_passes(self):

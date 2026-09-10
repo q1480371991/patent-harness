@@ -58,6 +58,15 @@ FULL_DRAFT_REQUIRED_SECTIONS_ORDER = [
 # 说明书禁用数量词 (G6-1)
 FULL_DRAFT_FORBIDDEN_QUANTIFIERS = ["若干个", "多个"]
 
+# 收尾装置/系统示意性说明段锚点 (docx-template.md G8-2 模板固定套话)
+# 「需要说明的是，以上所描述的…实施例仅仅是示意性的，其中所述作为分离部件说明的
+# 单元可以是或者也可以不是物理上分开的，…分布到多个网络单元上。…」
+# 该段为模板法定套话 (王工 H2608165 定稿亲手保留版), 含「可以」「多个」等禁词字面——
+# 禁词/数量词扫描对其整行豁免。H2609029 实测教训: 1稿曾为过闸门删段, 属闸门误报
+# 引发的错误决策 (套话报警不删段, 修闸门不修稿)。锚点取段内独有短语
+# 「实施例仅仅是示意性」, 正常正文不会命中。
+BOILER_INDICATIVE_ANCHOR = "实施例仅仅是示意性"
+
 # -----------------------------------------------------------------------------
 # 数据结构
 # -----------------------------------------------------------------------------
@@ -699,6 +708,8 @@ def check_forbidden_words(lines: list[str], sections: dict, report: Report, stag
     for (label, start, end) in scan_range:
         for i in range(start, end):
             line = lines[i]
+            if BOILER_INDICATIVE_ANCHOR in line:
+                continue  # 收尾装置/系统示意性说明段 = 模板固定套话, 整行豁免(见常量注释)
             for w in FORBIDDEN_WORDS:
                 if w in line:
                     report.add(
@@ -993,6 +1004,8 @@ def check_full_draft_forbidden_quantifiers(lines: list[str], sections: dict, rep
         if "权利要求书" in title:
             continue
         for i in range(start, end):
+            if BOILER_INDICATIVE_ANCHOR in lines[i]:
+                continue  # 收尾套话段豁免(同 check_forbidden_words)
             for w in FULL_DRAFT_FORBIDDEN_QUANTIFIERS:
                 pos = lines[i].find(w)
                 if pos < 0:
@@ -2575,4 +2588,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows GBK 控制台: 报告含 ⚠/全角空格等 GBK 外字符, 裸跑会 UnicodeEncodeError
+    # 且 stdout 半截/为空, --json 消费方解析失败 (H2609029 实测, 2026-09-10)。
+    # 强制 UTF-8 输出, 与 PYTHONIOENCODING=utf-8 等效但不依赖调用方带环境变量。
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     sys.exit(main())
