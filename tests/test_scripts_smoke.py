@@ -1240,6 +1240,110 @@ class FigureScriptsSmokeTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
 
 
+class BoilerplateTest(unittest.TestCase):
+    """boilerplate.py：模板句唯一副本的渲染与逐字校验（H2609029 六处模板问题的根治）。"""
+
+    def _mod(self):
+        import importlib
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        return importlib.import_module("boilerplate")
+
+    def _canonical(self, bp):
+        """render 输出 = 一份逐字合规的段落集合（自由槽位填上示意内容）。"""
+        paras, secs = [], {}
+        for tpl, s in bp.render("测试方法", "测试系统", True):
+            s = s.replace("{串述}", "获取数据，生成信号").replace("{手段}", "滤波").replace("{效果}", "降噪")
+            secs[len(paras)] = tpl.section
+            paras.append(s)
+        return paras, secs
+
+    def test_render_covers_all_required_and_check_passes(self):
+        bp = self._mod()
+        paras, secs = self._canonical(bp)
+        keys = [tpl.key for tpl, _ in bp.render("测试方法", "测试系统", True)]
+        self.assertEqual(keys, ["aspect1", "aspect2", "aspect3", "benefit_intro", "fig1", "opening",
+                                "intro", "summary", "embod2", "correspond", "indicative", "closing"])
+        self.assertIn("第一方面，为了解决上述技术问题，本发明提供了一种测试方法，包括：", paras)
+        self.assertIn("图1为本发明第一实施例提供的测试方法的流程示意图。", paras)
+        self.assertEqual(bp.check_paragraphs(paras, True, True, secs), [])
+        # 无系统权/介质权的案子：系统类模板不渲染、也不要求
+        keys2 = [tpl.key for tpl, _ in bp.render("测试方法", None, False)]
+        self.assertNotIn("aspect2", keys2)
+        self.assertNotIn("embod2", keys2)
+        p2 = [s for _, s in bp.render("测试方法", None, False)]
+        p2 = [s.replace("{串述}", "a").replace("{手段}", "b").replace("{效果}", "c") for s in p2]
+        self.assertEqual(bp.check_paragraphs(p2, False, False), [])
+
+    def test_check_catches_h2609029_defects(self):
+        bp = self._mod()
+        paras, secs = self._canonical(bp)
+
+        def run(mut):
+            ps = list(paras)
+            mut(ps)
+            return {(v["key"], v["kind"]) for v in bp.check_paragraphs(ps, True, True, secs)}
+
+        # ① 第一方面整句漏（H2609029 2稿）
+        self.assertIn(("aspect1", "missing"), run(lambda ps: ps.pop(0)))
+        # ② 附图说明漏「第一实施例」
+        self.assertIn(("fig1", "mismatch"), run(lambda ps: ps.__setitem__(
+            4, "图1为本发明实施例提供的测试方法的流程示意图。")))
+        # ③ 结束语用旧变体（偏离批注 21 定版）
+        self.assertIn(("closing", "mismatch"), run(lambda ps: ps.__setitem__(
+            len(ps) - 1, "以上所述的具体实施例，仅用于解释本发明，并不用于限定本发明的保护范围。")))
+        # ④ 第二实施例写「所述程序」
+        self.assertIn(("embod2", "mismatch"), run(lambda ps: ps.__setitem__(
+            8, ps[8].replace("所述处理器执行所述计算机程序", "所述处理器执行所述程序"))))
+        # ⑤ 示意性说明段被删（1稿为过闸门删段）
+        self.assertIn(("indicative", "missing"), run(lambda ps: ps.pop(10)))
+        # ⑥ 名称槽位不一致：入口句写了别的方法名
+        self.assertIn(("names", "name"), run(lambda ps: ps.__setitem__(
+            6, "如图1所示，本发明实施例提供的一种别的方法，包括：")))
+        # ⑦ 收尾顺序颠倒
+        def swap(ps):
+            ps[7], ps[8] = ps[8], ps[7]
+        self.assertIn(("order", "order"), run(swap))
+        # ⑧ 可选存储介质段：写对了不报，写偏了报
+        ok = list(paras)
+        ok.insert(10, "需要说明的是，本发明实施例还提供了一种计算机可读存储介质，其上存储有计算机程序，"
+                      "所述计算机程序被处理器执行时实现如上述所述的方法。")
+        secs_ok = {i: ("具体实施方式" if i >= 5 else secs.get(i)) for i in range(len(ok))}
+        self.assertEqual(bp.check_paragraphs(ok, True, True, secs_ok), [])
+        bad = list(ok)
+        bad[10] = bad[10].replace("其上存储有", "所述计算机可读存储介质上存储有")
+        self.assertIn(("medium_spec", "mismatch"),
+                      {(v["key"], v["kind"]) for v in bp.check_paragraphs(bad, True, True, secs_ok)})
+
+    def test_cli_check_on_case_md(self):
+        """CLI：对一份含偏离的 md 报 FAIL、exit 1；修正后 exit 0。"""
+        bp = self._mod()
+        with tempfile.TemporaryDirectory() as td:
+            paras, _ = self._canonical(bp)
+            sec_of = {t.key: t.section for t in bp.TEMPLATES}
+            keys = [tpl.key for tpl, _ in bp.render("测试方法", "测试系统", True)]
+            lines, cur = [], None
+            for k, s in zip(keys, paras):
+                if sec_of[k] != cur:
+                    cur = sec_of[k]
+                    lines.append(f"## {cur}")
+                lines.append(s)
+            md = Path(td) / "全文稿.md"
+            claims = Path(td) / "权要稿.md"
+            claims.write_text("## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据。\n\n"
+                              "9.一种测试系统，其特征在于，包括存储器。\n\n"
+                              "10.一种计算机可读存储介质，其上存储有计算机程序。\n", encoding="utf-8")
+            md.write_text("\n\n".join(lines) + "\n", encoding="utf-8")
+            res = run_script_allow_fail("boilerplate.py", "check", "--md", md, "--claims-md", claims)
+            self.assertEqual(res.returncode, 0, res.stdout)
+            md.write_text(("\n\n".join(lines) + "\n").replace(
+                "第一方面，为了解决上述技术问题，本发明提供了一种测试方法，包括：",
+                "第一方面，本发明提供一种测试方法，包括："), encoding="utf-8")
+            res = run_script_allow_fail("boilerplate.py", "check", "--md", md, "--claims-md", claims)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("第一方面句", res.stdout)
+
+
 class InjectFulltextSmokeTest(unittest.TestCase):
     """inject_fulltext_docx.py + verify_docx_injection.py 冒烟：全文稿 md → 模板 DOCX 注入。
 
@@ -1250,28 +1354,46 @@ class InjectFulltextSmokeTest(unittest.TestCase):
 
     FULLTEXT_MD_FIXTURE = (
         "## 说明书摘要\n\n"
-        "本发明涉及测试领域，公开了一种测试方法，获取输入数据；根据输入数据确定中间结果；"
+        "本发明涉及测试领域，公开了一种测试方法及系统，获取输入数据；根据输入数据确定中间结果；"
         "根据中间结果生成控制信号。本发明实现了测试效果。\n\n"
         "## 摘要附图\n\n图1\n\n"
         "## 发明内容\n\n"
-        "本发明提供一种测试方法，包括：\n"
+        "本发明提供了一种测试方法及系统，以解决现有技术误报率高的技术问题。\n\n"
+        "第一方面，为了解决上述技术问题，本发明提供了一种测试方法，包括：\n"
         "获取输入数据；\n"
         "根据所述输入数据确定所述中间结果；\n"
         "根据所述中间结果生成所述控制信号。\n\n"
-        "## 附图说明\n\n图1为测试方法流程示意图。\n\n"
+        "第二方面，本发明提供一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上"
+        "运行的计算机程序，所述处理器执行所述计算机程序时实现如上所述的方法。\n\n"
+        "相比于现有技术，本发明具有如下有益效果：\n\n"
+        "（1）本发明通过对输入数据滤波，抑制了噪声，实现了误报率的降低。\n\n"
+        "## 附图说明\n\n图1为本发明第一实施例提供的测试方法的流程示意图。\n\n"
         "## 具体实施方式\n\n"
+        "下面将结合本发明实施例中的附图，对本发明实施例中的技术方案进行清楚、完整地描述，"
+        "显然，所描述的实施例仅仅是本发明一部分实施例，而不是全部的实施例。"
+        "基于本发明中的实施例，本领域普通技术人员在没有作出创造性劳动前提下"
+        "所获得的所有其他实施例，都属于本发明保护的范围。\n\n"
+        "如图1所示，本发明实施例提供的一种测试方法，包括：\n\n"
         "在步骤S11中，获取输入数据，包括：读取传感器数据；对传感器数据滤波。\n\n"
         "其中，核函数的表达式为：\n\n"
         r"K(x, y) = \exp(-\gamma \|x - y\|^{2})" "\n\n"
         "式中，$K(x, y)$ 为核函数输出，$\\gamma$ 为核参数，$\\|x - y\\|$ 为欧氏距离，"
         "本实施例中取 $\\gamma=0.5$。\n\n"
-        "综上所述，本发明公开了一种测试方法。本发明实现了测试效果。\n\n"
-        "本发明第二实施例提供了一种测试系统，包括存储器、处理器及存储在存储器上并可在"
-        "处理器上运行的计算机程序，所述处理器执行所述计算机程序时实现上述测试方法的步骤。\n\n"
+        "综上所述，本发明公开了一种测试方法，获取输入数据，确定中间结果，生成控制信号。"
+        "本发明通过对输入数据滤波，实现了误报率的降低。\n\n"
+        "本发明第二实施例提供了一种测试系统，包括：存储器、处理器及存储在存储器上并可在处理器上"
+        "运行的计算机程序，所述处理器执行所述计算机程序时实现如上述所述的方法。\n\n"
         "需要说明的是，本发明实施例提供的一种测试系统用于执行上述实施例的一种测试方法的"
         "所有流程步骤，两者的工作原理和有益效果一一对应，因而不再赘述。\n\n"
+        "需要说明的是，以上所描述的系统实施例仅仅是示意性的，其中所述作为分离部件说明的单元"
+        "可以是或者也可以不是物理上分开的，作为单元显示的部件可以是或者也可以不是物理单元，"
+        "即可以位于一个地方，或者也可以分布到多个网络单元上。可以根据实际需要选择其中的部分"
+        "或者全部模块来实现本实施例方案的目的。本领域普通技术人员在不付出创造性劳动的情况下，"
+        "即可理解并实施。\n\n"
         "以上所述的具体实施例，对本发明的目的、技术方案和有益效果进行了进一步的详细说明，"
-        "应当理解，以上所述仅为本发明的具体实施例而已，并不用于限定本发明的保护范围。\n"
+        "应当理解，以上所述仅为本发明的具体实施例而已，并不用于限定本发明的保护范围。"
+        "特别指出，对于本领域技术人员来说，凡在本发明的精神和原则之内，所做的任何修改、"
+        "等同替换、改进等，均应包含在本发明的保护范围之内。\n"
     )
 
     def _unpack_template(self, dest: Path):
@@ -1334,11 +1456,12 @@ class InjectFulltextSmokeTest(unittest.TestCase):
             result = run_script_allow_fail(
                 "verify_docx_injection.py", out, "--md", md,
             )
-            # 公式/骨架/标题/套话项应 PASS；图1 drawing 项预期 FAIL（本测试未注图）
+            # 公式/骨架/标题/模板句项应 PASS；图1 drawing 项预期 FAIL（本测试未注图）
             self.assertIn("[PASS] 块公式 oMathPara=1", result.stdout)
             self.assertIn("[PASS] 行内 oMath=", result.stdout)
             self.assertIn("[PASS] sectPr=5", result.stdout)
             self.assertIn("[PASS] $残留=0", result.stdout)
+            self.assertIn("[PASS] 模板句逐字", result.stdout)
             self.assertIn("[FAIL] 图1 drawing=0", result.stdout)  # 未注图，预期失败
 
     # ---- 权要三章注入（H2609029 审核v1 格式乱套的根治：手填 → 脚本模板段） ----

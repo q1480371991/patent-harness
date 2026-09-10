@@ -16,6 +16,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys as _sys
+from pathlib import Path as _Path
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import boilerplate  # 模板句唯一副本 (规则 47)
 import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -1246,127 +1251,60 @@ def check_benefit_enumeration(lines: list[str], sections: dict, report: Report, 
                 )
 
 
-# ---------------------------------------------------------------- 规则 47: 法律套话逐字断言
+# ---------------------------------------------------------------- 规则 47: 模板句逐字断言
 #
 # 立项根因 (H2608165 全文审核v1, 王工三条批注 8/9/10「未按照模板套话来写」「不要改模板」
-# 「不要删减模板」): 分离式工作流从**权要 DOCX** 前向拷贝, 权要稿只含权利要求书+技术领域+
-# 背景技术, 开篇段/有益效果/收尾套话**全靠主 agent 从 md 生成** —— 套话原文第一次经过
-# 撰写者之手。而 `implementation.md` W08 条引用开篇段时用了省略号 (只引到"一部分实施例……"),
-# 主 agent 照该引文抄, 抄出 70 字残句 (母版原文 130 字, 缺后 47 字)。
-#
-# ★ 五案实测 (2026-09-01, 直读 docs/全文稿.md) —— 这是本规则只上两段的依据:
-#   开篇段:        五案全 130 字、逐字同 (仅"作出/做出"两种)  → 可逐字断言, 零误报
-#   方法-系统对应:  五案全同骨架, 只有发明名称在变            → 可逐字断言 (骨架)
-#   第二实施例系统: 五案骨架同, "存储在(所述)存储器上"两种     → 断言骨架, 放宽"所述"
-#   结束语:        五案**五种**写法 (142/141/121/86/81 字)   → **不做逐字**, 维持规则 21 锚点
-#   装置示意性说明: 五案**全缺**                              → 不进必查项
-#   优选实施例引入: 五案**全缺**                              → 不进必查项
-# ⚠️ 结束语若按母版 142 字做逐字, X2608107 定稿 (81 字) 与 H2608040 定稿 (121 字) 全判
-#    FAIL —— 那是闸门比审核人还严的误报形态 (外置根因: 假信号比漏检更坏), 故明确不做。
-#
-# 口径优先级 (用户 2026-09-01 定): **王工口头口径 > 母 skill > 新模板**。
-# ⚠️ `assets/docx/最新-申请文件模板.docx` 第 44/45/77 段仍写"所述的方法**的步骤**",
-#    属模板未同步王工 2026-08-28「'的步骤'三个字全文去掉」口径; 本规则按口头口径,
-#    与既有规则 2b/46 一致 (五案定稿实测「的步骤」全为 0)。
-_BOILER_OPENING = (
-    "下面将结合本发明实施例中的附图，对本发明实施例中的技术方案进行清楚、完整地描述，"
-    "显然，所描述的实施例仅仅是本发明一部分实施例，而不是全部的实施例。"
-    "基于本发明中的实施例，本领域普通技术人员在没有作出创造性劳动前提下"
-    "所获得的所有其他实施例，都属于本发明保护的范围。"
-)
-# "作出" 为母版与新模板原文; H2608040/X2608107 两定稿写"做出" —— 允许, 不报 FAIL。
+# 「不要删减模板」): 套话原文第一次经过撰写者之手就被改写/删减 (开篇段 130 字抄成 70 字)。
+# 2026-09-10 升级 (H2609029 用户连抓 6 处模板问题: 第一方面整句漏、附图说明漏「第一实施例」、
+# 装置示意段被删、第二实施例/存储介质段措辞自改、结束语偏离王工批注 21 定版): 首版只上三段
+# 骨架、且为避免对旧定稿误报而放宽变体; 现按王工批注 21「不一致, 后续都按模板来」与用户
+# 「模板是填空题, 变量词之外一字不动; 能固定的用脚本固定」口径, **全部模板句逐字断言**,
+# 原文唯一副本与校验逻辑移入 `scripts/boilerplate.py` (同一份常量同时服务 md 层本规则、
+# DOCX 层 verify_docx_injection.py、以及落笔前 `boilerplate.py render` 填空渲染)。
+# 旧定稿的同义变体 (第一方面短式、第二实施例「所述程序」、五种结束语) 自本版起判 FAIL ——
+# 这是有意为之: 王工口径已从「容忍」转为「统一按模板」。
+_BOILER_OPENING = boilerplate._OPENING          # 兼容旧引用
 _BOILER_OPENING_VARIANT = _BOILER_OPENING.replace("作出创造性", "做出创造性")
-# 方法-系统对应段骨架 (发明名称为槽位, 不入断言)
-_BOILER_METHOD_SYSTEM = (
-    r"需要说明的是，本发明实施例提供的一种.{2,60}?系统用于执行上述实施例的一种"
-    r".{2,60}?方法的所有流程步骤，两者的工作原理和有益效果一一对应，因而不再赘述。"
-)
-# 第二实施例系统段骨架。★ 首版正则过紧, 五案实测误报 4 例, 已按下列三处自然差异放宽
-# (2026-09-01 回归 regress_boilerplate.py 抓出 —— 收紧型规则必须双向验证的实例):
-#   ① "包括：" / "包括" —— 冒号可有可无 (X2607043 无冒号)
-#   ② "存储在(所述)存储器上""可在(所述)处理器上" —— "所述"可有可无 (五案两种)
-#   ③ "执行所述程序时" / "执行所述计算机程序时" —— 两种都在定稿出现
-#   ④ 句末引用: "如上述所述的方法。"/"如上所述的方法。"/"上述〔全称〕方法。" 三种并存
-#      —— 王工 2026-08-28 定"所述的方法"为正确写法, 但**发明名称全称式不是违规**
-#      (X2607040/X2607134 定稿即全称式), 故句末只断言到"方法。"收口 + 不带"的步骤"。
-# 本规则的职责边界: 只拦"骨架被换掉/被删段"(如把存储器处理器那串删了、或整段改写),
-# 不拦上述四类同义变体 —— 后者由规则 46 (「的步骤」) 与规则 30 各自管辖, 不在此重复。
-_BOILER_SECOND_EMBODIMENT = (
-    r"本发明第二实施例提供了一种.{2,60}?系统，包括：?存储器、处理器及存储在(?:所述)?存储器上"
-    r"并可在(?:所述)?处理器上运行的计算机程序，所述处理器执行所述(?:计算机)?程序时实现"
-    r"(?:如上述所述的|如上所述的|上述)?.{0,40}?方法。"
-)
 
 
 def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
-                               stage: str) -> None:
-    """规则 47 (1级 hard): 三段法律套话逐字/骨架断言 (L8-1; 王工审核v1 批注 8/9/10).
+                               stage: str, claims_text: str = "") -> None:
+    """规则 47 (1级 hard): 模板句逐字断言 (L6-1 / L7 / L8-1 / G8-2 批注 21; 唯一副本 boilerplate.py).
 
-    与规则 21 (check_closing_boilerplate) 的分工: 规则 21 查**四锚点是否按序出现**
-    (结构层, 母 skill 已有, 本规则不动它); 本规则查**套话内容是否被改写或删减**
-    (内容层, 分离式工作流新增暴露面)。两者并存、不同维。
-
-    覆盖三段 (依据见上方五案实测表):
-      ① 开篇段 —— 逐字 (允许"作出/做出")
-      ② 方法-系统对应段 —— 骨架逐字, 发明名称填槽
-      ③ 第二实施例系统段 —— 骨架逐字, "所述"可选, 句末不得带"的步骤"
-    仅 full-draft。
+    覆盖 13 句: 第一方面 / 第二方面 / 第三方面 / 有益效果引入 / 附图说明图1 / 开篇段 /
+    集中罗列入口句 / 综上所述骨架 / 第二实施例 / 方法—系统对应 / 存储介质(可选) /
+    示意性说明 / 结束语; 另查名称槽位一致与收尾顺序。
+    与规则 21 (四锚点按序) 并存: 规则 21 管结构, 本规则管内容逐字。仅 full-draft。
     """
     if stage != "full-draft":
         return
     text = "\n".join(lines)
     # 豁免: 非真实全文稿的短样例 (单元测试 fixture / 半成品草稿), 与 L8-1 字数条同口径。
-    # 真实全文稿必含"具体实施方式"且远超 1000 字; 不足者不适用套话断言 —— 否则
-    # 每个 fixture 都会被判"缺开篇段", 属误报 (2026-09-01 smoke 实测)。
     if count_chinese(text) < 1000:
         return
-
-    # ① 开篇段
-    if _BOILER_OPENING not in text and _BOILER_OPENING_VARIANT not in text:
-        hit = next((ln.strip() for ln in lines
-                    if ln.strip().startswith("下面将结合本发明实施例中的附图")), None)
-        if hit is None:
-            report.add(
-                "L8-1", "具体实施方式(开篇段)", "未检出开篇法律套话",
-                "缺开篇段法律套话; 须逐字照抄母版原文 130 字"
-                "(『下面将结合本发明实施例中的附图……都属于本发明保护的范围。』)",
-            )
-        else:
-            report.add(
-                "L8-1", "具体实施方式(开篇段)",
-                f"现为 {len(hit)} 字: {hit[:60]}…",
-                "开篇段法律套话被改写或删减 (母版原文 130 字, 允许『作出/做出』两种); "
-                "该段属纯法律套话, 一字不改照抄, 不得因压字数删减 —— "
-                "常见形态: 删末尾『基于本发明中的实施例，本领域普通技术人员在没有作出"
-                "创造性劳动前提下所获得的所有其他实施例，都属于本发明保护的范围。』47 字",
-            )
-
-    # ② 方法-系统对应段
-    if not re.search(_BOILER_METHOD_SYSTEM, text):
-        hit = next((ln.strip() for ln in lines
-                    if ln.strip().startswith("需要说明的是，本发明实施例提供的一种")), None)
+    paras, secs = [], {}
+    cur = None
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            if s.startswith("## "):
+                cur = s[3:].strip()
+            continue
+        secs[len(paras)] = cur
+        paras.append(s)
+    claims_src = claims_text or "\n".join(
+        ln for tt in sections if "权利要求书" in tt for ln in lines[sections[tt][0]:sections[tt][1]]
+    )
+    has_system, has_medium = boilerplate.detect_subjects(claims_src)
+    rule_of = {"发明内容": "L6-1", "附图说明": "L7", "具体实施方式": "L8-1", "全文": "L8-1"}
+    for v in boilerplate.check_paragraphs(paras, has_system, has_medium, secs):
         report.add(
-            "L8-1", "具体实施方式(方法-系统对应段)",
-            (f"现为: {hit[:70]}…" if hit else "未检出该段"),
-            "方法-系统对应段套话骨架不符; 须为『需要说明的是，本发明实施例提供的一种"
-            "〔发明名称〕系统用于执行上述实施例的一种〔发明名称〕方法的所有流程步骤，"
-            "两者的工作原理和有益效果一一对应，因而不再赘述。』(只换发明名称)",
-        )
-
-    # ③ 第二实施例系统段
-    if not re.search(_BOILER_SECOND_EMBODIMENT, text):
-        hit = next((ln.strip() for ln in lines
-                    if ln.strip().startswith("本发明第二实施例提供了一种")), None)
-        extra = ""
-        if hit and "的步骤" in hit:
-            extra = " ⚠️ 本段含『的步骤』——按王工 2026-08-28「『的步骤』三个字全文去掉」删除"
-        report.add(
-            "L8-1", "具体实施方式(第二实施例系统段)",
-            (f"现为: {hit[:70]}…" if hit else "未检出该段"),
-            "第二实施例系统段套话骨架不符; 须为『本发明第二实施例提供了一种〔发明名称〕系统，"
-            "包括：存储器、处理器及存储在存储器上并可在处理器上运行的计算机程序，"
-            "所述处理器执行所述程序时实现如上述所述的方法。』"
-            "(『所述存储器/所述处理器』可写可不写; 句末到『方法。』收口)" + extra,
+            rule_of.get(v["section"], "L8-1"),
+            f"{v['section']}(模板句·{v['label'].split('·', 1)[-1]})",
+            v["evidence"][:160],
+            v["message"] + " —— 落笔前用 `python scripts/boilerplate.py render --method-name … --system-name …` 渲染后整句粘贴",
         )
 
 
@@ -2484,7 +2422,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_full_draft_word_budget(md_path, claims_md, report, stage, draft_round)
     check_figure_numbering(lines, sections, report, stage)
     check_closing_boilerplate(lines, sections, report, stage)
-    check_boilerplate_verbatim(lines, sections, report, stage)
+    check_boilerplate_verbatim(lines, sections, report, stage, claims_text)   # 规则 47 (模板句逐字, boilerplate.py)
     check_benefit_enumeration(lines, sections, report, stage)
     check_benefit_item_pattern(lines, sections, report, stage)
     check_judgment_sentence_pattern(lines, sections, report, stage)

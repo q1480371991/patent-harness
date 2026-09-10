@@ -13,7 +13,8 @@ inject_fulltext_docx.py 注入 + insert_figures_docx.py 注图 + pack 之后、�
   - 无 `$` 残留、无裸 LaTeX 源码残留（`\frac`/`\sum`/`\gamma` 等出现在 `<w:t>` 内）
   - 无中西文间空格（汉字与西文数字/字母间不得留空白，W-SPACE）
   - 章节标题齐全（发明内容/附图说明/具体实施方式 各 ≥1 段含 `<w:b/>`，且顶格 firstLine=0）
-  - 套话锚点齐全（综上所述 / 本发明第二实施例 / 并不用于限定）
+  - 模板句逐字一致（13 句：第一/二/三方面、有益效果引入、附图说明图1、开篇段、入口句、综上所述骨架、
+    第二实施例、方法—系统对应、存储介质(可选)、示意性说明、结束语；唯一副本 boilerplate.py）
   - 图1 已注入（分节2 摘要附图 + 分节5 说明书附图各 ≥1 个 `<w:drawing>`）
 
 pandoc 缺失走 G6-1 回退时（inject 退出码 3），公式断言自动放宽为「无 `$` 残留」即可。
@@ -35,6 +36,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
 from inject_fulltext_docx import (  # noqa: E402
     parse_fulltext_md, collect_latex, _INLINE_RE,
 )
+import boilerplate  # noqa: E402  模板句唯一副本
 
 
 def _read_docx(docx_path: Path) -> str:
@@ -122,10 +124,13 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
                             has_b and top_left,
                             f"加粗={has_b} 顶格={top_left}"))
 
-    # 5) 套话锚点齐全
-    for anchor in ("综上所述", "本发明第二实施例", "并不用于限定"):
-        results.append((f"套话「{anchor}」", anchor in all_t,
-                        "缺失" if anchor not in all_t else "在"))
+    # 5) 模板句逐字（唯一副本 boilerplate.py；2026-09-10 由「锚点存在」升级为逐字比对——
+    #    H2609029 实测锚点在、句子却被改写/漏句: 第一方面整句漏、结束语偏离批注 21 定版）
+    paras, secs = boilerplate.docx_paragraphs(doc)
+    has_system, has_medium = boilerplate.detect_subjects("\n".join(paras))
+    vio = boilerplate.check_paragraphs(paras, has_system, has_medium, secs)
+    results.append((f"模板句逐字（系统权={has_system} 介质权={has_medium}）", not vio,
+                    "；".join(f"{v['label']}: {v['evidence'][:90]}" for v in vio) if vio else "13 句全部逐字一致"))
 
     # 6) 图1 注入（分节2 + 分节5 各 ≥1 drawing）—— 仅在 insert_figures 跑过后查
     drawings = len(re.findall(r"<w:drawing>", doc))
