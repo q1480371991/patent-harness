@@ -351,6 +351,12 @@ def check_title_format(doc_xml, styles_xml, reference_docx, invention_name, resu
 
 
 if __name__ == "__main__":
+    # Windows GBK 控制台: 输出含 GBK 外字符时裸跑 UnicodeEncodeError (H2609029 实测, 2026-09-10)。强制 UTF-8。
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     ap = argparse.ArgumentParser(description="专利模板 DOCX 骨架机械项一次性校验")
     ap.add_argument("docx", help="待校验的 .docx 文件")
     ap.add_argument("--stage", choices=["权要", "全文"], default="全文",

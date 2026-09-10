@@ -1255,6 +1255,156 @@ class InjectFulltextSmokeTest(unittest.TestCase):
             self.assertIn("[PASS] $残留=0", result.stdout)
             self.assertIn("[FAIL] 图1 drawing=0", result.stdout)  # 未注图，预期失败
 
+    # ---- 权要三章注入（H2609029 审核v1 格式乱套的根治：手填 → 脚本模板段） ----
+
+    CLAIMS_MD_FIXTURE = (
+        "## 权利要求书\n\n"
+        "1.一种测试控制方法，其特征在于，包括：\n"
+        "获取输入数据；\n"
+        "根据所述输入数据确定中间结果；\n"
+        "根据所述中间结果生成控制信号。\n\n"
+        "2.根据权利要求1所述的测试控制方法，其特征在于，所述根据所述输入数据确定中间结果，包括：\n"
+        "对所述输入数据滤波；\n"
+        "确定所述中间结果。\n\n"
+        "## 技术领域\n\n"
+        "本发明涉及测试技术领域，尤其涉及一种测试控制方法及系统。\n\n"
+        "## 背景技术\n\n"
+        "现有技术存在问题。\n\n"
+        "因此，现有技术存在无法自适应过滤、导致误报率高的问题。\n"
+    )
+    INVENTION_NAME = "测试控制方法及系统"
+
+    @staticmethod
+    def _sections(doc: str) -> list[list[str]]:
+        """按 5 个 sectPr 段切分，返回每分节的 <w:p> 列表（含该分节的 sectPr 段本身）。"""
+        paras = re.findall(r"<w:p\b[^>]*>.*?</w:p>", doc, re.S)
+        out, cur = [], []
+        for p in paras:
+            cur.append(p)
+            if "<w:sectPr" in p:
+                out.append(cur)
+                cur = []
+        if cur:
+            out.append(cur)
+        return out
+
+    @staticmethod
+    def _txt(p: str) -> str:
+        return "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p)).strip()
+
+    def _assert_claims_head_layout(self, doc: str):
+        """分节3 = 7 段权要（王工定稿标准段）；分节4 开头 = 发明名称/技术领域/背景技术。"""
+        secs = self._sections(doc)
+        self.assertEqual(len(secs), 5)
+        s3 = [p for p in secs[2] if "<w:sectPr" not in p]
+        self.assertTrue(self._txt(s3[0]).startswith("1.一种测试控制方法，其特征在于，包括："))
+        self.assertEqual(self._txt(s3[1]), "获取输入数据；")
+        self.assertEqual(len(s3), 7)  # 权1 头行+3 步 / 权2 头行+2 步，每行一段
+        std_ppr = '<w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr>'
+        std_rpr = '<w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr>'
+        for p in s3:
+            self.assertIn(std_ppr, p)          # 只有 1.5 倍行距
+            self.assertIn(std_rpr, p)          # run 只有 eastAsia hint
+            self.assertNotIn("szCs", p)        # 不重复声明字号（H2609029 1稿偏差）
+            self.assertNotIn("w:firstLine", p)  # 缩进继承 Normal
+        s4 = [p for p in secs[3] if "<w:sectPr" not in p]
+        texts = [self._txt(p) for p in s4]
+        self.assertEqual(texts[0], self.INVENTION_NAME)
+        name_p = s4[0]
+        for frag in ('<w:jc w:val="center"/>', "<w:b/>", '<w:sz w:val="32"/>',
+                     '<w:ind w:firstLine="0" w:firstLineChars="0"/>',
+                     '<w:spacing w:line="360" w:lineRule="auto"/>'):
+            self.assertIn(frag, name_p)
+        self.assertEqual(texts[1], "技术领域")
+        self.assertIn("<w:b/>", s4[1])
+        self.assertIn('<w:ind w:firstLine="0" w:firstLineChars="0"/>', s4[1])
+        self.assertTrue(texts[2].startswith("本发明涉及测试技术领域"))
+        self.assertEqual(texts[3], "背景技术")
+        self.assertEqual(texts[4], "现有技术存在问题。")
+        self.assertTrue(texts[5].startswith("因此，现有技术存在"))
+        return texts
+
+    def test_inject_claims_only_mode(self):
+        """权要一稿模式：只注三章头 + 权要；分节4 无模板套话残留；分节1/2 不动；二次注入被拒。"""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            cmd = tmp / "权要稿.md"
+            cmd.write_text(self.CLAIMS_MD_FIXTURE, encoding="utf-8")
+            unpacked = tmp / "unpack"
+            self._unpack_template(unpacked)
+            before = self._sections((unpacked / "word" / "document.xml").read_text(encoding="utf-8"))
+
+            run_script("inject_fulltext_docx.py", unpacked, "--claims-md", cmd,
+                       "--invention-name", self.INVENTION_NAME)
+            doc = (unpacked / "word" / "document.xml").read_text(encoding="utf-8")
+            texts = self._assert_claims_head_layout(doc)
+            # 分节4 只有三章头，模板 ...... 套话与发明内容都不在
+            self.assertEqual(len(texts), 6)
+            self.assertNotIn("......", "".join(texts))
+            self.assertNotIn("发明内容", "".join(texts))
+            # 分节1/2 原样未动（段数与模板一致）
+            after = self._sections(doc)
+            self.assertEqual(len(after[0]), len(before[0]))
+            self.assertEqual(len(after[1]), len(before[1]))
+
+            # 二次注入：分节3 已有权要 → 拒绝，且文件未被改动
+            snapshot = doc
+            result = run_script_allow_fail("inject_fulltext_docx.py", unpacked, "--claims-md", cmd,
+                                           "--invention-name", self.INVENTION_NAME)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("拒绝重复注入", result.stdout + result.stderr)
+            self.assertEqual((unpacked / "word" / "document.xml").read_text(encoding="utf-8"), snapshot)
+
+    def test_inject_claims_requires_invention_name_and_sections(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            cmd = tmp / "权要稿.md"
+            cmd.write_text(self.CLAIMS_MD_FIXTURE, encoding="utf-8")
+            unpacked = tmp / "unpack"
+            self._unpack_template(unpacked)
+            # 缺 --invention-name → argparse 错误（发明名称不得由脚本推导）
+            result = run_script_allow_fail("inject_fulltext_docx.py", unpacked, "--claims-md", cmd)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("--invention-name", result.stderr)
+            # 权要稿缺「背景技术」章 → 拒绝注入残缺稿
+            bad = tmp / "残缺.md"
+            bad.write_text(self.CLAIMS_MD_FIXTURE.split("## 背景技术")[0], encoding="utf-8")
+            result = run_script_allow_fail("inject_fulltext_docx.py", unpacked, "--claims-md", bad,
+                                           "--invention-name", self.INVENTION_NAME)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("背景技术", result.stdout + result.stderr)
+            # 既无 --md 也无 --claims-md → 参数错误
+            result = run_script_allow_fail("inject_fulltext_docx.py", unpacked)
+            self.assertEqual(result.returncode, 2)
+
+    @unittest.skipUnless(PANDOC_AVAILABLE, "pandoc 不可用, 跳过直写模式注入测试")
+    def test_inject_direct_mode_claims_plus_fulltext(self):
+        """直写全文稿：一次命令注完权要三章 + 全文四章，分节4 顺序 = 名称→技术领域→背景技术→发明内容…"""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            md = tmp / "全文稿.md"
+            md.write_text(self.FULLTEXT_MD_FIXTURE, encoding="utf-8")
+            cmd = tmp / "权要稿.md"
+            cmd.write_text(self.CLAIMS_MD_FIXTURE, encoding="utf-8")
+            unpacked = tmp / "unpack"
+            self._unpack_template(unpacked)
+
+            run_script("inject_fulltext_docx.py", unpacked, "--md", md,
+                       "--claims-md", cmd, "--invention-name", self.INVENTION_NAME)
+            doc = (unpacked / "word" / "document.xml").read_text(encoding="utf-8")
+            texts = self._assert_claims_head_layout(doc)
+            self.assertEqual(texts[6], "发明内容")
+            self.assertIn("附图说明", texts)
+            self.assertIn("具体实施方式", texts)
+            self.assertNotIn("......", "".join(texts))
+            # 分节3 只有权要，不含发明名称/技术领域（H2609029 1稿把三章塞进权利要求书分节）
+            secs = self._sections(doc)
+            s3_txt = "".join(self._txt(p) for p in secs[2])
+            self.assertNotIn("技术领域", s3_txt)
+            self.assertNotIn(self.INVENTION_NAME + "本发明涉及", s3_txt)
+            # 摘要仍在分节1
+            self.assertTrue(self._txt(secs[0][0]).startswith("本发明涉及测试领域"))
+
 
 class RuleAnchorGuardTest(unittest.TestCase):
     """verify_rule_anchors.py 的四类防护 (审计实测的四个洞).

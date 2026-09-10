@@ -1,16 +1,31 @@
 #!/usr/bin/env python3
-"""全文稿 md → 专利模板 DOCX 就地注入（摘要 / 发明内容 / 附图说明 / 具体实施方式）。
+"""全文稿 md → 专利模板 DOCX 就地注入（摘要 / 发明内容 / 附图说明 / 具体实施方式 + 权要三章）。
 
 承担全文稿章节（L4 摘要 + L6 发明内容 + L7 附图说明 + L8 具体实施方式）的 DOCX
 就地下笔，根治两类手写即兴 bug：① 行内 `$...$` 公式漏编译成原生 OMML；② md 单换行
-分隔的子步骤被挤进同一段。权要三章（权利要求书 / 技术领域 / 背景技术）仍由 docx
-执行层手填（SKILL.md 权要一稿 step 10 不动；直写全文稿在 step 9 同轮手填）。
+分隔的子步骤被挤进同一段。
+
+权要三章（权利要求书 / 发明名称 + 技术领域 + 背景技术）自 2026-09-10 起也由本脚本
+注入（`--claims-md` + `--invention-name`），不再由 docx 执行层手填。★ 根因（H2609029
+审核v1，王工「格式乱套，发明名称不一致，副标题也没了」）：直写模式下权要三章走手填，
+手填没有段落 XML 标准——权要 48 段全部漏行距 360、多写 szCs、「技术领域」「背景技术」
+标题段整个漏写、发明名称自行加「一种」、三章还被塞进权利要求书分节。三种标准段 XML
+逐字取自王工定稿（H2608165 审核v2 定稿 = 权要1稿原样保留），零自由发挥：
+  - 权要正文段 / 技术领域·背景技术正文段：pPr 只有 1.5 倍行距，run 只有 eastAsia hint
+    （字号/字体/首行缩进 2 字全部继承模板 Normal 样式）；
+  - 章节标题段：加粗 + 顶格；
+  - 发明名称段：居中 + 加粗 + 三号 + 顶格（G8-0b 六属性）。
+发明名称一律取 `--invention-name` 原样（王工给定名称，含不含「一种」都跟着给定值走，
+G1-1），脚本不加不减。
 
 设计约束（规则出处 docx-template.md G8-0/G8-0b/G8-1、global.md G6-1、案例 C-DOCX-7/8）：
 - 不用 paraId 定位（WPS 再保存重排 paraId），改用 5 个 `<w:sectPr>` 序数 + 段内文本
   特征定位（与 insert_figures_docx.py 同一已验证机制）。
 - 不清空 body、不删 sectPr / header / headerReference：摘要就地替换分节1占位段；L6-L8
   在分节4末个 sectPr 段前追加，并清掉模板预置的 `......` 占位套话段。
+- 权要 1..N → 分节3（清掉模板空占位段后插在该分节 sectPr 段前）；发明名称 → 技术领域 →
+  背景技术 → 分节4 开头（紧跟分节3 sectPr 段之后、「发明内容」标题之前）。分节3/4 已有
+  同类内容时拒绝重复注入（防止对前向拷贝稿/已注入稿二次叠加）。
 - 块公式（L8 独立成段的 LaTeX，无 `$`）：复用 omml_formulas.gen_omml_paragraphs 取整段
   `<w:p>…<m:oMathPara>…</w:p>`，不加 w:jc、不加 pStyle（G8-3）。
 - 行内公式（`$…$`）：每条唯一片段经 gen 生成后取内层 `<m:oMath>` 子元素，按 `$…$` 拆段
@@ -20,6 +35,13 @@
 - 默认一次性注完（输入是已过 md 闸门的审定全文稿）；`--block 章节` 可只注单章节调试。
 
 用法：
+    # 直写全文稿：权要三章 + 全文四章一次注完（空白模板 unpack 目录）
+    python3 scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md \
+        --claims-md docs/权要稿.md --invention-name "<王工给定名称>"
+    # 权要一稿：只注权要三章（空白模板 unpack 目录）
+    python3 scripts/inject_fulltext_docx.py <unpack目录> \
+        --claims-md docs/权要稿.md --invention-name "<王工给定名称>"
+    # 全文一稿（分离式，权要 DOCX 前向拷贝已带权要三章）：只注全文四章
     python3 scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md
     python3 scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md --block 具体实施方式
 """
@@ -66,6 +88,31 @@ _FALLBACK_MATH_RPR = (
     'w:cs="Times New Roman"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>'
 )
 
+# ---------------------------------------------------------------- 权要三章标准段（王工定稿逐字）
+# 三种段 XML 逐字取自 H2608165 审核v2 定稿（权要三章 = 权要1稿原样，王工未动一字一格），
+# 字号/字体/首行缩进 2 字由模板 Normal 样式继承，段内不重复声明（H2609029 1稿手填时多写
+# szCs、漏行距 360 即偏离此基准）。只替换 {TEXT}，不得增删属性。
+_CLAIM_BODY_TPL = (
+    '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr>'
+    '<w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr>'
+    '<w:t xml:space="preserve">{TEXT}</w:t></w:r></w:p>'
+)
+_SPEC_TITLE_TPL = (
+    '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/>'
+    '<w:ind w:firstLine="0" w:firstLineChars="0"/><w:rPr><w:b/></w:rPr></w:pPr>'
+    '<w:r><w:rPr><w:rFonts w:hint="eastAsia"/><w:b/></w:rPr>'
+    '<w:t xml:space="preserve">{TEXT}</w:t></w:r></w:p>'
+)
+_INVENTION_NAME_TPL = (
+    '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/>'
+    '<w:ind w:firstLine="0" w:firstLineChars="0"/><w:jc w:val="center"/>'
+    '<w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:pPr>'
+    '<w:r><w:rPr><w:rFonts w:hint="eastAsia"/><w:b/><w:sz w:val="32"/></w:rPr>'
+    '<w:t xml:space="preserve">{TEXT}</w:t></w:r></w:p>'
+)
+# 权要稿.md 三章标题（`## ` 级）；缺任一章即输入不完整、拒绝注入
+CLAIMS_SECTIONS = ("权利要求书", "技术领域", "背景技术")
+
 # md 章节标题 → 分节落位（G8-0 对照表）。摘要附图章节正文不注入（图1由
 # insert_figures_docx.py 单独注到分节2/5），仅作章节边界标记跳过。
 SECTION_TITLES = ("说明书摘要", "摘要附图", "发明内容", "附图说明", "具体实施方式")
@@ -111,6 +158,52 @@ def parse_fulltext_md(md_path: Path) -> list[dict]:
         else:
             blocks.append({"kind": "paragraph", "text": stripped, "section": section})
     return blocks
+
+
+def parse_claims_md(md_path: Path) -> dict[str, list[str]]:
+    """权要稿 md → {章节名: [每行一段的正文]}，章节 = `## 权利要求书 / 技术领域 / 背景技术`。
+
+    每个非空行各自成段（权要编号头行、每个分号步骤各占一段，契合 claims-format-standard
+    「编号开头单独成段、每个分号步骤单独成段」）；front-matter 与 `# ` 一级标题跳过；
+    三章缺任一即输入不完整（SystemExit），不静默注入残缺稿。
+    """
+    raw = md_path.read_text(encoding="utf-8")
+    if raw.startswith("---"):
+        end = raw.find("\n---\n", 4)
+        if end != -1:
+            raw = raw[end + len("\n---\n"):]
+    out: dict[str, list[str]] = {}
+    cur: str | None = None
+    for line in raw.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("## "):
+            cur = s[3:].strip()
+            out.setdefault(cur, [])
+            continue
+        if s.startswith("# "):
+            continue
+        if cur is not None:
+            out[cur].append(s)
+    missing = [k for k in CLAIMS_SECTIONS if not out.get(k)]
+    if missing:
+        raise SystemExit(f"ERROR\t权要稿 md 缺章节或章节为空：{missing}（需 `## ` 级标题 {CLAIMS_SECTIONS}）")
+    return out
+
+
+def render_claims_paragraphs(claims: dict[str, list[str]], invention_name: str
+                             ) -> tuple[list[str], list[str]]:
+    """→ (分节3 权要段列表, 分节4 头部段列表 = 发明名称 + 技术领域 + 背景技术)。
+
+    发明名称段文本 = invention_name 原样（不加不减「一种」，G1-1 跟给定名称走）。
+    """
+    claim_paras = [_CLAIM_BODY_TPL.format(TEXT=escape(l)) for l in claims["权利要求书"]]
+    head: list[str] = [_INVENTION_NAME_TPL.format(TEXT=escape(invention_name.strip()))]
+    for title in ("技术领域", "背景技术"):
+        head.append(_SPEC_TITLE_TPL.format(TEXT=title))
+        head.extend(_CLAIM_BODY_TPL.format(TEXT=escape(l)) for l in claims[title])
+    return claim_paras, head
 
 
 def collect_latex(blocks: list[dict]) -> tuple[list[str], list[str]]:
@@ -363,61 +456,175 @@ def inject(unpacked_dir: Path, rendered_by_section: dict[str, list[str]],
     return stats
 
 
+_PARA_RE = re.compile(r"<w:p\b[^>]*>.*?</w:p>", re.S)
+
+
+def _para_text(seg: str) -> str:
+    return "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", seg)).strip()
+
+
+def inject_claims(unpacked_dir: Path, claim_paras: list[str], head_paras: list[str],
+                  stats: dict, clean_sect4: bool) -> dict:
+    """权要三章就地注入：权要 1..N → 分节3；发明名称/技术领域/背景技术 → 分节4 开头。
+
+    - 分节3：清掉模板空占位段，权要段插在分节3 sectPr 段前。分节3 已有正文（非空段）
+      即拒绝——那是前向拷贝稿或已注入稿，二次注入会叠出两份权要。
+    - 分节4：头部段插在分节3 sectPr 段之后（=分节4 首段之前）。分节4 已有「技术领域」
+      标题段同样拒绝。`clean_sect4=True`（权要一稿模式，无全文注入）时先清掉分节4 内模板
+      预置的 `......` 占位套话段与空占位段——权要稿分节4 只显示三章头（G8-0 权要稿列；
+      H2608165 权要1稿实测结构），不留模板套话。
+    - 不动分节1/2/5，不动任何 sectPr / header。
+    """
+    doc_path = unpacked_dir / "word" / "document.xml"
+    doc = doc_path.read_text(encoding="utf-8")
+    sp = _section_sectpr_positions(doc)
+    if len(sp) != 5:
+        raise SystemExit(f"ERROR\tsectPr 数量 {len(sp)}（模板家族应为 5），停止注入")
+
+    # ---- 分节3：权利要求书 ----
+    _, p2_end = find_paragraph_span(doc, sp[1])
+    p3_start, p3_end = find_paragraph_span(doc, sp[2])
+    region3 = doc[p2_end:p3_start]
+    existing3 = [_para_text(m.group(0)) for m in _PARA_RE.finditer(region3)]
+    if any(existing3):
+        raise SystemExit("ERROR\t分节3（权利要求书）已有正文，拒绝重复注入权要："
+                         f"首段「{next(t for t in existing3 if t)[:30]}」")
+    region3_clean, n_blank3 = _PARA_RE.subn("", region3)
+    stats["claims_blank_removed"] = n_blank3
+    doc = doc[:p2_end] + region3_clean + "".join(claim_paras) + doc[p3_start:]
+    stats["claims_paragraphs"] = len(claim_paras)
+
+    # ---- 分节4 开头：发明名称 + 技术领域 + 背景技术 ----
+    sp = _section_sectpr_positions(doc)
+    _, p3_end = find_paragraph_span(doc, sp[2])
+    p4_start, _ = find_paragraph_span(doc, sp[3])
+    region4 = doc[p3_end:p4_start]
+    if any(_para_text(m.group(0)) in ("技术领域", "背景技术") for m in _PARA_RE.finditer(region4)):
+        raise SystemExit("ERROR\t分节4 已有「技术领域/背景技术」标题段，拒绝重复注入权要三章头")
+    if clean_sect4:
+        def _drop(m: re.Match) -> str:
+            seg = m.group(0)
+            txt = _para_text(seg)
+            if _PLACEHOLDER_QMARK in txt or any(p in txt for p in _PLACEHOLDER_PATTERNS):
+                stats["placeholders_removed"] += 1
+                return ""
+            if _is_blank_placeholder(seg):
+                stats["blank_paras_removed"] += 1
+                return ""
+            return seg
+        region4 = _PARA_RE.sub(_drop, region4)
+    doc = doc[:p3_end] + "".join(head_paras) + region4 + doc[p4_start:]
+    stats["spec_head_paragraphs"] = len(head_paras)
+
+    doc_path.write_text(doc, encoding="utf-8")
+    stats["sectpr_kept"] = len(_section_sectpr_positions(doc))
+    return stats
+
+
 # ---------------------------------------------------------------- 主流程
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("unpacked", type=Path, help="docx skill 的 unpack 目录")
-    parser.add_argument("--md", type=Path, required=True, help="已过闸门的审定全文稿.md")
+    parser.add_argument("--md", type=Path, default=None,
+                        help="已过闸门的审定全文稿.md（注 L4+L6+L7+L8；权要一稿模式可省）")
     parser.add_argument("--block", choices=list(SECTION_TITLES), default=None,
                         help="只注指定单章节（调试用）；缺省一次性注完 L4+L6+L7+L8")
+    parser.add_argument("--claims-md", type=Path, default=None,
+                        help="已过闸门的权要稿.md：权要 1..N 注分节3，发明名称+技术领域+背景技术注分节4 开头"
+                             "（直写全文稿 / 权要一稿用；分离式全文一稿的前向拷贝稿已带三章，勿传）")
+    parser.add_argument("--invention-name", default=None,
+                        help="王工给定的案件名称原样（facts.md 第 0 节真源），作分节4 首段发明名称；"
+                             "含不含「一种」都照给定值写。--claims-md 时必传")
     args = parser.parse_args(argv)
 
-    if not args.md.exists():
+    if args.md is None and args.claims_md is None:
+        parser.error("至少需要 --md（全文四章）或 --claims-md（权要三章）之一")
+    if args.claims_md is not None and not (args.invention_name or "").strip():
+        parser.error("--claims-md 必须同时传 --invention-name（发明名称不得由脚本推导或留空）")
+    if args.block and args.md is None:
+        parser.error("--block 需要 --md")
+    if args.md is not None and not args.md.exists():
         raise SystemExit(f"ERROR\t全文稿 md 不存在：{args.md}")
+    if args.claims_md is not None and not args.claims_md.exists():
+        raise SystemExit(f"ERROR\t权要稿 md 不存在：{args.claims_md}")
     if not (args.unpacked / "word" / "document.xml").exists():
         raise SystemExit(f"ERROR\tunpack 目录无效：{args.unpacked}")
 
-    pandoc = omml_formulas.find_pandoc()
-
-    blocks = parse_fulltext_md(args.md)
-    by_sec = split_by_section(blocks)
-    block_list, inline_list = collect_latex(blocks)
-    block_table, inline_table, fallback = build_omml_tables(block_list, inline_list, pandoc)
-
-    rendered: dict[str, list[str]] = {}
-    targets = [args.block] if args.block else ["说明书摘要", "发明内容", "附图说明", "具体实施方式"]
-    for sec in targets:
-        if sec in by_sec:
-            rendered[sec] = render_blocks(by_sec[sec], block_table, inline_table, fallback)
-
     stats = {
-        "paragraphs": sum(len(v) for v in rendered.values()),
-        "block_omml": sum(1 for b in blocks if b["kind"] == "block_formula") if not fallback else 0,
-        "inline_omath": sum(len(_INLINE_RE.findall(b["text"]))
-                            for b in blocks if b["kind"] == "paragraph") if not fallback else 0,
+        "paragraphs": 0,
+        "block_omml": 0,
+        "inline_omath": 0,
         "abstract_paragraphs": 0,
         "body_paragraphs": 0,
         "placeholders_removed": 0,
         "blank_paras_removed": 0,
         "carried_headings_topped": 0,
+        "claims_paragraphs": 0,
+        "claims_blank_removed": 0,
+        "spec_head_paragraphs": 0,
         "sectpr_kept": 0,
-        "fallback": fallback,
+        "fallback": False,
     }
-    inject(args.unpacked, rendered, stats)
+    fallback = False
 
-    mode = "一次性注入" if not args.block else f"分块注入({args.block})"
-    pandoc_note = "pandoc 缺失，公式回退纯文本（G6-1，完工报告须注明）" if fallback else "pandoc 编译原生 OMML"
-    print(f"OK\t{mode} · {stats['paragraphs']} 段 · "
-          f"块公式 {stats['block_omml']} · 行内公式 {stats['inline_omath']} · "
-          f"删占位套话 {stats['placeholders_removed']} · "
-          f"删空占位段 {stats['blank_paras_removed']} · "
-          f"标题归顶格 {stats['carried_headings_topped']} · sectPr={stats['sectpr_kept']}")
-    print(f"   · {pandoc_note}")
+    # 先注全文四章（清占位、追加到分节4 末），再注权要三章（分节3 + 分节4 开头）：
+    # 顺序固定，保证分节4 头部段不被全文注入的占位清理/标题归顶格逻辑二次处理。
+    if args.md is not None:
+        pandoc = omml_formulas.find_pandoc()
+        blocks = parse_fulltext_md(args.md)
+        by_sec = split_by_section(blocks)
+        block_list, inline_list = collect_latex(blocks)
+        block_table, inline_table, fallback = build_omml_tables(block_list, inline_list, pandoc)
+
+        rendered: dict[str, list[str]] = {}
+        targets = [args.block] if args.block else ["说明书摘要", "发明内容", "附图说明", "具体实施方式"]
+        for sec in targets:
+            if sec in by_sec:
+                rendered[sec] = render_blocks(by_sec[sec], block_table, inline_table, fallback)
+
+        stats.update({
+            "paragraphs": sum(len(v) for v in rendered.values()),
+            "block_omml": sum(1 for b in blocks if b["kind"] == "block_formula") if not fallback else 0,
+            "inline_omath": sum(len(_INLINE_RE.findall(b["text"]))
+                                for b in blocks if b["kind"] == "paragraph") if not fallback else 0,
+            "fallback": fallback,
+        })
+        inject(args.unpacked, rendered, stats)
+
+        mode = "一次性注入" if not args.block else f"分块注入({args.block})"
+        pandoc_note = "pandoc 缺失，公式回退纯文本（G6-1，完工报告须注明）" if fallback else "pandoc 编译原生 OMML"
+        print(f"OK\t{mode} · {stats['paragraphs']} 段 · "
+              f"块公式 {stats['block_omml']} · 行内公式 {stats['inline_omath']} · "
+              f"删占位套话 {stats['placeholders_removed']} · "
+              f"删空占位段 {stats['blank_paras_removed']} · "
+              f"标题归顶格 {stats['carried_headings_topped']} · sectPr={stats['sectpr_kept']}")
+        print(f"   · {pandoc_note}")
+
+    if args.claims_md is not None:
+        claims = parse_claims_md(args.claims_md)
+        claim_paras, head_paras = render_claims_paragraphs(claims, args.invention_name)
+        inject_claims(args.unpacked, claim_paras, head_paras, stats,
+                      clean_sect4=(args.md is None))
+        n_claims = sum(1 for l in claims["权利要求书"] if re.match(r"^\d+\s*\.", l))
+        print(f"OK\t权要三章注入 · 分节3 权要 {n_claims} 条 {stats['claims_paragraphs']} 段"
+              f"（删空占位 {stats['claims_blank_removed']}） · "
+              f"分节4 头部 {stats['spec_head_paragraphs']} 段（发明名称「{args.invention_name.strip()}」"
+              f"+技术领域 {len(claims['技术领域'])} 段+背景技术 {len(claims['背景技术'])} 段）"
+              + (f" · 权要稿模式清分节4 占位 {stats['placeholders_removed']}+空段 {stats['blank_paras_removed']}"
+                 if args.md is None else "")
+              + f" · sectPr={stats['sectpr_kept']}")
+
     if fallback:
         return 3
     return 0
 
 
 if __name__ == "__main__":
+    # Windows GBK 控制台: 输出含 GBK 外字符时裸跑 UnicodeEncodeError (H2609029 实测, 2026-09-10)。强制 UTF-8。
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     raise SystemExit(main())
