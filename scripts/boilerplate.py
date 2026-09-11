@@ -400,8 +400,11 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("render", help="把本案名称填进全部模板句")
-    r.add_argument("--method-name", required=True, help="方法保护主题名（不带「一种」，如「基于…的…方法」）")
-    r.add_argument("--system-name", default=None, help="系统保护主题名（无系统权则不传）")
+    r.add_argument("--method-name", required=True,
+                   help="本案方法保护主题：权 1 名称去掉「一种」后的整串，"
+                        "= 王工给定案件名称去掉「及系统/及装置」后缀（如「基于红外热成像的埋地供热管网泄漏定位方法」）")
+    r.add_argument("--system-name", default=None,
+                   help="本案系统/装置保护主题：与方法同词干、末尾「系统」或「装置」（无系统权则不传；check 会校验两名词干一致）")
     r.add_argument("--no-medium", action="store_true", help="无计算机可读存储介质权")
     r.add_argument("--indicative-subject", default="系统", choices=["系统", "装置"])
     c = sub.add_parser("check", help="逐字校验全文稿 md")
