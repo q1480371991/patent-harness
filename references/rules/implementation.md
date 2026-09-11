@@ -220,5 +220,5 @@
 
 6. 注入由 `scripts/inject_fulltext_docx.py` 承担：默认**一次性注入**摘要+发明内容+附图说明+具体实施方式四章（输入为已过全文闸门的审定 `docs/全文稿.md`），可选 `--block 具体实施方式` 单章节分块调试。脚本就地下笔、不清空 body、不删 `sectPr`/`header`/`headerReference`，按 md 单换行切段（「……，包括：」后的子步骤各自成段，根治挤段），块公式与行内 `$...$` 公式编译为原生 OMML（G8-3）；pandoc 缺失时回退纯文本并在完工报告注明（G6-1）。摘要就地替换分节1占位段；L6–L8 追加到分节4末个 `sectPr` 段前并清掉模板预置的 `......` 占位套话段。权要三章（权利要求书/发明名称+技术领域+背景技术）也由本脚本注入、**不手填**：权要一稿与直写全文稿加 `--claims-md <权要稿.md> --invention-name "<王工给定名称原样>"`（参数与落位见 `docx-scripts.md`）；传统全文一稿沿用权要一稿已注入 DOCX 的三章（`SKILL.md` 全文一稿 step 10 前向拷贝），不再传 `--claims-md`。
 7. 不得把全部章节一次性拼成大段 XML 写入，不得清空 body 重建（脚本已就地下笔，禁止绕过脚本手拼）。
-8. 注入完成后由 `scripts/insert_figures_docx.py` 注图1（分节2 摘要附图 + 分节5 说明书附图含「图1」图题），pack 后跑 `scripts/verify_docx_injection.py`（注入机械项：oMath 数/段落数/章节标题/套话锚点/图1）+ `omml_formulas.py check`/`fix-settings` + `scripts/verify_docx_skeleton.py`（骨架机械项）一次性收尾，看 PASS/FAIL 报告即可。分块调试模式下每注一块 pack 一次作 checkpoint，再继续下一块。
+8. 注入完成后由 `scripts/insert_figures_docx.py` 注图1（分节2 摘要附图 + 分节5 说明书附图含「图1」图题），pack 后跑 `scripts/verify_docx_injection.py`（注入机械项：oMath 数/段落数/章节标题/13 句模板句逐字/图1）+ `omml_formulas.py check`/`fix-settings` + `scripts/verify_docx_skeleton.py`（骨架机械项）一次性收尾，看 PASS/FAIL 报告即可。分块调试模式下每注一块 pack 一次作 checkpoint，再继续下一块。
 9. 全文稿文字多不是例外理由：不得因文本过长、XML 易错而改为输出整段文本要求用户手动复制粘贴进 Word，必须由 `inject_fulltext_docx.py` 写完。
