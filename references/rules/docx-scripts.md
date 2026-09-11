@@ -18,7 +18,7 @@
 
 辅助脚本：
 
-- `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`
+- `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`（**损坏部件容错**：交底书含无扩展名/零字节的 docProps 部件时自动剥离其在 [Content_Types]/rels 的登记后重试，原文件只读——H2609029 交底书实测 python-docx 直接崩溃）
 - `scripts/render_patent_figure.py --claims-md <权要稿.md> --output <案件文件夹>/docs/figures/figure-1.png`：从权要 1 分号分句自动生成图 1（摘要附图 = 方法主流程图）PNG；节点文字逐字一致由构造保证，规则见 `figures.md` L9。
 - `scripts/insert_figures_docx.py <unpack目录> --png <figure-1.png>`：把图 1 注入分节 2（摘要附图）与分节 5（说明书附图 + "图1"图题），自动注册 media/relationship/Content-Type；两处已有图片时为替换语义。
 - `scripts/boilerplate.py render --method-name <方法名> --system-name <系统名> [--no-medium]` / `boilerplate.py check --md <全文稿.md> --claims-md <权要稿.md>`：**模板句（套话）唯一副本**——13 句（发明内容第一/二/三方面、有益效果引入、附图说明图1、具体实施方式开篇段、集中罗列入口句、综上所述骨架、第二实施例、方法—系统对应、存储介质(可选，默认不写)、示意性说明、结束语）。`render` 把本案名称填进全部模板句供落笔整句粘贴；`check` 逐字校验（含名称槽位一致、收尾顺序），同一逻辑被 `check_hard_rules.py` 规则 47（md 层）与 `verify_docx_injection.py`（DOCX 层）调用。规则文件只放指针不摘引原文（W08 口径）。
