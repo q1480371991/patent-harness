@@ -17,8 +17,8 @@
 A/B 写法规范化 md 再重跑.
 
 用法:
-    python3 scripts/extract_structure.py --md docs/权要稿.md --stage claims-draft
-    python3 scripts/extract_structure.py --md docs/全文稿.md --stage full-draft
+    python scripts/extract_structure.py --md docs/权要稿.md --stage claims-draft
+    python scripts/extract_structure.py --md docs/全文稿.md --stage full-draft
 
 输出 JSON 到 stdout. extraction_errors 非空时 exit 2, 否则 exit 0.
 """

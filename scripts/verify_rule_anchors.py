@@ -13,8 +13,8 @@
 - 提取区间必须非空 (起止之间至少一行正文).
 
 用法 (每案件首次编排 auditor 前跑一次; 改规则文件标题或契约锚点后必跑):
-    python3 scripts/verify_rule_anchors.py           # 报告到 stderr
-    python3 scripts/verify_rule_anchors.py --json    # stdout 输出 JSON
+    python scripts/verify_rule_anchors.py           # 报告到 stderr
+    python scripts/verify_rule_anchors.py --json    # stdout 输出 JSON
 
 Exit code = 失败锚点数; 0 = 全部命中.
 """

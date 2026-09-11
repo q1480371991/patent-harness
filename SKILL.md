@@ -170,6 +170,9 @@ python scripts/check_env.py --json
 2. 除非用户要求改动，保留已审权要不变。
 3. **在开始补写说明书前，获取或复用 `docs/facts.md`**：若 `docs/facts.md` 已在权要一稿阶段生成且交底书未变更，直接复用；否则由主 agent 在下述深读时亲自生成（结构同权要一稿 step 2 的事实提纲）。主 agent **必须亲自深读 `docs/交底书.md`**（G2 深读义务）并核对批注、技术链和潜在风险，`facts.md` 只是深读的落盘产物，不替代深读本身。
 4. 在 `docs/全文稿.md` 中补全权要一稿未写的章节，必须按 `references/rules/implementation.md`「全文稿分块撰写法」（唯一出处）逐块写、逐块过自检清单，不得一次性生成全文长文；具体实施方式框架按 `implementation.md` L8-0 Sxx 框架同构规则执行。
+   - **★ 动笔前先跑模板句渲染（1级动作，2026-09-10 定）**：`python scripts/boilerplate.py render --method-name "<方法名>" --system-name "<系统名>"[ --no-medium]`（无系统权时不传 `--system-name`、无介质权加 `--no-medium`）。
+     - **名称口径（两个参数从哪来）**：`--method-name` = **本案方法保护主题**，即权 1 名称去掉「一种」后的整串（如「基于红外热成像的埋地供热管网泄漏定位方法」）——等价于王工给定案件名称去掉「及系统/及装置」后缀；`--system-name` = **系统保护主题**，方法与系统同词干、末尾用「系统」或「装置」（如「……定位系统」）。两个名字取自 `docs/facts.md` 第 0 节的案件名称真源与权要保护主题，**不另起名、不做简写**；`boilerplate.py check` 会校验各模板句中的方法名/系统名词干一致，写岔了会报 FAIL。
+     - 渲染结果 = 13 句本案定版模板句（第一/二/三方面、有益效果引入、附图说明图1、开篇段、集中罗列入口句、综上所述骨架、第二实施例、方法—系统对应、示意性说明、结束语），**写到对应位置时整句粘贴、只填自由槽位**（`{串述}`/`{手段}`/`{效果}`），不凭记忆手写；DOCX 阶段由 `inject_fulltext_docx.py` 注入、收尾由 `boilerplate.py check` + `verify_docx_injection.py` + `verify_docx_skeleton.py` 逐字复核同一份原文。
    - **★ 每块写完立刻过「审核人四问」**（清单唯一出处 `references/cases/experience/lxl.md` 第 3 节，**本 step 只留指针、不复述**）：①这个运算**对什么做**（作用在哪个具体量上）；②**这个数哪来的**（每个阈值/容差/百分位写出对哪批数据做了什么动作得到，且不得用待判断结果反推阈值）；③**另一半分支呢**（每个判断、每个"为零/不存在/冷启动"的边界情形写出后续如何处理）；④**同名同义吗**（同一名词在两处是否同一口径，不同口径必须显式区分并各自命名）。**答案不能在稿中定位的，该块不算写完。** 四问与「逐槽点数」分工：四问抓"该写的没想到"（链条断裂、分支缺失、术语双义），逐槽点数抓"想到了但写得不全"（阈值段、模型展开、首现五槽）——**反向质询解决不了槽位漏填型问题**，两者都要过。
 5. 在说明书中解释每一条权要步骤。
 6. 加入有益效果的技术原因。
@@ -220,6 +223,9 @@ python scripts/check_env.py --json
 4. **跑权要闸门（claims-draft，此时无任何 Word 产物）**：先断言 step 2.5 体检结论与 step 3.5 三张表已落盘且与落笔态一致（表三 distinct 数须等于规则 43 实测数），再 `python scripts/check_hard_rules.py --md <案件文件夹>/docs/权要稿.md --stage claims-draft --json`，再 `python scripts/check_cross_block.py --md <案件文件夹>/docs/权要稿.md --stage claims-draft`。任一 FAIL 按 `location`/`evidence` 定点回修 `权要稿.md` 重跑，直到全 PASS。PASS 后按「审查闸门通用规则」用 `Workflow` 工具编排 claims-auditor + global-auditor 两路并行语义复核（`stage=claims-draft`，规则一律传文件路径，编排细节同权要一稿 step 7 阶段 B）。通过判定、合并落盘（`docs/审查报告-权要1稿.md`）、回修重审同「审查闸门通用规则」。**两路 PASS 后调 `reviewer-sim-claims`**（第五路，无否决权）：传 `stage=claims-draft` + `md_path` + `facts_path` + `gate_result` + **`workflow_mode=direct`** —— ⚠️ **直写模式下权要不经审核人过目即进入说明书撰写，本路是权要侧唯一的外部检查，且挡在大量下游工作之前，价值明显高于分离式**。疑点清单落 `docs/审稿人视角复核-权要1稿.md`；未采纳的疑点进完工报告「提请老板确认清单」。本路不阻断，可继续 step 5。
 5. **权要闸门 PASS 后，立即跑 `python scripts/fingerprint_claims.py --gen --fulltext <案件文件夹>/docs/全文稿.md --claims <案件文件夹>/docs/权要稿.md`**，把权要稿当前分句序列的 sha1 写入 `docs/全文稿.md` 头部 front-matter（为后续 `--check` 准备；此时 `全文稿.md` 可仅为含 front-matter 的空壳）。**写全文期间权要稿不得再改**——一旦改动必须回本步重新 `--gen`，否则后续 `--check` 硬停（exit 3）。
 6. **md 层续写全文稿**（`docs/全文稿.md`）：按 `implementation.md`「全文稿分块撰写法」（唯一出处）逐块撰写 L4 说明书摘要 → L5 摘要附图 → L6 发明内容 → L7 附图说明 → L8 具体实施方式（L8 按 L8-0 Sxx 框架同构、逐条主步骤分批写），逐块过自检清单、自检通过才写下一块；以已通过自检的权要三章为术语与链条基准。L9 附图见 step 7。
+   - **★ 动笔前先跑模板句渲染（1级动作，2026-09-10 定）**：`python scripts/boilerplate.py render --method-name "<方法名>" --system-name "<系统名>"[ --no-medium]`（无系统权时不传 `--system-name`、无介质权加 `--no-medium`）。
+     - **名称口径（两个参数从哪来）**：`--method-name` = **本案方法保护主题**，即权 1 名称去掉「一种」后的整串（如「基于红外热成像的埋地供热管网泄漏定位方法」）——等价于王工给定案件名称去掉「及系统/及装置」后缀；`--system-name` = **系统保护主题**，方法与系统同词干、末尾用「系统」或「装置」（如「……定位系统」）。两个名字取自 `docs/facts.md` 第 0 节的案件名称真源与权要保护主题，**不另起名、不做简写**；`boilerplate.py check` 会校验各模板句中的方法名/系统名词干一致，写岔了会报 FAIL。
+     - 渲染结果 = 13 句本案定版模板句（第一/二/三方面、有益效果引入、附图说明图1、开篇段、集中罗列入口句、综上所述骨架、第二实施例、方法—系统对应、示意性说明、结束语），**写到对应位置时整句粘贴、只填自由槽位**（`{串述}`/`{手段}`/`{效果}`），不凭记忆手写；DOCX 阶段由 `inject_fulltext_docx.py` 注入、收尾由 `boilerplate.py check` + `verify_docx_injection.py` + `verify_docx_skeleton.py` 逐字复核同一份原文。
    - **★ 每块写完立刻过「审核人四问」**：与全文一稿 step 4 同流程（清单唯一出处 `references/cases/experience/lxl.md` 第 3 节），本节不复述。
 7. 生成图 1（摘要附图 = 方法主流程图）：`python scripts/render_patent_figure.py --claims-md <案件文件夹>/docs/权要稿.md --output <案件文件夹>/docs/figures/figure-1.png`（规则唯一出处 `figures.md` L9，同全文一稿 step 7）。
 8. **跑全文闸门（full-draft，此时仍无任何 Word 产物）**，按 8a→8b→8c 顺序：
@@ -266,6 +272,7 @@ python scripts/check_env.py --json
   ✅ check_hard_rules.py 硬规则脚本 PASS
   ✅ check_cross_block.py 结构/跨块校验 PASS
   ✅ verify_claims_alignment.py 对齐校验 PASS（全文稿；hard=0，suspect 已由 auditor 逐条处置）
+  ✅ A5 第三层联动：返修轮已传 `--prev-claims/--prev-md` 快照比对（无 suspect 或已逐条处置）；首稿轮由 content-auditor 语义核
   ✅ check_cross_block.py 的 X8（从权引导句在说明书逐字复现）PASS（全文稿；权要本轮有改动时重点看）
   ✅ 模板句逐字（boilerplate.py check：13 句；系统权/介质权整条由规则 51 在权要侧查）PASS
   ✅ 规则 53 单步子动作密度 / 规则 54 采样率·频带 的 suspect 已逐条处置（无则写「无」）

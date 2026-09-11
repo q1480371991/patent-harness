@@ -58,6 +58,11 @@ tools: Read, Bash
 
 - 逐条处置 `mechanical_check_result.suspect_manifest.content` 中 `suspect_id == "S-L6-benefit-length"` 的条目（有益效果部分超出 400–450 字）：判是灌水还是必要——灌水则给出删减到区间内的具体句，必要则写明豁免理由（王工亲改的 H2608165 定稿为 496 字，区间非绝对红线）。
 
+## 机械 suspect 处置（本路专属）
+
+- 逐条处置 `mechanical_check_result.suspect_manifest.content` 中 `suspect_id == "S-L6-benefit-length"` 的条目（有益效果部分超出 400–450 字）：判是灌水还是必要——灌水则给出删减到区间内的具体句，必要则写明豁免理由（王工亲改的 H2608165 定稿为 496 字，区间非绝对红线）。
+- **第三层联动语义核（权要→说明书三层清单的第三层，无历史快照时的唯一防线）**：核说明书摘要与「综上所述」串述段是否覆盖权 1 全部分句、是否有权 1 已删改的旧表述残留（该两处是概括改写、不能逐字核；有历史快照时由 `verify_claims_alignment.py` A5 出 suspect 一并处置）。
+
 ## 输出契约(Output Contract)
 
 必须严格按以下 Markdown 结构返回,不返回多余内容:

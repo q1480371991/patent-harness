@@ -1452,6 +1452,61 @@ class BoilerplateTest(unittest.TestCase):
             self.assertIn("[FAIL] 分节3/4·无空段（1 个）", res.stdout)
 
 
+class ThirdLayerSyncA5Test(unittest.TestCase):
+    """A5 第三层联动：权 1 改了而摘要/综上所述串述段未动 → suspect（无 prev 参数则跳过）。"""
+
+    CLAIMS_PREV = (
+        "## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n"
+        "获取输入数据，对所述输入数据进行滤波处理，得到滤波数据；\n"
+        "根据所述滤波数据确定中间结果。\n"
+    )
+    CLAIMS_CUR = CLAIMS_PREV.replace("根据所述滤波数据确定中间结果。", "根据所述滤波数据确定目标结果。")
+    MD = (
+        "## 说明书摘要\n\n本发明涉及测试领域，公开了一种测试方法，获取输入数据并滤波，"
+        "根据滤波数据确定中间结果。\n\n"
+        "## 具体实施方式\n\n"
+        "综上所述，本发明公开了一种测试方法，获取输入数据并滤波，根据滤波数据确定中间结果。"
+        "本发明通过滤波，实现了降噪。\n"
+    )
+    MD_SYNCED = MD.replace("中间结果", "目标结果")
+
+    def _run(self, md_text, prev_claims_text, prev_md_text):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            (tmp / "权要稿.md").write_text(self.CLAIMS_CUR, encoding="utf-8")
+            (tmp / "全文稿.md").write_text(md_text, encoding="utf-8")
+            (tmp / "prev_claims.md").write_text(prev_claims_text, encoding="utf-8")
+            (tmp / "prev_md.md").write_text(prev_md_text, encoding="utf-8")
+            res = run_script_allow_fail("verify_claims_alignment.py", "--md", tmp / "全文稿.md",
+                                        "--claims-md", tmp / "权要稿.md", "--stage", "full-draft",
+                                        "--prev-claims", tmp / "prev_claims.md", "--prev-md", tmp / "prev_md.md")
+            data = json.loads(res.stdout)
+            return [s for s in data["suspects"] if s["assert"].startswith("A5")]
+
+    def test_unsynced_reports(self):
+        hits = self._run(self.MD, self.CLAIMS_PREV, self.MD)
+        self.assertEqual(len(hits), 2)          # 摘要 + 综上串述 各一条
+        self.assertTrue(all("未同步" in h["assert"] for h in hits))
+
+    def test_synced_passes(self):
+        self.assertEqual(self._run(self.MD_SYNCED, self.CLAIMS_PREV, self.MD), [])
+
+    def test_claims_unchanged_passes(self):
+        self.assertEqual(self._run(self.MD, self.CLAIMS_CUR, self.MD), [])
+
+    def test_no_prev_args_skips(self):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            (tmp / "全文稿.md").write_text(self.MD, encoding="utf-8")
+            (tmp / "权要稿.md").write_text(self.CLAIMS_CUR, encoding="utf-8")
+            res = run_script_allow_fail("verify_claims_alignment.py", "--md", tmp / "全文稿.md",
+                                        "--claims-md", tmp / "权要稿.md", "--stage", "full-draft")
+            data = json.loads(res.stdout)
+            self.assertEqual([s for s in data["suspects"] if s["assert"].startswith("A5")], [])
+
+
 class CrossBlockX8Test(unittest.TestCase):
     """X8：从权引导句在具体实施方式的逐字复现（权要→说明书第二层联动，H2609029 实测盲区）。"""
 

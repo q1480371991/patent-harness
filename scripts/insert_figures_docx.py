@@ -11,7 +11,7 @@
 模板结构硬约束：必须恰好 5 个 sectPr（G8-0），否则报错退出、不做任何修改。
 
 用法：
-    python3 scripts/insert_figures_docx.py <unpack目录> --png docs/figures/figure-1.png \
+    python scripts/insert_figures_docx.py <unpack目录> --png docs/figures/figure-1.png \
         [--abstract-width-cm 16.0] [--spec-width-cm 12.3] [--max-height-cm 22.0]
 """
 

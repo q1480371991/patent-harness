@@ -28,9 +28,9 @@
 21531 字, Words 写的是 4260。字数一律走 check_hard_rules.py 规则 41 从 md 算。
 
 用法:
-    python3 scripts/check_page_count.py <交付.docx>
-    python3 scripts/check_page_count.py <交付.docx> --md docs/全文稿.md   # 开启陈旧检测
-    python3 scripts/check_page_count.py <交付.docx> --max 30 --json
+    python scripts/check_page_count.py <交付.docx>
+    python scripts/check_page_count.py <交付.docx> --md docs/全文稿.md   # 开启陈旧检测
+    python scripts/check_page_count.py <交付.docx> --max 30 --json
 
 Exit code: 0 = PASS, 1 = 超页数 FAIL, 2 = Pages 不可信 (STALE) 或读取失败.
 """

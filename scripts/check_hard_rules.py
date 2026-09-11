@@ -3,8 +3,8 @@
 硬规则机械化检查脚本 (第一类).
 
 用法:
-    python3 scripts/check_hard_rules.py --md docs/权要稿.md --stage claims-draft
-    python3 scripts/check_hard_rules.py --md docs/全文稿.md --stage full-draft
+    python scripts/check_hard_rules.py --md docs/权要稿.md --stage claims-draft
+    python scripts/check_hard_rules.py --md docs/全文稿.md --stage full-draft
 
 Exit code = 违反的硬规则数量; 0 = 全通过.
 

@@ -18,7 +18,7 @@ md 三节文本 (具体实施方式 + 发明内容 + 有益效果), 做三项断
 - suspect: 正则近似的语义线索, 不直接 FAIL, 回传 auditor 复核确认.
 
 用法:
-    python3 scripts/verify_claims_alignment.py --md docs/全文稿.md \
+    python scripts/verify_claims_alignment.py --md docs/全文稿.md \
         --claims-md docs/权要稿.md --stage full-draft
 
 输出 JSON 到 stdout, 人读报告到 stderr.
@@ -249,7 +249,77 @@ def check_step_set_diff(claim_steps: list[dict], spec_text: str) -> list[dict]:
 # -----------------------------------------------------------------------------
 
 
-def run(md_path: Path, claims_md_path: Path | None, stage: str) -> dict:
+def get_summary_para_text(md_path: Path) -> str:
+    """取具体实施方式里「综上所述…」那一段（第三层联动的串述段）。"""
+    body, hit = get_section_text(md_path, "具体实施方式")
+    if not hit:
+        return ""
+    for ln in body.split("\n"):
+        if ln.strip().startswith("综上所述"):
+            return ln.strip()
+    return ""
+
+
+def check_third_layer_sync(prev_claims_md: Path | None, prev_md: Path | None,
+                           cur_claims: dict, cur_md: Path) -> list[dict]:
+    """A5 第三层联动（suspect）：权 1 改了，摘要与「综上所述」串述段是否也跟着改了。
+
+    权要 → 说明书有三层（`revision.md`「权要 → 说明书联动三层清单」）：第一层框架句由
+    `check_cross_block.py` X6 逐字核、第二层从权引导句由 X8 逐字核；**第三层（说明书摘要 +
+    「综上所述」串述段）是概括改写、不能逐字核**——H2609029 权 1 返修后这两处留旧表述，
+    用户提问才抓出。本项不用「术语覆盖」做代理（六案定稿实测：摘要缺 0–3 句、串述缺 0–5 句，
+    概括改写本来就不逐字点名产物，覆盖检查必然误报），改用**回归比对**：
+    拿上一轮的历史快照（`docs/history/权要N-1稿.md` 与 `全文N-1稿.md`），若权 1 分句较上轮有改动，
+    而摘要或串述段与上轮**逐字未变**，即报 suspect——「权 1 改了、这两处没动」就是漏同步的强信号。
+    缺历史快照（首稿轮）时本项不适用，由 content-auditor 语义核。
+    """
+    if not prev_claims_md or not prev_md or not prev_claims_md.exists() or not prev_md.exists():
+        return []
+
+    def claim1_clauses(md: Path) -> list[str]:
+        struct = extract_structure(md, "claims-draft", None)
+        claims = struct.get("claims") or {}
+        for it in claims.get("items") or []:
+            if it.get("num") == 1 and it.get("steps"):
+                return [s.strip() for s in it["steps"]]
+        return []
+
+    def _cur_claim1_clauses(claims: dict) -> list[str]:
+        for it in claims.get("items") or []:
+            if it.get("num") == 1 and it.get("steps"):
+                return [s.strip() for s in it["steps"]]
+        return []
+
+    def layer_text(md: Path, key: str) -> str:
+        body, hit = get_section_text(md, key)
+        if not hit:
+            return ""
+        if key == "具体实施方式":
+            for ln in body.split("\n"):
+                if ln.strip().startswith("综上所述"):
+                    return ln.strip()
+            return ""
+        return body.strip()
+
+    if claim1_clauses(prev_claims_md) == _cur_claim1_clauses(cur_claims):
+        return []
+    out = []
+    for key, label in (("说明书摘要", "说明书摘要"), ("具体实施方式", "综上所述串述段")):
+        prev_text = layer_text(prev_md, key)      # 两层都在上一轮全文稿快照里
+        cur_text = layer_text(cur_md, key)
+        if prev_text and prev_text == cur_text:
+            out.append({
+                "assert": f"A5-权1已改·{label}未同步",
+                "confidence": "suspect",
+                "entity": label,
+                "note": f"本轮权 1 分句较上轮有改动，而{label}与上轮逐字一致——第三层联动疑似漏同步"
+                        "（摘要/「综上所述」串述段按权 1 走，改动权 1 后必须重写这两处）",
+            })
+    return out
+
+
+def run(md_path: Path, claims_md_path: Path | None, stage: str,
+        prev_claims_md: Path | None = None, prev_md: Path | None = None) -> dict:
     struct = extract_structure(md_path, stage, claims_md_path)
     result = {
         "md_path": str(md_path),
@@ -279,6 +349,7 @@ def run(md_path: Path, claims_md_path: Path | None, stage: str) -> dict:
     suspects = (
         check_reverse_features(claim_ents, frame_text)
         + check_name_collision(claims)
+        + check_third_layer_sync(prev_claims_md, prev_md, claims, md_path)
     )
     result["hard_violations"] = hard
     result["suspects"] = suspects
@@ -311,6 +382,10 @@ def main() -> int:
     ap.add_argument("--md", required=True, help="全文稿 md 路径")
     ap.add_argument("--claims-md", help="权要基准 md (分离式工作流全文稿不含权要时必传)")
     ap.add_argument("--stage", default="full-draft", choices=["full-draft"])
+    ap.add_argument("--prev-claims", type=Path, default=None,
+                    help="上一轮权要快照（docs/history/权要N-1稿.md）：供 A5 第三层联动回归比对；缺则跳过该项")
+    ap.add_argument("--prev-md", type=Path, default=None,
+                    help="上一轮全文稿快照（docs/history/全文N-1稿.md）：供 A5 第三层联动回归比对；缺则跳过该项")
     args = ap.parse_args()
 
     md_path = Path(args.md)
@@ -322,7 +397,7 @@ def main() -> int:
         print(f"[verify_claims_alignment] ERROR claims md not found: {claims_md_path}", file=sys.stderr)
         return 2
 
-    r = run(md_path, claims_md_path, args.stage)
+    r = run(md_path, claims_md_path, args.stage, args.prev_claims, args.prev_md)
     print(json.dumps(r, ensure_ascii=False, indent=2))
     print(format_report(r), file=sys.stderr, end="")
 

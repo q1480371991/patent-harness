@@ -15,9 +15,9 @@
 
 用法:
     # 传案件目录, 自动 glob 审核稿
-    python3 scripts/timestamp_guard.py --case <案件文件夹>
+    python scripts/timestamp_guard.py --case <案件文件夹>
     # 或显式指定
-    python3 scripts/timestamp_guard.py --fulltext docs/全文稿.md \
+    python scripts/timestamp_guard.py --fulltext docs/全文稿.md \
         --review-glob '审核*.docx'
 
 exit: 0 = 全文稿不早于任何审核稿 (放行); 2 = 用法错误;

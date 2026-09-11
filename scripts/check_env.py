@@ -16,9 +16,9 @@ patent skill 接入前环境自检器 (跨平台: Windows / macOS / Linux).
           由 AI 在会话中自行确认能否调用, 本脚本仅提示.
 
 用法:
-    python3 scripts/check_env.py                    # 只检测, 人类可读报告到 stderr
-    python3 scripts/check_env.py --json             # 追加 JSON 报告到 stdout (给 AI 消费)
-    python3 scripts/check_env.py --fix              # 对 pip 类缺失项执行 pip install
+    python scripts/check_env.py                    # 只检测, 人类可读报告到 stderr
+    python scripts/check_env.py --json             # 追加 JSON 报告到 stdout (给 AI 消费)
+    python scripts/check_env.py --fix              # 对 pip 类缺失项执行 pip install
 
 Exit code: 0 = 必需项全部就绪 (可选项缺失不影响); 非 0 = 缺必需项数量.
 """

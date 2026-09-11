@@ -10,7 +10,7 @@
 框内折行遵循行首禁则（行首不出现标点，标点上提至上一行行尾）。
 
 用法：
-    python3 scripts/render_patent_figure.py --claims-md docs/权要稿.md \
+    python scripts/render_patent_figure.py --claims-md docs/权要稿.md \
         --output docs/figures/figure-1.png [--claim-number 1]
 
 输出仅 PNG（任务宗旨：能成功插入 Word）。依赖 Pillow。

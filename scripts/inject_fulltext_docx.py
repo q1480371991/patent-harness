@@ -36,14 +36,14 @@ G1-1），脚本不加不减。
 
 用法：
     # 直写全文稿：权要三章 + 全文四章一次注完（空白模板 unpack 目录）
-    python3 scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md \
+    python scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md \
         --claims-md docs/权要稿.md --invention-name "<王工给定名称>"
     # 权要一稿：只注权要三章（空白模板 unpack 目录）
-    python3 scripts/inject_fulltext_docx.py <unpack目录> \
+    python scripts/inject_fulltext_docx.py <unpack目录> \
         --claims-md docs/权要稿.md --invention-name "<王工给定名称>"
     # 全文一稿（分离式，权要 DOCX 前向拷贝已带权要三章）：只注全文四章
-    python3 scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md
-    python3 scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md --block 具体实施方式
+    python scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md
+    python scripts/inject_fulltext_docx.py <unpack目录> --md docs/全文稿.md --block 具体实施方式
 """
 
 from __future__ import annotations

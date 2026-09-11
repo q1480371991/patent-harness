@@ -16,8 +16,8 @@ scoring 摘录一致性守卫 (仅标准库).
 纪律句的漂移.
 
 用法:
-    python3 scripts/verify_scoring_excerpts.py           # 报告到 stderr
-    python3 scripts/verify_scoring_excerpts.py --json    # stdout 输出 JSON
+    python scripts/verify_scoring_excerpts.py           # 报告到 stderr
+    python scripts/verify_scoring_excerpts.py --json    # stdout 输出 JSON
 
 Exit code = 失败检查数; 0 = 全部一致.
 """

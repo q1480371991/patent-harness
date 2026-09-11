@@ -20,8 +20,8 @@ inject_fulltext_docx.py 注入 + insert_figures_docx.py 注图 + pack 之后、�
 pandoc 缺失走 G6-1 回退时（inject 退出码 3），公式断言自动放宽为「无 `$` 残留」即可。
 
 用法：
-    python3 scripts/verify_docx_injection.py <file.docx> --md docs/全文稿.md
-    python3 scripts/verify_docx_injection.py <file.docx> --md docs/全文稿.md --fallback
+    python scripts/verify_docx_injection.py <file.docx> --md docs/全文稿.md
+    python scripts/verify_docx_injection.py <file.docx> --md docs/全文稿.md --fallback
 """
 import argparse
 import re

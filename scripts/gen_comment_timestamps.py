@@ -15,16 +15,16 @@
 
 用法:
     # 取当前时间为基准, 生成 10 条
-    python3 scripts/gen_comment_timestamps.py --count 10
+    python scripts/gen_comment_timestamps.py --count 10
 
     # 指定基准时间 (接首轮之后的第二轮注入时可续上一轮末尾时间)
-    python3 scripts/gen_comment_timestamps.py --count 5 --base 2026-08-06T10:30:00Z
+    python scripts/gen_comment_timestamps.py --count 5 --base 2026-08-06T10:30:00Z
 
     # 收窄间隔为 2-3 分钟
-    python3 scripts/gen_comment_timestamps.py --count 5 --min-gap 2 --max-gap 3
+    python scripts/gen_comment_timestamps.py --count 5 --min-gap 2 --max-gap 3
 
     # JSON 输出 (便于注入脚本直接读)
-    python3 scripts/gen_comment_timestamps.py --count 3 --json
+    python scripts/gen_comment_timestamps.py --count 3 --json
 
 输出: 默认每行一个 `w:date` 可直接使用的时间戳字符串.
 

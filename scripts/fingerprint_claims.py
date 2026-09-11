@@ -18,11 +18,11 @@ sha1 即变. `--check` 在撰写/注入前重算当前权要基准 sha1 与 fron
 
 用法:
     # 生成/更新指纹 (按当前权要基准写入全文稿.md 头)
-    python3 scripts/fingerprint_claims.py --gen \
+    python scripts/fingerprint_claims.py --gen \
         --fulltext docs/全文稿.md --claims docs/权要稿.md
 
     # 校验 (撰写/注入前置闸门)
-    python3 scripts/fingerprint_claims.py --check \
+    python scripts/fingerprint_claims.py --check \
         --fulltext docs/全文稿.md --claims docs/权要稿.md
 
 exit: 0 = 一致/已写入; 2 = 用法或抽取错误; 3 = 指纹不一致 (硬停).

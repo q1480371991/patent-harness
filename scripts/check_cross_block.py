@@ -22,14 +22,14 @@
 subagent 判定, 本脚本不越权.
 
 用法 (主 agent 常规入口, 内部自动跑抽取):
-    python3 scripts/check_cross_block.py --md docs/权要稿.md --stage claims-draft
-    python3 scripts/check_cross_block.py --md docs/全文稿.md --stage full-draft --claims-md docs/权要稿.md
+    python scripts/check_cross_block.py --md docs/权要稿.md --stage claims-draft
+    python scripts/check_cross_block.py --md docs/全文稿.md --stage full-draft --claims-md docs/权要稿.md
 
 分离式工作流的全文稿.md 不含权利要求书 (冻结在权要稿.md), full-draft 必须
 用 --claims-md 传入权要基准; 一体式 md (自含权要章节) 可省略.
 
 也可直接消费已有抽取 JSON:
-    python3 scripts/check_cross_block.py --structure structure.json
+    python scripts/check_cross_block.py --structure structure.json
 
 输出 JSON 到 stdout (作为 `structure_check_result` 传给各路 auditor),
 报告到 stderr. Exit code = 抽取错误数 + 违规数; 0 = 全通过.
