@@ -11,6 +11,11 @@
 - X7 (L1-1, 两阶段): 从权引用句逐字一致 —— `其特征在于，所述〔引用句〕，包括：`
   的引用句 (仅允许去句首连接词并/再/然后、加"所述") 必须是依附链上某条权要
   原文的连续子串; 防改动词 (对↔根据) 与引用句内附加限定 (审批人硬要求).
+- X8 (L8-1, 仅 full-draft): 从权引导句在说明书复现逐字 —— 每条方法从权的引导句
+  (`所述〔引用句〕，包括：` / form③ `在所述〔…〕之后，所述方法还包括：`) 必须在具体
+  实施方式里以「在步骤Sxx中，…，包括：」入口句或「在一种实施方式中，…」衔接句逐字复现。
+  H2609029 实测盲区: 权 1 返修后 X6 三处同步了, 三条从权的「在一种实施方式中，所述…」
+  衔接句仍是旧文案, impl-auditor 终判 FAIL —— 权要→说明书复现有三层, X6 只管第一层。
 
 其余第二类项 (权要 1 步骤数/附图 1 节点数、发明内容对每条权要、附图说明数 vs
 反向特征校验、从权多元化依附) 为语义项, 归各路 auditor (multi-auditor)
@@ -215,6 +220,61 @@ def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None
             })
 
 
+def check_x8_dep_lead_in_spec(structure: dict, violations: list[dict]) -> None:
+    """X8: 从权引导句在具体实施方式逐字复现 (L8-1 展开话术; 权要→说明书第二层联动).
+
+    引导句 = 从权 preamble「其特征在于，」之后到「包括：」的整段 (含句首「所述」),
+    form③ 为「在所述〔步骤〕之后/之前，所述方法还包括：」。合法复现形态二选一:
+      ① 展开段入口句「在步骤Sxx中，〔权1分句〕，包括：」—— 引用句去「所述」后逐字 == 权1分句
+         (该从权直接展开在主步骤入口之下, 不另起衔接句);
+      ② 衔接句「在一种实施方式中，〔引导句〕」逐字 (含「所述」与「，包括：」/「所述方法还包括：」)。
+    两者皆无 = 该从权在说明书里没有对应的展开入口, 或入口仍是返修前旧文案 → FAIL。
+    """
+    claims = structure.get("claims") or {}
+    spec_lines = structure.get("impl_lines") or []
+    if not spec_lines:
+        return
+
+    def _lead_key(s: str) -> str:
+        """归一化引导句: 去尾部「,包括:」与句首「所述」, 用于集合比对。"""
+        s = re.sub(r"[，,]?包括[：:]?\s*$", "", (s or "").strip())
+        return s[len("所述"):] if s.startswith("所述") else s
+
+    # 说明书侧两种合法复现形态
+    entry_re = re.compile(r"^在步骤S\d+中，(.+)，包括：$")
+    entries = {_lead_key(m.group(1)) for ln in spec_lines for m in [entry_re.match(ln.strip())] if m}
+    leads = {_lead_key(ln.strip()[len("在一种实施方式中，"):]) for ln in spec_lines
+             if ln.strip().startswith("在一种实施方式中，")}
+    quote_re = re.compile(r"其特征在于，(.*?)，?包括[：:]")
+    for it in claims.get("items", []):
+        if not it.get("dependent"):
+            continue
+        flat = it.get("flat") or ""
+        m = quote_re.search(flat)
+        if not m:
+            continue  # 无「包括：」锚点的从权 (单句限定型) 不在本检范围
+        lead = m.group(1)
+        key = _lead_key(lead)
+        # 从权引用句可以是权1分句的「连续半句」(X7 许可), 故除整句命中外, 引导句整体
+        # 逐字出现在说明书某行内也算复现 (避免把合法半句引用误判为未同步)。
+        if not key or (key in entries) or (key in leads) or any(key in ln for ln in spec_lines):
+            continue
+        head = key[:12]
+        stale = next((ln.strip() for ln in spec_lines
+                      if head and head in ln and (ln.strip().startswith("在一种实施方式中，")
+                                                  or ln.strip().startswith("在步骤S"))), None)
+        violations.append({
+            "rule_id": "L8-1",
+            "check": "X8",
+            "location": f"权要 {it['num']} → 具体实施方式",
+            "evidence": (f"引导句='{lead[:50]}…'" if len(lead) > 50 else f"引导句='{lead}'")
+                        + (f"; 说明书疑似旧文案='{stale[:50]}…'" if stale else "; 说明书中未见相近文案"),
+            "message": f"权要 {it['num']} 的引导句未在具体实施方式逐字复现 (须为「在一种实施方式中，{lead[:20]}…」衔接句, "
+                       "或该从权直接展开在对应「在步骤Sxx中，…，包括：」入口之下)。权要改动后须同步说明书三层: "
+                       "主步骤框架句(X6)/从权引导句(本项)/摘要+综上所述串述(auditor)",
+        })
+
+
 def check_x3_dependency(structure: dict, violations: list[dict]) -> None:
     """X3: 依附/引用合法 —— 单点依附与范围引用的目标权要均须存在且在前位."""
     claims = structure.get("claims") or {}
@@ -366,6 +426,7 @@ def run_checks(structure: dict) -> dict:
         check_x4_no_merged_steps(structure, violations)
         check_x5_fmnr_dep_expansion(structure, violations)
         check_x6_verbatim_restatement(structure, violations)
+        check_x8_dep_lead_in_spec(structure, violations)
     check_x3_dependency(structure, violations)
     check_x7_dep_quote_verbatim(structure, violations)
 
@@ -446,6 +507,7 @@ def main() -> int:
     _claims = (result.get("structure") or {}).get("claims") or {}
     for _it in _claims.get("items") or []:
         _it.pop("flat", None)
+    (result.get("structure") or {}).pop("impl_lines", None)  # X8 已消费, 不进 auditor prompt
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     print(format_human_report(result), file=sys.stderr)

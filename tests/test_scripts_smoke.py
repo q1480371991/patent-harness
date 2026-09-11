@@ -1431,6 +1431,126 @@ class BoilerplateTest(unittest.TestCase):
             self.assertIn("[FAIL] 分节3/4·无空段（1 个）", res.stdout)
 
 
+class CrossBlockX8Test(unittest.TestCase):
+    """X8：从权引导句在具体实施方式的逐字复现（权要→说明书第二层联动，H2609029 实测盲区）。"""
+
+    CLAIMS = ("## 权利要求书\n\n"
+              "1.一种测试方法，其特征在于，包括：\n"
+              "获取输入数据，对所述输入数据进行滤波处理，得到滤波数据；\n"
+              "根据所述滤波数据确定中间结果；\n"
+              "根据所述中间结果生成控制信号。\n\n"
+              "2.根据权利要求1所述的测试方法，其特征在于，所述根据所述滤波数据确定中间结果，包括：\n"
+              "对所述滤波数据进行归一化；\n"
+              "确定所述中间结果。\n")
+
+    SPEC_STALE_S12 = ("在步骤S12中，根据所述中间数据确定最终结果，包括：所述中间结果为预设模型的输出。\n\n"
+                      "在一种实施方式中，所述对所述中间数据确定最终结果，包括：对所述中间数据进行归一化。\n\n")
+
+    def _spec(self, lead_line):
+        return ("## 说明书摘要\n\n本发明涉及测试领域，公开了一种测试方法。\n\n"
+                "## 发明内容\n\n本发明提供了一种测试方法，以解决现有技术精度低的问题。\n\n"
+                "## 附图说明\n\n图1为本发明第一实施例提供的测试方法的流程示意图。\n\n"
+                "## 具体实施方式\n\n"
+                "在步骤S11中，获取输入数据，对所述输入数据进行滤波处理，得到滤波数据，包括：\n"
+                "读取传感器数据；\n对所述传感器数据进行滤波。\n\n"
+                "在步骤S12中，根据所述滤波数据确定中间结果，包括：所述中间结果为预设模型的输出。\n\n"
+                "在一种实施方式中，所述根据所述滤波数据确定中间结果，包括：对所述滤波数据进行归一化；"
+                "确定所述中间结果。\n\n"
+                "在步骤S13中，根据所述中间结果生成控制信号。\n\n"
+                + lead_line + "\n")
+
+    def _run(self, spec_text):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            (tmp / "权要稿.md").write_text(self.CLAIMS, encoding="utf-8")
+            (tmp / "全文稿.md").write_text(spec_text, encoding="utf-8")
+            res = run_script_allow_fail("check_cross_block.py", "--md", tmp / "全文稿.md",
+                                        "--stage", "full-draft", "--claims-md", tmp / "权要稿.md")
+            return [ln for ln in res.stdout.splitlines() if "X8" in ln]
+
+    def test_dep_lead_present_forms_pass(self):
+        # ① 衔接句形态（在一种实施方式中，〔引导句〕）
+        self.assertEqual(self._run(self._spec("")), [])
+        # ② 删掉衔接句、直接把该从权展开在对应入口句之下，同样合法
+        spec = self._spec("").replace(
+            "在一种实施方式中，所述根据所述滤波数据确定中间结果，包括：对所述滤波数据进行归一化；确定所述中间结果。\n\n", "")
+        self.assertEqual(self._run(spec), [])
+
+    def test_dep_lead_stale_wording_fails(self):
+        # 衔接句与 S12 入口句仍是返修前旧文案（H2609029 审核v1 返修轮实测形态：改动后的引用句没同步）
+        spec = self._spec("").replace(
+            "在步骤S12中，根据所述滤波数据确定中间结果，包括：所述中间结果为预设模型的输出。\n\n"
+            "在一种实施方式中，所述根据所述滤波数据确定中间结果，包括：对所述滤波数据进行归一化；"
+            "确定所述中间结果。\n\n", self.SPEC_STALE_S12)
+        hits = self._run(spec)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("权要 2", "\n".join(hits))
+
+
+class BoilerplateRule53Test(unittest.TestCase):
+    """规则 53：权 1 单步子动作密度 >4 出 suspect（王工 H2609029「最后一步太臃肿」）。"""
+
+    def _run(self, claim1_steps):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            md = Path(td) / "权要稿.md"
+            md.write_text("## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n"
+                          + "\n".join(claim1_steps) + "\n", encoding="utf-8")
+            res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "claims-draft", "--json")
+            return json.loads(res.stdout)
+
+    def test_density_suspect(self):
+        fat = ("获取所述交叉验证区域内的热量扩散梯度值，提取所述滤噪频域特征矩阵的频率峰值，根据所述热量扩散梯度值与所述频率峰值计算热振关联度，"
+               "当所述热振关联度大于预设关联阈值时，对所述交叉验证区域进行声学定位，得到声源坐标，"
+               "根据所述交叉验证区域的中心坐标与所述声源坐标构建空间拟合方程，求解所述空间拟合方程得到映射坐标，将所述映射坐标作为最终泄漏位置；")
+        d = self._run([fat])
+        self.assertTrue(any(s["suspect_id"] == "S-L1-step-density" for s in all_suspects(d)))
+        lean = "获取红外成像设备采集的地表热辐射数据，对所述地表热辐射数据进行温度反演处理，得到温度场矩阵；"
+        d = self._run([lean])
+        self.assertFalse(any(s["suspect_id"] == "S-L1-step-density" for s in all_suspects(d)))
+
+
+class Rule54NumericTest(unittest.TestCase):
+    """规则 54：采样率 vs 最高频率（奈奎斯特）与频带覆盖，只出 suspect。"""
+
+    def _run(self, spec_body):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            md = Path(td) / "全文稿.md"
+            md.write_text("## 具体实施方式\n\n" + spec_body, encoding="utf-8")
+            res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "full-draft", "--json")
+            return json.loads(res.stdout)
+
+    def test_nyquist_and_band(self):
+        body = ("在步骤S11中，采集机械振动信号，采样周期为0.2ms，得到数据序列。\n\n"
+                "在步骤S12中，对所述数据序列进行频域变换，提取100~400Hz频段内的成分，得到特征矩阵。\n\n"
+                "在步骤S13中，对所述特征矩阵进行能量积分，积分区间为3000~6000Hz，得到能量值。\n\n"
+                "在步骤S14中，确定频率峰值为5500Hz。\n")
+        d = self._run(body)
+        ids = {s["suspect_id"] for s in all_suspects(d)}
+        self.assertIn("S-G6-nyquist", ids)
+        self.assertIn("S-G6-band-range", ids)
+        # 合规稿：采样率 10kHz、峰值落在声明的频段内
+        ok = ("在步骤S11中，采集机械振动信号，采样率为10kHz，得到数据序列。\n\n"
+              "在步骤S12中，对所述数据序列进行频域变换，提取100~400Hz频段内的成分，得到特征矩阵。\n\n"
+              "在步骤S13中，对所述特征矩阵进行200~400Hz区间的能量积分，得到能量值，确定频率峰值为250Hz。\n")
+        d = self._run(ok)
+        ids = {s["suspect_id"] for s in all_suspects(d)}
+        self.assertNotIn("S-G6-nyquist", ids)
+        self.assertNotIn("S-G6-band-range", ids)
+
+
+class DocxAssetsTest(unittest.TestCase):
+    """docx_assets.py：交付稿用户手工资产的查看（只读冒烟）。"""
+
+    def test_list_on_reference_sample(self):
+        ref = SKILL_DIR / "assets" / "docx" / "参考-申请文件样例-王工2026-09.docx"
+        res = run_script_allow_fail("docx_assets.py", "list", ref)
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("media:", res.stdout)
+        self.assertIn("分节5", res.stdout)  # 样例的图在说明书附图分节
+
+
 class InjectFulltextSmokeTest(unittest.TestCase):
     """inject_fulltext_docx.py + verify_docx_injection.py 冒烟：全文稿 md → 模板 DOCX 注入。
 

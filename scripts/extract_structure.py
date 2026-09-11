@@ -380,6 +380,7 @@ def extract_structure(md_path: Path, stage: str, claims_md_path: Path | None = N
     central_list = None
     fmnr_main_clauses = None
     figure_design_present = False
+    impl_lines = None
     if stage == "full-draft":
         main_steps, sub_steps = extract_steps(lines, sections, errors)
         figures = extract_figures(lines, sections, errors)
@@ -387,6 +388,8 @@ def extract_structure(md_path: Path, stage: str, claims_md_path: Path | None = N
         central_list = extract_central_list(lines, sections)
         fmnr_main_clauses = extract_fmnr_main_clauses(lines, sections)
         _, fd_offset = get_section_lines(lines, sections, "附图设计")
+        _impl_body, _impl_off = get_section_lines(lines, sections, "具体实施方式")
+        impl_lines = [ln for ln in _impl_body if ln.strip()] if _impl_off >= 0 else []
         figure_design_present = fd_offset >= 0
 
     return {
@@ -404,6 +407,8 @@ def extract_structure(md_path: Path, stage: str, claims_md_path: Path | None = N
         "central_list": central_list,
         "fmnr_main_clauses": fmnr_main_clauses,
         "figure_design_present": figure_design_present,
+        # X8 用: 具体实施方式非空行 (emit 层剥离, 与 flat 同策略)
+        "impl_lines": impl_lines,
     }
 
 

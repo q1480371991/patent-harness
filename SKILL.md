@@ -266,6 +266,9 @@ python scripts/check_env.py --json
   ✅ check_hard_rules.py 硬规则脚本 PASS
   ✅ check_cross_block.py 结构/跨块校验 PASS
   ✅ verify_claims_alignment.py 对齐校验 PASS（全文稿；hard=0，suspect 已由 auditor 逐条处置）
+  ✅ check_cross_block.py 的 X8（从权引导句在说明书逐字复现）PASS（全文稿；权要本轮有改动时重点看）
+  ✅ 模板句逐字（boilerplate.py check：13 句；系统权/介质权整条由规则 51 在权要侧查）PASS
+  ✅ 规则 53 单步子动作密度 / 规则 54 采样率·频带 的 suspect 已逐条处置（无则写「无」）
   ✅ timestamp_guard.py / fingerprint_claims.py --check 守卫 PASS（全文稿/返修）
 
   【权利要求书 L1】（权要稿）/【发明内容 L6】【具体实施方式 L8】（全文稿）

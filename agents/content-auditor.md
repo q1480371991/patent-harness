@@ -54,9 +54,15 @@ tools: Read, Bash
 - `structure_check_result.extraction_ok == false` 时,报告"结构抽取失败,权要覆盖比对基准缺失",把 `extraction_errors` 列入最短回修清单。
 - 两个 JSON 任一未传或损坏,报告"输入不完整",不假装完成全量审计。
 
+## 机械 suspect 处置（本路专属）
+
+- 逐条处置 `mechanical_check_result.suspect_manifest.content` 中 `suspect_id == "S-L6-benefit-length"` 的条目（有益效果部分超出 400–450 字）：判是灌水还是必要——灌水则给出删减到区间内的具体句，必要则写明豁免理由（王工亲改的 H2608165 定稿为 496 字，区间非绝对红线）。
+
 ## 输出契约(Output Contract)
 
 必须严格按以下 Markdown 结构返回,不返回多余内容:
+
+**报告纪律（1级，2026-09-10 定）**：正文控制在 **4000 字以内**——通过项合并成一行写（如「通过项：1–13、15–21 全部通过」），只对失败项逐条展开；最短回修清单只列要点，不复述证据原文。超限会导致整轮输出被截断而**整体失败**（H2609029 claims-auditor 第四轮实测：报告超 32000 token 上限，重跑浪费一轮）。
 
 ```
 # 审查报告 — content-auditor(full-draft)

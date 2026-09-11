@@ -89,9 +89,15 @@ tools: Read, Bash
 - `structure_check_result.extraction_ok == false` 时,报告"结构抽取失败,同构类审计缺失",把 `extraction_errors` 列入最短回修清单。
 - 两个 JSON 任一未传或损坏,报告"输入不完整",不假装完成全量审计。
 
+## 机械 suspect 处置（本路专属）
+
+- 逐条处置 `mechanical_check_result.suspect_manifest.impl` 中 `suspect_id` 为 `S-G6-nyquist`（采样率低于最高频率的 2 倍）与 `S-G6-band-range`（同一信号链的特征频段/积分区间互不覆盖）的条目：核是否为不同通道/设备各自采样、或两频带分属不同信号——是则写明豁免理由，否则按「数值三问」回修（改数值或改口径）。
+
 ## 输出契约(Output Contract)
 
 必须严格按以下 Markdown 结构返回,不返回多余内容:
+
+**报告纪律（1级，2026-09-10 定）**：正文控制在 **4000 字以内**——通过项合并成一行写（如「通过项：1–13、15–21 全部通过」），只对失败项逐条展开；最短回修清单只列要点，不复述证据原文。超限会导致整轮输出被截断而**整体失败**（H2609029 claims-auditor 第四轮实测：报告超 32000 token 上限，重跑浪费一轮）。
 
 ```
 # 审查报告 — impl-auditor(full-draft)

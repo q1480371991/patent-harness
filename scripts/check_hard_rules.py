@@ -1368,6 +1368,133 @@ def check_benefit_count_and_length(lines: list[str], sections: dict, report: Rep
         )
 
 
+# ---------------------------------------------------------------- 规则 53: 权 1 单步子动作密度
+#
+# 立项 (王工 2026-09-10 看 H2609029 Visio 图口头: 「最后一步太臃肿」, 指示自「当关联度大于阈值」
+# 起另起第 6 步): 外置经验 2.6.2 早有「创新档拆 2–3 个显式子步骤(有上限)」、X12「引导句只覆盖
+# 1 个动作」, 但落笔时没人数——原 S15 一步串 7 个动作 127 字。机械闸门此前只查主步骤**数量**
+# (规则 1b), 不查单步**密度**。
+# 计数法 (七案定稿标定, 2026-09-11): 去掉「当…时」判定条件后按「，；」切分, 「得到/输出/作为」
+# 起句的输出分句并入前一动作, 每个含动作动词的分句计 1, 「…的」定语里藏的动作 (「声学定位得到的」)
+# 另计 1, 判定条件本身计 1。六案定稿 30 步实测密度 1–4, H2609029 1稿臃肿步 = 6, 3稿拆后末步 = 5
+# (王工看图后仍要求再拆, 说明 5 也偏密)。阈值 ≥5 出 suspect (owner=claims, 交 claims-auditor 判
+# 是否拆步), 不做 hard —— 拆步是方案层决策。
+_ACTION_VERB_RE = re.compile(
+    r"(获取|采集|提取|计算|确定|生成|构建|输出|导入|输入|进行|求解|识别|判定|划分|匹配|融合|反演"
+    r"|滤除|校验|验证|修正|补偿|加权|拼接|映射|换算|截取|标定|记录|更新|选取|筛选|比对|统计|叠加"
+    r"|回调|解算|定位|得到|作为|平滑|归一化|变换|分类|聚类|预测|估计|拟合|检测|分割|重构|转换"
+    r"|编码|解码|排序|存储|发送|接收|调节|控制|触发|执行)"
+)
+_HIDDEN_ACTION_RE = re.compile(r"(得到|输出|提取|采集|计算|确定|生成|求解|识别|定位|拟合|预测|估计)的")
+_OUTPUT_CLAUSE_RE = re.compile(r"^(得到|输出|作为|确定为)")
+CLAIM1_STEP_ACTION_DENSITY_MAX = 4
+
+
+def claim1_step_action_density(step: str) -> int:
+    """单步子动作数 (计数法见上方注释)。"""
+    s = step.strip().rstrip("；;。")
+    n = len(re.findall(r"当[^，；]{2,60}?时", s))
+    s2 = re.sub(r"当[^，；]{2,60}?时，?", "", s)
+    clauses = [c.strip() for c in re.split(r"[，；]", s2) if c.strip()]
+    merged: list[str] = []
+    for c in clauses:
+        if _OUTPUT_CLAUSE_RE.match(c) and merged:
+            merged[-1] += "，" + c
+        else:
+            merged.append(c)
+    for c in merged:
+        hidden = len(_HIDDEN_ACTION_RE.findall(c))
+        core = _HIDDEN_ACTION_RE.sub("", c)
+        n += (1 if _ACTION_VERB_RE.search(core) else 0) + hidden
+    return n
+
+
+def check_claim1_step_action_density(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 53 (suspect S-L1-step-density): 权 1 单步子动作 ≥5 出线索, 建议拆步 (L1-1 / 外置 2.6.2)。"""
+    blocks = extract_claim_blocks(lines, sections)
+    if 1 not in blocks:
+        return
+    start, end = blocks[1]
+    body_lines = [ln.strip() for ln in lines[start:end] if ln.strip()]
+    for k, step in enumerate(body_lines[1:], start=1):
+        n = claim1_step_action_density(step)
+        if n > CLAIM1_STEP_ACTION_DENSITY_MAX:
+            report.add_suspect(
+                "L1-1", f"权利要求书 权 1 第 {k} 分句 (第{start + 1 + k}行)",
+                f"子动作 {n} 个 / {len(step)} 字: {step[:60]}…",
+                f"权 1 第 {k} 分句串了约 {n} 个子动作 (六案定稿单步 1–4; H2609029 被王工判「太臃肿」的末步为 6), "
+                "建议自判定条件之后的第一动作起拆为新主步骤 (上限 6 步), 不得为守步数把多个动作塞进一步 (外置经验 2.6.2)",
+                suspect_id="S-L1-step-density", section="L1", owner="claims",
+                missing_dimensions=["拆步"],
+            )
+
+
+# ---------------------------------------------------------------- 规则 54: 采样率/频带数值三问
+#
+# 立项 (H2609029 交底书数值自相矛盾照抄进 1 稿, 第五路 reviewer-sim 才拦住): S104 特征频段
+# 特征频段与能量积分区间 / 频率峰值 不在同一覆盖范围; 采样周期
+# 采样周期对应的采样率连最高频率都采不到 (奈奎斯特)。规则 39 (W53) 只做示例值代回与量级一致, 不做频域三问。
+# 本规则是「数值三问」的机械半边 (①奈奎斯特 ②数值落区间), ③阈值方向仍靠 G6-1 不等号核。
+# 只报 suspect (owner=impl): 频率单位混写 (kHz/Hz)、多通道各自采样率等合法情形须由 auditor 判。
+_FREQ_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(kHz|KHz|Hz|MHz)")
+_SAMPLE_RATE_RE = re.compile(r"采样(?:率|频率)[^。；]{0,12}?(\d+(?:\.\d+)?)\s*(kHz|KHz|Hz|MHz)")
+_SAMPLE_PERIOD_RE = re.compile(r"采样(?:周期|间隔)[^。；]{0,12}?(\d+(?:\.\d+)?)\s*(ms|毫秒|μs|us|微秒|s|秒)")
+_BAND_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kHz|KHz|Hz|MHz)?\s*[~～\-–—至到]\s*(\d+(?:\.\d+)?)\s*(kHz|KHz|Hz|MHz)")
+
+
+def _hz(v: str, unit: str) -> float:
+    x = float(v)
+    return x * {"kHz": 1e3, "KHz": 1e3, "Hz": 1.0, "MHz": 1e6}[unit]
+
+
+def check_sampling_nyquist(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 54 (suspect S-G6-nyquist / S-G6-band-range): 采样率 vs 最高频率 (奈奎斯特) 与频带覆盖。仅 full-draft。"""
+    if stage != "full-draft":
+        return
+    body, offset = _impl_body(lines, sections)
+    if offset < 0:
+        return
+    text = "\n".join(body)
+    rates = [_hz(v, u) for v, u in _SAMPLE_RATE_RE.findall(text)]
+    for v, u in _SAMPLE_PERIOD_RE.findall(text):
+        sec = float(v) * {"ms": 1e-3, "毫秒": 1e-3, "μs": 1e-6, "us": 1e-6, "微秒": 1e-6, "s": 1.0, "秒": 1.0}[u]
+        if sec > 0:
+            rates.append(1.0 / sec)
+    # 先剔除「采样率/采样周期」片段本身，否则采样率会被当成信号频率自吞（10kHz 采样 → 误判最高频率 10kHz）
+    text_wo_fs = _SAMPLE_RATE_RE.sub("", _SAMPLE_PERIOD_RE.sub("", text))
+    freqs = [(_hz(v, u), v + u) for v, u in _FREQ_RE.findall(text_wo_fs)]
+    if rates and freqs:
+        fs = min(rates)
+        top = max(freqs, key=lambda x: x[0])
+        if top[0] > fs / 2:
+            report.add_suspect(
+                "G6-1", "具体实施方式(采样率 vs 最高频率)",
+                f"最低采样率 {fs:g}Hz, 文中最高频率 {top[1]}",
+                f"奈奎斯特: 采样率 {fs:g}Hz 只能表示 ≤{fs / 2:g}Hz, 文中出现 {top[1]} (实测: 采样周期换算的采样率不足最高频率两倍)。"
+                "若为不同通道/设备各自采样率, 请在文中写明; 否则改数值",
+                suspect_id="S-G6-nyquist", section="L8", owner="impl",
+                missing_dimensions=["采样率与频率自洽"],
+            )
+    bands = [(_hz(a, u), _hz(b, u)) for a, b, u in _BAND_RE.findall(text)]
+    if len(bands) >= 2:
+        lo = min(b[0] for b in bands)
+        hi = max(b[1] for b in bands)
+        disjoint = [b for b in bands if b[1] < lo or b[0] > hi]
+        # 任一频带与其余频带完全不相交 → 线索
+        for b in bands:
+            others = [o for o in bands if o is not b]
+            if others and all(b[1] < o[0] or b[0] > o[1] for o in others):
+                report.add_suspect(
+                    "G6-1", "具体实施方式(频带覆盖)",
+                    f"频带 {b[0]:g}–{b[1]:g}Hz 与其余频带 {[(o[0], o[1]) for o in others][:3]} 完全不相交",
+                    "同一信号链的特征频段/积分区间/峰值频率应互相覆盖 (实测: 特征频段与能量积分区间不相交, "
+                    "积分区间处无数据)。若两频带属不同信号, 请在文中写明",
+                    suspect_id="S-G6-band-range", section="L8", owner="impl",
+                    missing_dimensions=["频带自洽"],
+                )
+                break
+
+
 # ---------------------------------------------------------------- 规则 48: 有益效果分项句式
 #
 # 立项根因 (H2608165 全文审核v1, 王工批注 9 原话「套话模板，本发明通过xx，这样做怎么xx，
@@ -2459,6 +2586,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
         check_claims_preset_budget(lines, sections, report)      # 规则 43 (外置 2.4a)
         check_claim_wording_seven(lines, sections, report)        # 规则 44 (外置 2.6.1)
         check_claim_boilerplate(lines, sections, report)           # 规则 51 (权9/权10 模板句逐字, boilerplate.py)
+        check_claim1_step_action_density(lines, sections, report)  # 规则 53 (单步子动作密度 suspect)
 
     check_forbidden_words(lines, sections, report, stage)
     check_spec_no_debuzou(lines, sections, report, stage)      # 规则 46 (王工全文口径)
@@ -2511,6 +2639,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_trivial_arithmetic_formula(lines, sections, report, stage)   # W26
     check_negative_only_action(lines, sections, report, stage)         # W46
     check_cross_step_numeric_selfconsistency(lines, sections, report, stage)  # W53
+    check_sampling_nyquist(lines, sections, report, stage)                    # 规则 54 (数值三问机械半边)
     check_category_label_consistency(lines, sections, report, stage)             # W54
     check_function_noun_first_definition(lines, sections, report, stage, claims_text)  # W55
     check_long_parenthetical(lines, sections, report, stage)          # 规则 50 (suspect, 批注 20)
