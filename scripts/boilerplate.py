@@ -14,6 +14,9 @@ W08 条 2026-09-01 口径：省略号摘引会被照残句抄）。两个用法�
     # 1) 落笔前渲染：把本案名称填进全部模板句，撰写侧整句粘贴、不手写
     python scripts/boilerplate.py render --method-name "<方法名>" --system-name "<系统名>" [--no-medium]
 
+    # 1b) 只想看原文口径（不填案子）：
+    python scripts/boilerplate.py show [--claims]
+
     # 2) 校验：md 层（check_hard_rules.py 规则 47 调用）与 DOCX 层（verify_docx_injection.py 调用）
     python scripts/boilerplate.py check --md docs/全文稿.md [--claims-md docs/权要稿.md]
 
@@ -399,6 +402,8 @@ def detect_subjects(claims_text: str) -> tuple[bool, bool]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sh = sub.add_parser("show", help="打印全部模板句原文（槽位留空，供人查看口径；机器校对用 check）")
+    sh.add_argument("--claims", action="store_true", help="连同权利要求书侧两条（系统权/存储介质权）一起打印")
     r = sub.add_parser("render", help="把本案名称填进全部模板句")
     r.add_argument("--method-name", required=True,
                    help="本案方法保护主题：权 1 名称去掉「一种」后的整串，"
@@ -412,6 +417,16 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--claims-md", type=Path, default=None, help="权要稿.md（判断系统/介质权；缺省从全文稿找权利要求书章）")
     c.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+
+    if args.cmd == "show":
+        items = list(TEMPLATES) + (list(CLAIM_TEMPLATES) if args.claims else [])
+        for tpl in items:
+            print(f"[{tpl.section}] {tpl.label}  (need={tpl.need}, key={tpl.key})")
+            print(tpl.text)
+            print()
+        print("（以上为 13 句模板句唯一副本；撰写时用 `render` 填本案名称后整句粘贴，"
+              "校验用 `check`，规则文件只放指针不摘引原文）")
+        return 0
 
     if args.cmd == "render":
         for t, s in render(args.method_name, args.system_name, not args.no_medium, args.indicative_subject):
