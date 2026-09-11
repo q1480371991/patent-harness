@@ -1460,13 +1460,15 @@ class CrossBlockX8Test(unittest.TestCase):
                 + lead_line + "\n")
 
     def _run(self, spec_text):
+        import json
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             (tmp / "权要稿.md").write_text(self.CLAIMS, encoding="utf-8")
             (tmp / "全文稿.md").write_text(spec_text, encoding="utf-8")
             res = run_script_allow_fail("check_cross_block.py", "--md", tmp / "全文稿.md",
                                         "--stage", "full-draft", "--claims-md", tmp / "权要稿.md")
-            return [ln for ln in res.stdout.splitlines() if "X8" in ln]
+            data = json.loads(res.stdout)
+            return [v for v in data["violations"] if v.get("check") == "X8"]
 
     def test_dep_lead_present_forms_pass(self):
         # ① 衔接句形态（在一种实施方式中，〔引导句〕）
@@ -1484,7 +1486,7 @@ class CrossBlockX8Test(unittest.TestCase):
             "确定所述中间结果。\n\n", self.SPEC_STALE_S12)
         hits = self._run(spec)
         self.assertEqual(len(hits), 1)
-        self.assertIn("权要 2", "\n".join(hits))
+        self.assertIn("权要 2", hits[0]["location"])
 
 
 class BoilerplateRule53Test(unittest.TestCase):
