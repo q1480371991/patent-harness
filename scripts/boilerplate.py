@@ -40,7 +40,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 # ---------------------------------------------------------------- 模板句定义
@@ -63,7 +63,7 @@ class Template:
     need: str             # always | system | medium | optional
     label: str            # 报告用名
     anchor_mode: str = "prefix"   # prefix | contains
-    variants: tuple[str, ...] = ()  # 允许的逐字变体（整句）
+    variants: tuple[str, ...] = ()  # 允许的逐字变体（整句模板，含 {槽位}；与主正则在 check 内一并尝试）
 
 
 _OPENING = (
@@ -86,6 +86,15 @@ _CLOSING = (
     "等同替换、改进等，均应包含在本发明的保护范围之内。"
 )
 
+# 「所述（计算机）程序」两种写法均可（用户 2026-09-11 确认；五案定稿两种并存）：
+# 第二方面段 / 第二实施例段 / 权利要求书系统权 三处按变体白名单放行。
+_ALT_PROGRAM = "所述程序"
+
+
+def _program_alt(text: str) -> tuple[str, ...]:
+    """把「所述计算机程序」替换为「所述程序」的整句变体（无该串则返回空元组）。"""
+    return (text.replace("所述计算机程序", _ALT_PROGRAM),) if "所述计算机程序" in text else ()
+
 TEMPLATES: tuple[Template, ...] = (
     Template("aspect1", "发明内容", "第一方面",
              "第一方面，为了解决上述技术问题，本发明提供了一种{方法名}，包括：",
@@ -93,7 +102,9 @@ TEMPLATES: tuple[Template, ...] = (
     Template("aspect2", "发明内容", "第二方面",
              "第二方面，本发明提供一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上"
              "运行的计算机程序，所述处理器执行所述计算机程序时实现如上所述的方法。",
-             "system", "发明内容·第二方面系统段"),
+             "system", "发明内容·第二方面系统段", variants=_program_alt(
+                 "第二方面，本发明提供一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上"
+                 "运行的计算机程序，所述处理器执行所述计算机程序时实现如上所述的方法。")),
     Template("aspect3", "发明内容", "第三方面",
              "第三方面，本发明提供一种计算机可读存储介质，其上存储有计算机程序，"
              "所述计算机程序被处理器执行时实现如上所述的方法。",
@@ -115,7 +126,9 @@ TEMPLATES: tuple[Template, ...] = (
     Template("embod2", "具体实施方式", "本发明第二实施例",
              "本发明第二实施例提供了一种{系统名}，包括：存储器、处理器及存储在存储器上并可在处理器上"
              "运行的计算机程序，所述处理器执行所述计算机程序时实现如上述所述的方法。",
-             "system", "具体实施方式·第二实施例系统段"),
+             "system", "具体实施方式·第二实施例系统段", variants=_program_alt(
+                 "本发明第二实施例提供了一种{系统名}，包括：存储器、处理器及存储在存储器上并可在处理器上"
+                 "运行的计算机程序，所述处理器执行所述计算机程序时实现如上述所述的方法。")),
     Template("correspond", "具体实施方式", "因而不再赘述",
              "需要说明的是，本发明实施例提供的一种{系统名}用于执行上述实施例的一种{方法名}的所有流程步骤，"
              "两者的工作原理和有益效果一一对应，因而不再赘述。",
@@ -139,7 +152,10 @@ CLAIM_TEMPLATES: tuple[Template, ...] = (
     Template("claim_system", "权利要求书", "包括存储器、处理器",
              "一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
              "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至{N}任一项所述的方法。",
-             "system", "权利要求书·系统权（计算机设备式）", anchor_mode="contains"),
+             "system", "权利要求书·系统权（计算机设备式）", anchor_mode="contains",
+             variants=_program_alt(
+                 "一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+                 "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至{N}任一项所述的方法。")),
     Template("claim_medium", "权利要求书", "一种计算机可读存储介质",
              "一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
              "所述计算机程序被处理器执行时实现权利要求1至{N}任一项所述的方法。",
@@ -241,6 +257,12 @@ def check_paragraphs(paragraphs: list[str], has_system: bool, has_medium: bool,
         got = paragraphs[i].strip()
         rx = template_regex(t)
         m = rx.match(got)
+        if not m:
+            for alt in t.variants:           # 「所述程序 / 所述计算机程序」等整句变体
+                m_alt = template_regex(replace(t, text=alt)).match(got)  # dataclasses.replace
+                if m_alt:
+                    m = m_alt
+                    break
         if not m and got not in t.variants:
             if t.need == "optional":
                 msg = f"{t.label}写了但措辞偏离定版——该段默认不写；若写，须逐字为『{t.text}』"
@@ -305,6 +327,12 @@ def check_claims(claim_lines: list[str]) -> list[dict]:
             continue
         num, body = hits[0]
         m = template_regex(t).match(body)
+        if not m:
+            for alt in t.variants:              # 「所述程序 / 所述计算机程序」两种写法均可
+                m_alt = template_regex(replace(t, text=alt)).match(body)
+                if m_alt:
+                    m = m_alt
+                    break
         if not m:
             vio.append({"key": t.key, "label": t.label, "section": "权利要求书", "kind": "mismatch",
                         "message": f"权{num} {t.label}偏离模板——须逐字为『{t.text}』（编号头外只填槽位；"

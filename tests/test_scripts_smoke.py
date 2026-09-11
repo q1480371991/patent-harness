@@ -1292,9 +1292,10 @@ class BoilerplateTest(unittest.TestCase):
         # ③ 结束语用旧变体（偏离批注 21 定版）
         self.assertIn(("closing", "mismatch"), run(lambda ps: ps.__setitem__(
             len(ps) - 1, "以上所述的具体实施例，仅用于解释本发明，并不用于限定本发明的保护范围。")))
-        # ④ 第二实施例写「所述程序」
+        # ④ 第二实施例段改写（把「包括：」后的存储器处理器那串简缩掉）
         self.assertIn(("embod2", "mismatch"), run(lambda ps: ps.__setitem__(
-            8, ps[8].replace("所述处理器执行所述计算机程序", "所述处理器执行所述程序"))))
+            8, ps[8].replace("包括：存储器、处理器及存储在存储器上并可在处理器上运行的计算机程序",
+                             "包括存储器与处理器"))))
         # ⑤ 示意性说明段被删（1稿为过闸门删段）
         self.assertIn(("indicative", "missing"), run(lambda ps: ps.pop(10)))
         # ⑥ 名称槽位不一致：入口句写了别的方法名
@@ -1346,6 +1347,26 @@ class BoilerplateTest(unittest.TestCase):
             self.assertEqual(res.returncode, 1)
             self.assertIn("第一方面句", res.stdout)
 
+
+    def test_program_wording_both_accepted(self):
+        """「所述计算机程序 / 所述程序」两种写法均可（用户 2026-09-11 确认），三处机械校验都放行。"""
+        import json
+        bp = self._mod()
+        c = ("一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+             "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。")
+        d = c.replace("所述计算机程序时实现", "所述程序时实现")
+        self.assertEqual(bp.check_claims(["9." + c]), [])
+        self.assertEqual(bp.check_claims(["9." + d]), [])
+        # 全文稿：第二方面 + 第二实施例段两种写法
+        for key in ("aspect2", "embod2"):
+            paras, secs = [], {}
+            for tpl, s in bp.render("测试方法", "测试系统", True):
+                s = s.replace("{串述}", "a").replace("{手段}", "b").replace("{效果}", "c")
+                if tpl.key == key:
+                    s = s.replace("所述计算机程序时实现", "所述程序时实现")
+                secs[len(paras)] = tpl.section
+                paras.append(s)
+            self.assertEqual(bp.check_paragraphs(paras, True, True, secs), [], key)
 
     def test_claim_templates_rule51(self):
         """规则 51：权9/权10 整条逐字；H2609029 交付稿形态（其特征在于前移 + 「如…中任一项」）FAIL；N 须 = 系统权编号−1。"""
