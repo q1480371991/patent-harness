@@ -1495,6 +1495,31 @@ def check_sampling_nyquist(lines: list[str], sections: dict, report: Report, sta
                 break
 
 
+# ---------------------------------------------------------------- 规则 55: 「其中」代指不显式
+#
+# 立项 (H2609029 定稿轮): 王工把 3 处「通过其中的决策树集合」改为「通过所述预设随机森林模型中的
+# 决策树集合」——正文里不写「其中」代指, 写「所述〔对象〕中」, 让回指对象显式化 (与 G4-1 的
+# 「所述」回指链同一取向)。规则零误报口径: 只在「介词 + 其中」形态命中 (通过其中/将其中/对其中/
+# 在其中的 X), 正常引述「其中，…」作引导词不算 (那是 implementation.md L8-1 的合法引导词)。
+_PRONOUN_QIZHONG_RE = re.compile(r"(?:通过|将|对|在|由|从|把)其中")
+
+
+def check_pronoun_qizhong(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 55 (suspect): 正文用「其中」代指对象 (G4-1 回指显式化; H2609029 定稿轮)."""
+    if stage != "full-draft":
+        return
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        for i in range(start, end):
+            m = _PRONOUN_QIZHONG_RE.search(lines[i])
+            if m:
+                report.add_suspect(
+                    "G4-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
+                    "「其中」代指对象不显式; 应写「所述〔对象〕中」(王工 H2609029 定稿亲改 3 处)",
+                    suspect_id="S-G4-qizhong", section="G4", owner="global",
+                    missing_dimensions=["回指显式化"],
+                )
+
+
 # ---------------------------------------------------------------- 规则 48: 有益效果分项句式
 #
 # 立项根因 (H2608165 全文审核v1, 王工批注 9 原话「套话模板，本发明通过xx，这样做怎么xx，
@@ -2429,14 +2454,19 @@ def check_function_noun_first_definition(lines: list[str], sections: dict, repor
             )
             break
 
-# 规则 42 判据 (implementation.md L8-1 解释段段落行数上限): 四号宋体 1.5 倍行距、
-# 正文宽 ≈16.9cm 换行折算 ≈34 字/行, 7 行 ≈ 238 字, 取 240 为界.
+# 规则 42 判据 (implementation.md L8-1 解释段段落行数区间): 四号宋体 1.5 倍行距、
+# 正文宽 ≈16.9cm 换行折算 ≈34 字/行. ★ 王工 H2609029 定稿轮给全区间「正常 5-10 行,
+# 最多不超过 15 行; 解释同一部分内容的就不要拆分两个段落」(原话), 故上限由 7 行(240 字)
+# 放宽为 15 行(≈510 字); 下限 5 行(≈170 字) 与「一句话一段/一行」属语义项, 交 impl-auditor
+# (机械判会误伤王工定稿保留的短解释段, 实测 19 段 <3 行中多为合规项).
 # 豁免段前缀: Sxx 框架句/展开段入口句 (按权 1/从权分句逐字, 行数跟随分句)、
 # 收尾"综上所述"方法与三段法律套话、图导引句.
 _IMPL_PARA_EXEMPT_PREFIX = (
     "综上所述", "以下所述", "以上所述", "本发明第二实施例", "第二方面", "第三方面",
     "图1为", "图1为本", "如图1", "下面将结合", "需要说明的是，本发明实施例还提供",
 )
+# 解释段段落长度硬上限 (≈34 字/行 × 15 行); 王工 2026-09-11 H2609029 定稿轮口径。
+IMPL_PARA_MAX_CHARS = 510
 _IMPL_PARA_ENTRY_RE = re.compile(r"^(在步骤S\d+中|在一个实施方式中|在一种实施方式中).*，包括：$")
 
 
@@ -2541,10 +2571,10 @@ def check_impl_para_lines(lines: list[str], sections: dict, report: Report, stag
         if stripped.startswith(_IMPL_PARA_EXEMPT_PREFIX):
             continue
         cjk = len(re.findall(r"[一-鿿]", stripped))
-        if cjk > 240:
+        if cjk > IMPL_PARA_MAX_CHARS:
             report.add(
                 "L8-1", f"具体实施方式 第{offset + i + 1}行", stripped[:60],
-                "解释段单段纯汉字 >240 字(≈34字/行×7行上界), 超 ≤7 行上限; "
+                f"解释段单段纯汉字 >{IMPL_PARA_MAX_CHARS} 字(≈34字/行×15行上界), 超 ≤15 行上限; "
                 "按语义自然断点(对图像通路/对文本通路、随后/最后等动作或对象切换处)"
                 "拆分为多个 ≤7 行独立段, 或精简冗余展开(L8-1 解释段段落行数上限)",
             )
@@ -2643,6 +2673,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_category_label_consistency(lines, sections, report, stage)             # W54
     check_function_noun_first_definition(lines, sections, report, stage, claims_text)  # W55
     check_long_parenthetical(lines, sections, report, stage)          # 规则 50 (suspect, 批注 20)
+    check_pronoun_qizhong(lines, sections, report, stage)             # 规则 55 (「其中」代指, H2609029)
     # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
     check_impl_para_lines(lines, sections, report, stage)
 

@@ -11,6 +11,11 @@
 - X7 (L1-1, 两阶段): 从权引用句逐字一致 —— `其特征在于，所述〔引用句〕，包括：`
   的引用句 (仅允许去句首连接词并/再/然后、加"所述") 必须是依附链上某条权要
   原文的连续子串; 防改动词 (对↔根据) 与引用句内附加限定 (审批人硬要求).
+- X9 (L1-1, 仅 claims-draft/full-draft): 从权引用句形态线索（suspect）——
+  ①**引用句重复/包含**：两条从权的引用句互相包含（同一动作被两条从权展开）；
+  ②**form③ 误用**：`在所述〔…〕之后，所述方法还包括：` 的内层句逐字命中权 1 文本
+  （该内容属权 1 某分句**内部**的动作，应写「所述〔动作〕，包括：」而非包装成补充步骤）。
+  H2609029 定稿轮王工原话「这两个从权引用是乱的」+ 批注「这不就是…吗，为什么要写之后」。
 - X8 (L8-1, 仅 full-draft): 从权引导句在说明书复现逐字 —— 每条方法从权的引导句
   (`所述〔引用句〕，包括：` / form③ `在所述〔…〕之后，所述方法还包括：`) 必须在具体
   实施方式里以「在步骤Sxx中，…，包括：」入口句或「在一种实施方式中，…」衔接句逐字复现。
@@ -275,6 +280,64 @@ def check_x8_dep_lead_in_spec(structure: dict, violations: list[dict]) -> None:
         })
 
 
+def check_x9_dep_quote_shape(structure: dict, violations: list[dict]) -> None:
+    """X9: 从权引用句形态线索 (L1-1; suspect) —— 重复引用 / form③ 误用 (H2609029 定稿轮)。
+
+    ①**引用句重复/包含**：两条从权的引用句（去「所述」后）互相包含且长度 ≥12，
+      说明同一动作被两条从权重复展开（王工批注「这里反而多引用，解释的内容在权7」）。
+    ②**form③ 误用**：`在所述〔X〕之后，所述方法还包括：` 的内层句 X 逐字命中**权 1 文本**
+      且长度 ≥12 —— X 是权 1 某分句内部的动作，不是『结果之后的扩展优化』，应写成
+      「所述〔X〕，包括：」（王工批注「这不就是…吗，为什么要写之后」）。
+    仅报 suspect（form③ 有合法用途：交底书末尾的扩展优化步骤），交 claims-auditor 判。
+    """
+    claims = structure.get("claims") or {}
+    items = [it for it in claims.get("items", []) if it.get("dependent")]
+    if not items:
+        return
+    quote_re = re.compile(r"其特征在于，(.*?)，?包括[：:]")
+    form3_re = re.compile(r"^在所述(.+?)(?:之后|之前)，所述方法还")
+    claim1_flat = next((it.get("flat") or "" for it in claims.get("items", []) if it.get("num") == 1), "")
+
+    def _norm(s: str) -> str:
+        return re.sub(r"^所述", "", (s or "").strip())
+
+    quotes = {}
+    for it in items:
+        m = quote_re.search(it.get("flat") or "")
+        if m and len(_norm(m.group(1))) >= 12:
+            quotes[it["num"]] = _norm(m.group(1))
+    nums = sorted(quotes)
+    for i, a in enumerate(nums):
+        for b in nums[i + 1:]:
+            qa, qb = quotes[a], quotes[b]
+            if qa in qb or qb in qa:
+                violations.append({
+                    "rule_id": "L1-1", "check": "X9",
+                    "location": f"权要 {a} 与权要 {b} 的引用句",
+                    "evidence": f"权{a}='{qa[:40]}…' / 权{b}='{qb[:40]}…'",
+                    "message": f"权要 {a} 与权要 {b} 的引用句互相包含——同一动作被两条从权重复展开; "
+                               "应合并展开或改引用对象 (每条从权只解决一个问题, L1-1)",
+                })
+    for it in items:
+        m = quote_re.search(it.get("flat") or "")
+        if not m:
+            continue
+        q = _norm(m.group(1))
+        m3 = form3_re.match(q)
+        if not m3:
+            continue
+        inner = _norm(m3.group(1))
+        if len(inner) >= 12 and inner in claim1_flat:
+            violations.append({
+                "rule_id": "L1-1", "check": "X9",
+                "location": f"权要 {it['num']} (form③ 包装)",
+                "evidence": f"内层句='{inner[:50]}…' 逐字命中权 1 文本",
+                "message": f"权要 {it['num']} 用「在所述…之后，所述方法还包括：」包装的内层句逐字来自权 1 —— "
+                           "该内容属权 1 分句内部的动作, 不是『结果之后的扩展优化』; 应写「所述〔动作〕，包括：」"
+                           "（form③ 只留给真正的扩展优化步骤, claims-requirements.md L1-1）",
+            })
+
+
 def check_x3_dependency(structure: dict, violations: list[dict]) -> None:
     """X3: 依附/引用合法 —— 单点依附与范围引用的目标权要均须存在且在前位."""
     claims = structure.get("claims") or {}
@@ -429,6 +492,7 @@ def run_checks(structure: dict) -> dict:
         check_x8_dep_lead_in_spec(structure, violations)
     check_x3_dependency(structure, violations)
     check_x7_dep_quote_verbatim(structure, violations)
+    check_x9_dep_quote_shape(structure, violations)
 
     return {
         "stage": structure["stage"],

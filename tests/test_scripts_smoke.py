@@ -1629,6 +1629,70 @@ class DocxAssetsTest(unittest.TestCase):
         self.assertIn("分节5", res.stdout)  # 样例的图在说明书附图分节
 
 
+class X9DepQuoteShapeTest(unittest.TestCase):
+    """X9：从权引用句形态线索（重复引用 / form③ 误用），复刻 H2609029 定稿轮被王工指出的形态。"""
+
+    GOOD = ("## 权利要求书\n\n"
+            "1.一种测试方法，其特征在于，包括：\n"
+            "获取输入数据，对所述输入数据进行滤波处理，得到滤波数据；\n"
+            "根据所述滤波数据确定中间结果。\n\n"
+            "2.根据权利要求1所述的测试方法，其特征在于，所述获取输入数据，对所述输入数据进行滤波处理，得到滤波数据，包括：\n"
+            "读取传感器数据；\n"
+            "对所述传感器数据进行滤波。\n")
+
+    def _run(self, md_text):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            md = Path(td) / "权要稿.md"
+            md.write_text(md_text, encoding="utf-8")
+            res = run_script_allow_fail("check_cross_block.py", "--md", md, "--stage", "claims-draft")
+            data = json.loads(res.stdout)
+            return [v for v in data["violations"] if v.get("check") == "X9"]
+
+    def test_good_passes(self):
+        self.assertEqual(self._run(self.GOOD), [])
+
+    def test_form3_misuse_flagged(self):
+        # 复刻 H2609029 权7：把权 1 分句内部的动作包装成「在…之后，所述方法还包括：」
+        bad = self.GOOD + (
+            "\n3.根据权利要求1所述的测试方法，其特征在于，在所述根据所述滤波数据确定中间结果之后，所述方法还包括：\n"
+            "根据所述中间结果生成控制信号。\n")
+        hits = self._run(bad)
+        self.assertTrue(any("form③" in h["message"] for h in hits), hits)
+
+    def test_duplicate_quote_flagged(self):
+        # 复刻 H2609029 权5/权7：两条从权的引用句互相包含（同一动作被重复展开）
+        bad = self.GOOD.replace(
+            "2.根据权利要求1所述的测试方法，其特征在于，所述获取输入数据，对所述输入数据进行滤波处理，得到滤波数据，包括：",
+            "2.根据权利要求1所述的测试方法，其特征在于，所述获取输入数据，对所述输入数据进行滤波处理，得到滤波数据，并作平滑，包括：")
+        bad += ("\n3.根据权利要求1所述的测试方法，其特征在于，所述获取输入数据，对所述输入数据进行滤波处理，得到滤波数据，包括：\n"
+                "读取传感器数据。\n")
+        hits = self._run(bad)
+        self.assertTrue(any("互相包含" in h["message"] for h in hits), hits)
+
+
+class PronounQizhongTest(unittest.TestCase):
+    """规则 55：「其中」代指对象 → suspect（王工 H2609029 定稿亲改 3 处）。"""
+
+    def _run(self, body):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            md = Path(td) / "全文稿.md"
+            md.write_text("## 具体实施方式\n\n" + body, encoding="utf-8")
+            res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "full-draft", "--json")
+            data = json.loads(res.stdout)
+            return [s for s in all_suspects(data) if s["suspect_id"] == "S-G4-qizhong"]
+
+    def test_flagged(self):
+        hits = self._run("在步骤S11中，将所述数据输入所述预设模型，通过其中的决策树集合计算重要度序列。\n")
+        self.assertEqual(len(hits), 1)
+
+    def test_legit_lead_word_not_flagged(self):
+        # 「其中，」作引导词（implementation.md L8-1 合法引导词）不报
+        hits = self._run("其中，所述阈值的确定过程为：对不少于一百个样本统计其分布。\n")
+        self.assertEqual(hits, [])
+
+
 class InjectFulltextSmokeTest(unittest.TestCase):
     """inject_fulltext_docx.py + verify_docx_injection.py 冒烟：全文稿 md → 模板 DOCX 注入。
 
