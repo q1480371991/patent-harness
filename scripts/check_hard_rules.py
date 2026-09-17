@@ -541,7 +541,7 @@ def check_no_specific_values_in_claims(lines: list[str], sections: dict, report:
     权利要求编号与从属引用不属违规, 先剔除再检测.
     """
     blocks = extract_claim_blocks(lines, sections)
-    # 合法剔除: 行首编号、从属引用 (权利要求1至8 / 权利要求1所述 / 根据权利要求1所述)
+    # 合法剔除: 行首编号、从属引用 (权利要求1至9 / 权利要求1所述 / 根据权利要求1所述)
     legal_re = re.compile(
         r"^\s*\d+\s*\.|权利要求\s*\d+\s*至\s*\d+|权利要求\s*\d+\s*所述|根据权利要求\s*\d+\s*所述"
     )
@@ -1172,8 +1172,9 @@ def check_figure_numbering(lines: list[str], sections: dict, report: Report, sta
 def check_closing_boilerplate(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 21: 具体实施方式收尾=实施例分层+固定套话 (L8-1).
 
-    说明书按实施例分层: 第一实施例=方法, 第二实施例=系统 (计算机设备式), 其后可续
-    计算机可读存储介质. 系统内容属第二实施例, 不得用"本发明实施例还提供了一种...系统"
+    说明书按实施例分层: 第一实施例=方法, 第二实施例=系统 (计算机设备式);
+    存储介质相关段落自 2026-09-11 起不再撰写(原「其后可续计算机可读存储介质」已废止).
+    系统内容属第二实施例, 不得用"本发明实施例还提供了一种...系统"
     模糊表述写进方法(第一实施例)正文并展开存储器/处理器构成与部署细节. 收尾四锚点按序
     出现, 缺一或乱序即 FAIL. 锚点取模板固定骨架 (发明名称在填空处、不入锚点), 零误报.
     仅 full-draft.
@@ -1261,8 +1262,8 @@ def check_benefit_enumeration(lines: list[str], sections: dict, report: Report, 
 # 「模板是填空题, 变量词之外一字不动; 能固定的用脚本固定」口径, **全部模板句逐字断言**,
 # 原文唯一副本与校验逻辑移入 `scripts/boilerplate.py` (同一份常量同时服务 md 层本规则、
 # DOCX 层 verify_docx_injection.py、以及落笔前 `boilerplate.py render` 填空渲染)。
-# 旧定稿的同义变体 (第一方面短式、第二实施例「所述程序」、五种结束语) 自本版起判 FAIL ——
-# 这是有意为之: 王工口径已从「容忍」转为「统一按模板」。
+# 变体口径：模板句整体逐字，但两类按白名单放行 —— ①「所述程序 / 所述计算机程序」两版；②结束语批注 21 定版 + 简版；
+# 其余旧定稿同义变体（第一方面短式、其它结束语写法）仍判 FAIL。
 _BOILER_OPENING = boilerplate._OPENING          # 兼容旧引用
 _BOILER_OPENING_VARIANT = _BOILER_OPENING.replace("作出创造性", "做出创造性")
 
@@ -1272,8 +1273,8 @@ def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
     """规则 47 (1级 hard): 模板句逐字断言 (L6-1 / L7 / L8-1 / G8-2 批注 21; 唯一副本 boilerplate.py).
 
     覆盖 11 句: 第一方面 / 第二方面 / 有益效果引入 / 附图说明图1 / 开篇段 /
-    集中罗列入口句 / 综上所述骨架 / 第二实施例 / 方法—系统对应 / 存储介质(可选) /
-    示意性说明 / 结束语; 另查名称槽位一致与收尾顺序。
+    集中罗列入口句 / 综上所述骨架 / 第二实施例 / 方法—系统对应 / 示意性说明 /
+    结束语; 另查名称槽位一致与收尾顺序。介质相关三句为禁写项，出现即 FAIL。
     与规则 21 (四锚点按序) 并存: 规则 21 管结构, 本规则管内容逐字。仅 full-draft。
     """
     if stage != "full-draft":
@@ -1317,17 +1318,22 @@ def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
 # 原文唯一副本 boilerplate.CLAIM_TEMPLATES; {N} 须 = 系统权编号 − 1 (覆盖全部方法权)。
 
 def check_claim_boilerplate(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 51 (1级 hard): 系统权 / 存储介质权整条逐字 (L1-1; 唯一副本 boilerplate.py)."""
+    """规则 51 (1级 hard): 系统权整条逐字 + 介质权禁写 (L1-1; 唯一副本 boilerplate.py)."""
     body, offset = get_section_lines(lines, sections, "权利要求书")
     if offset < 0:
         return
     claim_lines = [ln.strip() for ln in body if ln.strip()]
     for v in boilerplate.check_claims(claim_lines):
-        report.add(
-            "L1-1", f"权利要求书(模板句·{v['label'].split('·', 1)[-1]})",
-            v["evidence"][:160],
-            v["message"] + " —— 系统权/介质权是填空题: 只填系统名与 N, 其余一字不改",
-        )
+        loc = f"权利要求书(模板句·{v['label'].split('·', 1)[-1]})"
+        if v.get("kind") == "suspect":
+            # 形态/位置类线索只出 suspect（功能模块式属规则允许的备选形态、位置偏差由人定）
+            sid = "S-L1-system-claim-form" if "形态" in v["label"] else "S-L1-system-claim-position"
+            report.add_suspect("L1-1", loc, v["evidence"][:160], v["message"],
+                               suspect_id=sid, section="L1", owner="claims",
+                               missing_dimensions=["权要形态"])
+        else:
+            report.add("L1-1", loc, v["evidence"][:160],
+                       v["message"] + " —— 系统权是填空题: 只填系统名与 N, 其余一字不改（介质权已禁写）")
 
 
 # ---------------------------------------------------------------- 规则 52: 有益效果分项数与字数
@@ -1859,7 +1865,7 @@ SPEC_FORBIDDEN_CLAIM_WORDINGS: list[tuple[str, str]] = [
 def check_spec_no_claims_wording(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 29: 说明书禁用权要体例措辞 (G5-1, W18/W29/W30 合并).
 
-    说明书正文块不得出现权要专用体例: "权利要求"(含"权利要求1至8任一项"等引用
+    说明书正文块不得出现权要专用体例: "权利要求"(含"权利要求1至9任一项"等引用
     形态)、"其特征在于"、"不在权利要求中……"式取舍元叙述.
 
     扫描边界: 只扫说明书正文章节 (发明内容/附图说明/具体实施方式/说明书摘要);
@@ -2530,8 +2536,8 @@ def check_function_noun_first_definition(lines: list[str], sections: dict, repor
 # 豁免段前缀: Sxx 框架句/展开段入口句 (按权 1/从权分句逐字, 行数跟随分句)、
 # 收尾"综上所述"方法与三段法律套话、图导引句.
 _IMPL_PARA_EXEMPT_PREFIX = (
-    "综上所述", "以下所述", "以上所述", "本发明第二实施例", "第二方面", "第三方面",
-    "图1为", "图1为本", "如图1", "下面将结合", "需要说明的是，本发明实施例还提供",
+    "综上所述", "以下所述", "以上所述", "本发明第二实施例", "第二方面",
+    "图1为", "图1为本", "如图1", "下面将结合",
 )
 # 解释段段落长度硬上限 (≈34 字/行 × 15 行); 王工 2026-09-11 H2609029 定稿轮口径。
 IMPL_PARA_MAX_CHARS = 510
@@ -2620,7 +2626,7 @@ def check_long_parenthetical(lines: list[str], sections: dict, report: Report, s
 def check_impl_para_lines(lines: list[str], sections: dict, report: Report, stage: str) -> None:
     """规则 42 (1级 hard): 解释段段落行数上限 (L8-1).
 
-    具体实施方式章节内正文段 (v2 基线每行一段) 纯汉字 >240 字 (≈34字/行×7行)
+    具体实施方式章节内正文段 (v2 基线每行一段) 纯汉字 >510 字 (≈34字/行×15行)
     即直接 hard FAIL、阻断闸门 —— 段落行数属确定性可判规则, 豁免段 (Sxx 框架
     句/展开段入口句/收尾套话/图导引句) 已在探测器内预过滤, 无歧义, 不交 auditor
     复核. 说明书摘要受 L4 ≤300 字约束、不在本规则范围. 仅 full-draft.

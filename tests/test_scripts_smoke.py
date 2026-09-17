@@ -1629,6 +1629,63 @@ class DocxAssetsTest(unittest.TestCase):
         self.assertIn("分节5", res.stdout)  # 样例的图在说明书附图分节
 
 
+class SystemClaimFormTest(unittest.TestCase):
+    """系统权形态与位置线索 + 结束语简版放行（2026-09-11 复核补测）。
+
+    覆盖两路独立复核指出的「无测试守」三处：
+    ① 功能模块式系统权不得被规则 51 误判 FAIL（规则允许的备选形态）；
+    ② 系统权不在权 10 出位置线索；
+    ③ 结束语简版（王工 2026-09-11「都可以」）放行。
+    """
+
+    DEVICE = ("一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+              "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至9任一项所述的方法。")
+    MODULE = "一种测试系统，包括：获取模块，用于获取数据；处理模块，用于处理数据。"
+
+    def _run(self, claim_lines):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            md = Path(td) / "权要稿.md"
+            md.write_text("## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据。\n\n"
+                          + "\n\n".join(claim_lines) + "\n", encoding="utf-8")
+            res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "claims-draft", "--json")
+            data = json.loads(res.stdout)
+            hard = [v for v in data["violations"] if "模板句" in v["location"] or "介质" in v["location"]]
+            susp = {s["suspect_id"] for s in all_suspects(data)}
+            return hard, susp
+
+    def test_device_style_at_claim10_passes(self):
+        hard, susp = self._run(["10." + self.DEVICE])
+        self.assertEqual(hard, [])
+        self.assertNotIn("S-L1-system-claim-position", susp)
+
+    def test_module_style_is_suspect_not_hard(self):
+        hard, susp = self._run(["10." + self.MODULE])
+        self.assertEqual(hard, [], "功能模块式不得被规则 51 判 hard FAIL")
+        self.assertIn("S-L1-system-claim-form", susp)
+
+    def test_system_claim_not_at_10_flags_position(self):
+        hard, susp = self._run(["9." + self.DEVICE])
+        self.assertIn("S-L1-system-claim-position", susp)
+
+    def test_closing_short_variant_accepted(self):
+        import importlib
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        bp = importlib.import_module("boilerplate")
+        tpl = next(t for t in bp.TEMPLATES if t.key == "closing")
+        self.assertTrue(tpl.variants, "结束语应有简版白名单")
+        paras, secs = [], {}
+        for t, s in bp.render("测试方法", "测试系统"):
+            s = s.replace("{串述}", "a").replace("{手段}", "b").replace("{效果}", "c")
+            if t.key == "closing":
+                s = tpl.variants[0]
+            secs[len(paras)] = t.section
+            paras.append(s)
+        vio = [v for v in bp.check_paragraphs(paras, True, secs) if v["key"] == "closing"]
+        self.assertEqual(vio, [], "结束语简版应放行（王工 2026-09-11「都可以」）")
+
+
 class ClaimPronounAndReferentTest(unittest.TestCase):
     """规则 56（权要「其/该」代指 hard）+ 规则 57（权 1「所述」引用基础 suspect）。
 

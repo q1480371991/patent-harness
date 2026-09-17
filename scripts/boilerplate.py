@@ -333,8 +333,18 @@ def check_claims(claim_lines: list[str]) -> list[dict]:
              for m in [re.match(r"^\s*(\d+)\s*[\.．]\s*(.*)$", ln)] if m]
     if not heads:
         return vio
-    sys_idx = [(num, body) for _, num, body in heads if "包括存储器、处理器" in body
-               or re.match(r"^一种[^，。；]{2,40}(?:系统|装置)，", body)]
+    # 只对**计算机设备式**系统权套模板逐字（含「存储器、处理器」标记）；规则允许的
+    # 功能模块式（"一种X系统，包括：A模块，用于…"）不套模板，交 claims-auditor 按 L1-1 判。
+    sys_idx = [(num, body) for _, num, body in heads
+               if "包括存储器、处理器" in body or "包括：存储器、处理器" in body]
+    # 形似系统权但未用计算机设备式 → 功能模块式备选形态，出线索
+    for num, body in ((n, b) for _, n, b in heads
+                      if re.match(r"^一种[^，。；]{2,40}(?:系统|装置)", b) and (n, b) not in sys_idx):
+        vio.append({"key": "system_claim_form", "label": "系统权·形态线索", "section": "权利要求书",
+                    "kind": "suspect",
+                    "message": f"权{num} 形似系统/装置权但未采用计算机设备式（无「包括存储器、处理器」）——"
+                               "功能模块式属**备选形态**，须有个案理由（L1-1）；请 claims-auditor 核",
+                    "evidence": body[:80]})
     for num, body in ((n, b) for _, n, b in heads if b.startswith(MEDIUM_CLAIM_PREFIX)):
         vio.append({"key": "forbidden_medium", "label": "权利要求书·存储介质权（禁写）",
                     "section": "权利要求书", "kind": "forbidden",
@@ -359,6 +369,12 @@ def check_claims(claim_lines: list[str]) -> list[dict]:
                                    f"「其特征在于」位置、「权利要求1至N任一项」写法均不得改）",
                         "evidence": _mismatch_detail(t, body)})
             continue
+        if num != 10:
+            vio.append({"key": "system_claim_position", "label": "系统权位置", "section": "权利要求书",
+                        "kind": "suspect",
+                        "message": f"系统权位于权 {num}，按 2026-09-11 口径应为**权 10**（方法权写满权 1–9）；"
+                                   "请核是否需调整配比或方法从权条数",
+                        "evidence": body[:60]})
         n = int(m.group("N"))
         if expect_n is not None and n != expect_n:
             vio.append({"key": t.key, "label": t.label, "section": "权利要求书", "kind": "mismatch",
