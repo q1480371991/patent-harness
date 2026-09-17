@@ -1629,6 +1629,29 @@ class DocxAssetsTest(unittest.TestCase):
         self.assertIn("分节5", res.stdout)  # 样例的图在说明书附图分节
 
 
+class GuardScriptsTest(unittest.TestCase):
+    """三个「平时不跑」的守卫纳入常规回归（2026-09-11 教训：评分摘录守卫坏了无人知）。
+
+    - verify_rule_anchors.py   契约里的 sed 锚点是否仍命中、区间是否非空
+    - verify_scoring_excerpts.py  scoring.md 与四份按路摘录的编号分派是否一致
+    - rules_budget.py --check  各阶段规则读取量是否超基线 10%
+    """
+
+    def test_rule_anchors_guard(self):
+        res = run_script_allow_fail("verify_rule_anchors.py", "--json")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertRegex(res.stdout, r'"failures"\s*:\s*0')
+
+    def test_scoring_excerpts_guard(self):
+        res = run_script_allow_fail("verify_scoring_excerpts.py", "--json")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertRegex(res.stdout, r'"failures"\s*:\s*0')
+
+    def test_rules_budget_guard(self):
+        res = run_script_allow_fail("rules_budget.py", "--check")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
+
 class SystemClaimFormTest(unittest.TestCase):
     """系统权形态与位置线索 + 结束语简版放行（2026-09-11 复核补测）。
 
