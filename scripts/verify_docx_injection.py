@@ -127,9 +127,9 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
     # 5) 模板句逐字（唯一副本 boilerplate.py；2026-09-10 由「锚点存在」升级为逐字比对——
     #    H2609029 实测锚点在、句子却被改写/漏句: 第一方面整句漏、结束语偏离批注 21 定版）
     paras, secs = boilerplate.docx_paragraphs(doc)
-    has_system, has_medium = boilerplate.detect_subjects("\n".join(paras))
-    vio = boilerplate.check_paragraphs(paras, has_system, has_medium, secs)
-    results.append((f"模板句逐字（系统权={has_system} 介质权={has_medium}）", not vio,
+    has_system, _has_medium = boilerplate.detect_subjects("\n".join(paras))  # 介质权已禁写
+    vio = boilerplate.check_paragraphs(paras, has_system, secs)
+    results.append((f"模板句逐字（系统权={has_system}）", not vio,
                     "；".join(f"{v['label']}: {v['evidence'][:90]}" for v in vio) if vio else "13 句全部逐字一致"))
 
     # 6) 图1 注入（分节2 + 分节5 各 ≥1 drawing）—— 仅在 insert_figures 跑过后查

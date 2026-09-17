@@ -442,11 +442,11 @@ class PatentScriptSmokeTests(unittest.TestCase):
         self.assertNotIn("方法 ≤7 条", claims_text)
         # 默认配比示例守卫: 必须与"总数=10"算术闭合。旧文案"方法权通常写到权要 7 左右"
         # + "权9 系统、权10 存储介质"只有 9 条(漏权8), 已改为方法权到权 8。
-        self.assertIn("方法权通常写到权要 8", claims_text)
+        self.assertIn("方法权写满权 9", claims_text)
         self.assertNotIn("方法权通常写到权要 7", claims_text)
-        self.assertIn("可扩展方法权数量或压缩系统", claims_text)
+        self.assertIn("可调整方法从权数量", claims_text)
         self.assertIn("系统/装置独权默认采用计算机设备式写法", claims_text)
-        self.assertIn("计算机可读存储介质权", claims_text)
+        self.assertIn("存储介质权自 2026-09-11 起不再撰写", claims_text)
         self.assertNotIn("系统/装置独权及其从权的结构", skill_text)
 
         self.assertIn("构建模型", global_text)
@@ -1241,7 +1241,11 @@ class FigureScriptsSmokeTest(unittest.TestCase):
 
 
 class BoilerplateTest(unittest.TestCase):
-    """boilerplate.py：模板句唯一副本的渲染与逐字校验（H2609029 六处模板问题的根治）。"""
+    """boilerplate.py：模板句唯一副本的渲染与逐字校验（H2609029 六处模板问题的根治）。
+
+    2026-09-11 起：权要配比为「方法权写满权 9 + 系统权权 10」，**不写存储介质权、发明内容无第三方面**
+    （王工口径）——介质相关三句为禁写项（`FORBIDDEN_MEDIUM_PARAS` / `MEDIUM_CLAIM_PREFIX`）。
+    """
 
     def _mod(self):
         import importlib
@@ -1252,7 +1256,7 @@ class BoilerplateTest(unittest.TestCase):
     def _canonical(self, bp):
         """render 输出 = 一份逐字合规的段落集合（自由槽位填上示意内容）。"""
         paras, secs = [], {}
-        for tpl, s in bp.render("测试方法", "测试系统", True):
+        for tpl, s in bp.render("测试方法", "测试系统"):
             s = s.replace("{串述}", "获取数据，生成信号").replace("{手段}", "滤波").replace("{效果}", "降噪")
             secs[len(paras)] = tpl.section
             paras.append(s)
@@ -1261,19 +1265,22 @@ class BoilerplateTest(unittest.TestCase):
     def test_render_covers_all_required_and_check_passes(self):
         bp = self._mod()
         paras, secs = self._canonical(bp)
-        keys = [tpl.key for tpl, _ in bp.render("测试方法", "测试系统", True)]
-        self.assertEqual(keys, ["aspect1", "aspect2", "aspect3", "benefit_intro", "fig1", "opening",
+        keys = [tpl.key for tpl, _ in bp.render("测试方法", "测试系统")]
+        self.assertEqual(keys, ["aspect1", "aspect2", "benefit_intro", "fig1", "opening",
                                 "intro", "summary", "embod2", "correspond", "indicative", "closing"])
+        # 介质相关三句已从模板表移除
+        self.assertNotIn("aspect3", keys)
+        self.assertNotIn("medium_spec", keys)
         self.assertIn("第一方面，为了解决上述技术问题，本发明提供了一种测试方法，包括：", paras)
         self.assertIn("图1为本发明第一实施例提供的测试方法的流程示意图。", paras)
-        self.assertEqual(bp.check_paragraphs(paras, True, True, secs), [])
-        # 无系统权/介质权的案子：系统类模板不渲染、也不要求
-        keys2 = [tpl.key for tpl, _ in bp.render("测试方法", None, False)]
+        self.assertEqual(bp.check_paragraphs(paras, True, secs), [])
+        # 无系统权的案子：系统类模板不渲染、也不要求
+        keys2 = [tpl.key for tpl, _ in bp.render("测试方法", None)]
         self.assertNotIn("aspect2", keys2)
         self.assertNotIn("embod2", keys2)
-        p2 = [s for _, s in bp.render("测试方法", None, False)]
+        p2 = [s for _, s in bp.render("测试方法", None)]
         p2 = [s.replace("{串述}", "a").replace("{手段}", "b").replace("{效果}", "c") for s in p2]
-        self.assertEqual(bp.check_paragraphs(p2, False, False), [])
+        self.assertEqual(bp.check_paragraphs(p2, False), [])
 
     def test_check_catches_h2609029_defects(self):
         bp = self._mod()
@@ -1282,39 +1289,51 @@ class BoilerplateTest(unittest.TestCase):
         def run(mut):
             ps = list(paras)
             mut(ps)
-            return {(v["key"], v["kind"]) for v in bp.check_paragraphs(ps, True, True, secs)}
+            return {(v["key"], v["kind"]) for v in bp.check_paragraphs(ps, True, secs)}
 
         # ① 第一方面整句漏（H2609029 2稿）
         self.assertIn(("aspect1", "missing"), run(lambda ps: ps.pop(0)))
-        # ② 附图说明漏「第一实施例」
+        # ② 附图说明漏「第一实施例」（index 3 = fig1）
         self.assertIn(("fig1", "mismatch"), run(lambda ps: ps.__setitem__(
-            4, "图1为本发明实施例提供的测试方法的流程示意图。")))
+            3, "图1为本发明实施例提供的测试方法的流程示意图。")))
         # ③ 结束语用旧变体（偏离批注 21 定版）
         self.assertIn(("closing", "mismatch"), run(lambda ps: ps.__setitem__(
             len(ps) - 1, "以上所述的具体实施例，仅用于解释本发明，并不用于限定本发明的保护范围。")))
-        # ④ 第二实施例段改写（把「包括：」后的存储器处理器那串简缩掉）
+        # ④ 第二实施例段改写（把「包括：」后的存储器处理器那串简缩掉；index 7 = embod2）
         self.assertIn(("embod2", "mismatch"), run(lambda ps: ps.__setitem__(
-            8, ps[8].replace("包括：存储器、处理器及存储在存储器上并可在处理器上运行的计算机程序",
+            7, ps[7].replace("包括：存储器、处理器及存储在存储器上并可在处理器上运行的计算机程序",
                              "包括存储器与处理器"))))
-        # ⑤ 示意性说明段被删（1稿为过闸门删段）
-        self.assertIn(("indicative", "missing"), run(lambda ps: ps.pop(10)))
-        # ⑥ 名称槽位不一致：入口句写了别的方法名
+        # ⑤ 示意性说明段被删（index 9）
+        self.assertIn(("indicative", "missing"), run(lambda ps: ps.pop(9)))
+        # ⑥ 名称槽位不一致：入口句写了别的方法名（index 5 = intro）
         self.assertIn(("names", "name"), run(lambda ps: ps.__setitem__(
-            6, "如图1所示，本发明实施例提供的一种别的方法，包括：")))
-        # ⑦ 收尾顺序颠倒
+            5, "如图1所示，本发明实施例提供的一种别的方法，包括：")))
+        # ⑦ 收尾顺序颠倒（summary 6 / embod2 7）
         def swap(ps):
-            ps[7], ps[8] = ps[8], ps[7]
+            ps[6], ps[7] = ps[7], ps[6]
         self.assertIn(("order", "order"), run(swap))
-        # ⑧ 可选存储介质段：写对了不报，写偏了报
-        ok = list(paras)
-        ok.insert(10, "需要说明的是，本发明实施例还提供了一种计算机可读存储介质，其上存储有计算机程序，"
-                      "所述计算机程序被处理器执行时实现如上述所述的方法。")
-        secs_ok = {i: ("具体实施方式" if i >= 5 else secs.get(i)) for i in range(len(ok))}
-        self.assertEqual(bp.check_paragraphs(ok, True, True, secs_ok), [])
-        bad = list(ok)
-        bad[10] = bad[10].replace("其上存储有", "所述计算机可读存储介质上存储有")
-        self.assertIn(("medium_spec", "mismatch"),
-                      {(v["key"], v["kind"]) for v in bp.check_paragraphs(bad, True, True, secs_ok)})
+
+    def test_medium_paras_are_forbidden(self):
+        """介质禁写项：发明内容第三方面段 / 说明书收尾存储介质段出现即 FAIL（王工 2026-09-11）。"""
+        bp = self._mod()
+        paras, secs = self._canonical(bp)
+        third = ("第三方面，本发明提供一种计算机可读存储介质，其上存储有计算机程序，"
+                 "所述计算机程序被处理器执行时实现如上所述的方法。")
+        ps = list(paras)
+        ps.insert(2, third)                      # 插在发明内容段内
+        secs2 = {i: ("发明内容" if i <= 2 else secs.get(i - 1, "具体实施方式")) for i in range(len(ps))}
+        vio = [v for v in bp.check_paragraphs(ps, True, secs2) if v["key"] == "forbidden_medium"]
+        self.assertEqual(len(vio), 1)
+        self.assertEqual(vio[0]["kind"], "forbidden")
+
+    def test_medium_claim_is_forbidden(self):
+        """权利要求书存储介质权出现即 FAIL。"""
+        bp = self._mod()
+        med = ("10.一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
+               "所述计算机程序被处理器执行时实现权利要求1至9任一项所述的方法。")
+        vio = [v for v in bp.check_claims([med]) if v["key"] == "forbidden_medium"]
+        self.assertEqual(len(vio), 1)
+        self.assertIn("介质权", vio[0]["message"])
 
     def test_cli_check_on_case_md(self):
         """CLI：对一份含偏离的 md 报 FAIL、exit 1；修正后 exit 0。"""
@@ -1322,7 +1341,7 @@ class BoilerplateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             paras, _ = self._canonical(bp)
             sec_of = {t.key: t.section for t in bp.TEMPLATES}
-            keys = [tpl.key for tpl, _ in bp.render("测试方法", "测试系统", True)]
+            keys = [tpl.key for tpl, _ in bp.render("测试方法", "测试系统")]
             lines, cur = [], None
             for k, s in zip(keys, paras):
                 if sec_of[k] != cur:
@@ -1333,10 +1352,9 @@ class BoilerplateTest(unittest.TestCase):
             claims = Path(td) / "权要稿.md"
             claims.write_text(
                 "## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据。\n\n"
-                "9.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
-                "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。\n\n"
-                "10.一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
-                "所述计算机程序被处理器执行时实现权利要求1至8任一项所述的方法。\n", encoding="utf-8")
+                "10.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+                "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至9任一项所述的方法。\n",
+                encoding="utf-8")
             md.write_text("\n\n".join(lines) + "\n", encoding="utf-8")
             res = run_script_allow_fail("boilerplate.py", "check", "--md", md, "--claims-md", claims)
             self.assertEqual(res.returncode, 0, res.stdout)
@@ -1347,35 +1365,30 @@ class BoilerplateTest(unittest.TestCase):
             self.assertEqual(res.returncode, 1)
             self.assertIn("第一方面句", res.stdout)
 
-
     def test_program_wording_both_accepted(self):
         """「所述计算机程序 / 所述程序」两种写法均可（用户 2026-09-11 确认），三处机械校验都放行。"""
-        import json
         bp = self._mod()
         c = ("一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
-             "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。")
+             "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至9任一项所述的方法。")
         d = c.replace("所述计算机程序时实现", "所述程序时实现")
-        self.assertEqual(bp.check_claims(["9." + c]), [])
-        self.assertEqual(bp.check_claims(["9." + d]), [])
-        # 全文稿：第二方面 + 第二实施例段两种写法
+        self.assertEqual(bp.check_claims(["10." + c]), [])
+        self.assertEqual(bp.check_claims(["10." + d]), [])
         for key in ("aspect2", "embod2"):
             paras, secs = [], {}
-            for tpl, s in bp.render("测试方法", "测试系统", True):
+            for tpl, s in bp.render("测试方法", "测试系统"):
                 s = s.replace("{串述}", "a").replace("{手段}", "b").replace("{效果}", "c")
                 if tpl.key == key:
                     s = s.replace("所述计算机程序时实现", "所述程序时实现")
                 secs[len(paras)] = tpl.section
                 paras.append(s)
-            self.assertEqual(bp.check_paragraphs(paras, True, True, secs), [], key)
+            self.assertEqual(bp.check_paragraphs(paras, True, secs), [], key)
 
     def test_claim_templates_rule51(self):
-        """规则 51：权9/权10 整条逐字；H2609029 交付稿形态（其特征在于前移 + 「如…中任一项」）FAIL；N 须 = 系统权编号−1。"""
+        """规则 51：系统权整条逐字（权 10，N = 9）；H2609029 形态（其特征在于前移 + 「如…中任一项」）FAIL。"""
         import json
         good = ("## 权利要求书\n\n1.一种测试方法，其特征在于，包括：\n获取数据；\n生成信号。\n\n"
-                "9.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
-                "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。\n\n"
-                "10.一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
-                "所述计算机程序被处理器执行时实现权利要求1至8任一项所述的方法。\n")
+                "10.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+                "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至9任一项所述的方法。\n")
 
         def run(md_text):
             with tempfile.TemporaryDirectory() as tmp:
@@ -1383,29 +1396,34 @@ class BoilerplateTest(unittest.TestCase):
                 md.write_text(md_text, encoding="utf-8")
                 res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "claims-draft", "--json")
                 data = json.loads(res.stdout)
-                return [v for v in data["violations"] if "模板句" in v["location"]]
+                return [v for v in data["violations"] if "模板句" in v["location"] or "介质" in v["location"]]
 
         self.assertEqual(run(good), [])
         h2609029 = good.replace(
-            "9.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
-            "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至8任一项所述的方法。",
-            "9.一种测试系统，其特征在于，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
-            "所述处理器执行所述计算机程序时实现如权利要求1至8中任一项所述的方法。")
+            "10.一种测试系统，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+            "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至9任一项所述的方法。",
+            "10.一种测试系统，其特征在于，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
+            "所述处理器执行所述计算机程序时实现如权利要求1至9中任一项所述的方法。")
         hits = run(h2609029)
         self.assertEqual(len(hits), 1)
         self.assertIn("系统权", hits[0]["location"])
-        wrong_n = good.replace("被处理器执行时实现权利要求1至8", "被处理器执行时实现权利要求1至7")
+        wrong_n = good.replace("时实现权利要求1至9任一项", "时实现权利要求1至8任一项")
         hits = run(wrong_n)
         self.assertEqual(len(hits), 1)
-        self.assertIn("应为「1至8」", hits[0]["message"])
+        self.assertIn("应为「1至9」", hits[0]["message"])
+        # 介质权出现 → 禁写 FAIL
+        with_med = good + ("\n11.一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
+                           "所述计算机程序被处理器执行时实现权利要求1至9任一项所述的方法。\n")
+        hits = run(with_med)
+        self.assertTrue(any("介质" in h["location"] for h in hits), hits)
 
     def test_benefit_count_rule52(self):
-        """规则 52：有益效果恰 3 项 hard；字数出 400–450 区间只出 suspect S-L6-benefit-length。"""
+        """规则 52：有益效果恰 3 项 hard；字数出 400–450 区间只出 suspect。"""
         import json
         bp = self._mod()
         paras, _ = self._canonical(bp)
         sec_of = {tp.key: tp.section for tp in bp.TEMPLATES}
-        keys = [tp.key for tp, _ in bp.render("测试方法", "测试系统", True)]
+        keys = [tp.key for tp, _ in bp.render("测试方法", "测试系统")]
         item = "（{n}）本发明通过对输入数据滤波，抑制了噪声干扰，实现了误报率的降低。"
         filler = "在步骤S11中，获取输入数据并进行滤波处理得到滤波结果。\n\n" * 60
 
@@ -1429,27 +1447,9 @@ class BoilerplateTest(unittest.TestCase):
 
         d = run(build(3))
         self.assertEqual([v for v in d["violations"] if "有益效果分项数" in v["evidence"]], [])
-        self.assertTrue(any(s.get("suspect_id") == "S-L6-benefit-length" for s in all_suspects(d)))
         d = run(build(4))
         self.assertTrue(any("恰好 3 项" in v["message"] and "实际 4 项" in v["message"] for v in d["violations"]))
 
-    def test_skeleton_blank_paragraph_check(self):
-        """空段：干净稿分节3/4 出现无文本无图的 <w:p> → FAIL；权要稿分节1 的模板空占位不计。"""
-        name = "测试控制方法及系统"
-        helper = PatentScriptSmokeTests()
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
-            good = helper._claims_docx_from_template(tmp, name)
-            res = run_script_allow_fail("verify_docx_skeleton.py", good, "--stage", "权要", "--invention-name", name)
-            self.assertIn("[PASS] 分节3/4·无空段（0 个）", res.stdout)
-            bad = tmp / "blank.docx"
-            title = ('<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/>'
-                     '<w:ind w:firstLine="0" w:firstLineChars="0"/><w:rPr><w:b/></w:rPr></w:pPr>'
-                     '<w:r><w:rPr><w:rFonts w:hint="eastAsia"/><w:b/></w:rPr>'
-                     '<w:t xml:space="preserve">背景技术</w:t></w:r></w:p>')
-            helper._mutate_docx(good, bad, lambda d: d.replace(title, "<w:p/>" + title, 1))
-            res = run_script_allow_fail("verify_docx_skeleton.py", bad, "--stage", "权要", "--invention-name", name)
-            self.assertIn("[FAIL] 分节3/4·无空段（1 个）", res.stdout)
 
 
 class ThirdLayerSyncA5Test(unittest.TestCase):

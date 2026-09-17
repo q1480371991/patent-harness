@@ -12,7 +12,7 @@
 W08 条 2026-09-01 口径：省略号摘引会被照残句抄）。两个用法：
 
     # 1) 落笔前渲染：把本案名称填进全部模板句，撰写侧整句粘贴、不手写
-    python scripts/boilerplate.py render --method-name "<方法名>" --system-name "<系统名>" [--no-medium]
+    python scripts/boilerplate.py render --method-name "<方法名>" --system-name "<系统名>"
 
     # 1b) 只想看原文口径（不填案子）：
     python scripts/boilerplate.py show [--claims]
@@ -33,10 +33,12 @@ W08 条 2026-09-01 口径：省略号摘引会被照残句抄）。两个用法�
   - 综上所述段：L8-1 收尾条①骨架（三个槽位自由）
   - 第二实施例段：L8-1 收尾条②，「所述计算机程序」按 H2608165 定稿与权 9/第二方面同源写法
   - 方法—系统对应段：L8-1 收尾条③（五案逐字同）
-  - 存储介质段：可选段（L8-1 ④，默认不写）；写了就须为 H2608165 定稿形态
+  - ★ **介质相关三句自 2026-09-11 起不再撰写**（王工口径：「方法权写满九条……就不用介质来凑数了」
+    「发明内容没有第三方面了」）：权利要求书存储介质权 / 发明内容第三方面 / 说明书收尾存储介质段，
+    原文移入 `FORBIDDEN_MEDIUM_PARAS` 作**禁写项**——出现即 FAIL（见 `check_paragraphs` / `check_claims`）
   - 示意性说明段 / 结束语：`docx-template.md` G8-2 嵌入的王工批注 21 定版原文
-  - 权利要求书侧 系统权 / 存储介质权整条：`claims-requirements.md` L1-1（X2608107/H2608165 定稿逐字同；
-    `check_claims`，由 check_hard_rules.py 规则 51 在 claims-draft 阶段调用）
+  - 权利要求书侧 系统权（权 10）：`claims-requirements.md` L1-1（X2608107/H2608165 定稿逐字同；
+    `check_claims`，由 check_hard_rules.py 规则 51 在 claims-draft 阶段调用；`{N}` = 系统权编号 − 1 = 9）
 """
 from __future__ import annotations
 
@@ -108,10 +110,6 @@ TEMPLATES: tuple[Template, ...] = (
              "system", "发明内容·第二方面系统段", variants=_program_alt(
                  "第二方面，本发明提供一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上"
                  "运行的计算机程序，所述处理器执行所述计算机程序时实现如上所述的方法。")),
-    Template("aspect3", "发明内容", "第三方面",
-             "第三方面，本发明提供一种计算机可读存储介质，其上存储有计算机程序，"
-             "所述计算机程序被处理器执行时实现如上所述的方法。",
-             "medium", "发明内容·第三方面存储介质段"),
     Template("benefit_intro", "发明内容", "相比于现有技术",
              "相比于现有技术，本发明具有如下有益效果：",
              "always", "发明内容·有益效果引入句"),
@@ -136,10 +134,6 @@ TEMPLATES: tuple[Template, ...] = (
              "需要说明的是，本发明实施例提供的一种{系统名}用于执行上述实施例的一种{方法名}的所有流程步骤，"
              "两者的工作原理和有益效果一一对应，因而不再赘述。",
              "system", "具体实施方式·方法—系统对应段", anchor_mode="contains"),
-    Template("medium_spec", "具体实施方式", "还提供了一种计算机可读存储介质",
-             "需要说明的是，本发明实施例还提供了一种计算机可读存储介质，其上存储有计算机程序，"
-             "所述计算机程序被处理器执行时实现如上述所述的方法。",
-             "optional", "具体实施方式·存储介质段（可选，默认不写）", anchor_mode="contains"),
     Template("indicative", "具体实施方式", "仅仅是示意性", _INDICATIVE, "system",
              "具体实施方式·示意性说明段（批注 21 定版）", anchor_mode="contains"),
     Template("closing", "具体实施方式", "以上所述的具体实施例", _CLOSING, "always",
@@ -152,7 +146,18 @@ TEMPLATES: tuple[Template, ...] = (
              )),
 )
 # 收尾固定顺序（L8-1 收尾条）：综上所述 → 第二实施例 → 方法—系统对应 → [存储介质] → 示意性说明 → 结束语
-CLOSING_ORDER = ("summary", "embod2", "correspond", "medium_spec", "indicative", "closing")
+CLOSING_ORDER = ("summary", "embod2", "correspond", "indicative", "closing")
+
+# ---- 禁写项：介质相关三句（王工 2026-09-11：方法写满九条 + 权10 系统，不再用介质凑数）----
+FORBIDDEN_MEDIUM_PARAS: tuple[tuple[str, str], ...] = (
+    ("发明内容·第三方面存储介质段（禁写）",
+     "第三方面，本发明提供一种计算机可读存储介质，其上存储有计算机程序，"
+     "所述计算机程序被处理器执行时实现如上所述的方法。"),
+    ("具体实施方式·存储介质段（禁写）",
+     "需要说明的是，本发明实施例还提供了一种计算机可读存储介质，其上存储有计算机程序，"
+     "所述计算机程序被处理器执行时实现如上述所述的方法。"),
+)
+MEDIUM_CLAIM_PREFIX = "一种计算机可读存储介质"
 
 # ---- 权利要求书侧模板句（claims-requirements.md L1-1；X2608107 / H2608165 定稿逐字同）----
 # 编号头「N.」不入模板；{系统名} 含「系统/装置」后缀；{N} = 末条方法权编号（= 系统权编号 − 1）。
@@ -165,10 +170,6 @@ CLAIM_TEMPLATES: tuple[Template, ...] = (
              variants=_program_alt(
                  "一种{系统名}，包括存储器、处理器及存储在所述存储器上并可在所述处理器上运行的计算机程序，"
                  "其特征在于，所述处理器执行所述计算机程序时实现权利要求1至{N}任一项所述的方法。")),
-    Template("claim_medium", "权利要求书", "一种计算机可读存储介质",
-             "一种计算机可读存储介质，其上存储有计算机程序，其特征在于，"
-             "所述计算机程序被处理器执行时实现权利要求1至{N}任一项所述的方法。",
-             "medium", "权利要求书·存储介质权", anchor_mode="contains"),
 )
 _SLOT_RE["N"] = r"(?P<N>\d{1,2})"
 
@@ -187,16 +188,12 @@ def template_regex(t: Template) -> re.Pattern:
     return re.compile("^" + "".join(out) + "$", re.S)
 
 
-def render(method_name: str, system_name: str | None, has_medium: bool,
+def render(method_name: str, system_name: str | None,
            indicative_subject: str = "系统") -> list[tuple[Template, str]]:
-    """把本案名称填进全部适用模板句（不含可选存储介质段）。自由槽位保留 {…} 供撰写侧填。"""
+    """把本案名称填进全部适用模板句（介质三句已废弃、不渲染）。自由槽位保留 {…} 供撰写侧填。"""
     out = []
     for t in TEMPLATES:
-        if t.need == "optional":
-            continue
         if t.need == "system" and not system_name:
-            continue
-        if t.need == "medium" and not has_medium:
             continue
         s = t.text.replace("{方法名}", method_name).replace("{S}", indicative_subject)
         if system_name:
@@ -231,7 +228,7 @@ def _mismatch_detail(t: Template, got: str) -> str:
     return f"槽位之后有改写：实得「{got[:40]}…{got[-24:]}」 vs 模板「{t.text[:40]}…{t.text[-24:]}」"
 
 
-def check_paragraphs(paragraphs: list[str], has_system: bool, has_medium: bool,
+def check_paragraphs(paragraphs: list[str], has_system: bool,
                      sections: dict[int, str] | None = None) -> list[dict]:
     """逐字校验。paragraphs = 接受修订态的段落文本列表（md 非空行 / DOCX 段）。
 
@@ -247,10 +244,20 @@ def check_paragraphs(paragraphs: list[str], has_system: bool, has_medium: bool,
             return True
         return sections.get(i) == t.section
 
+    # 禁写项：介质相关段出现即 FAIL（王工 2026-09-11 口径）
+    for label, forbidden in FORBIDDEN_MEDIUM_PARAS:
+        for i, para in enumerate(paragraphs):
+            if forbidden in para:
+                vio.append({"key": "forbidden_medium", "label": label, "section": "全文",
+                            "kind": "forbidden",
+                            "message": f"出现禁写段：{label}——王工 2026-09-11 定「方法权写满九条、权10 系统、"
+                                       "不再写介质权；发明内容没有第三方面了」，该段一律不写",
+                            "evidence": para[:80]})
+                break
+
     for t in TEMPLATES:
         needed = (t.need == "always"
-                  or (t.need == "system" and has_system)
-                  or (t.need == "medium" and has_medium))
+                  or (t.need == "system" and has_system))
         cands = [i for i in _candidates(paragraphs, t) if in_section(i, t)]
         if not cands:
             if needed:
@@ -273,9 +280,7 @@ def check_paragraphs(paragraphs: list[str], has_system: bool, has_medium: bool,
                     m = m_alt
                     break
         if not m and got not in t.variants:
-            if t.need == "optional":
-                msg = f"{t.label}写了但措辞偏离定版——该段默认不写；若写，须逐字为『{t.text}』"
-            elif t.need in ("system", "medium") and not needed:
+            if t.need == "system" and not needed:
                 msg = f"{t.label}在本案无对应保护主题却出现，且措辞偏离定版『{t.text}』"
             else:
                 msg = f"{t.label}偏离模板——须逐字为『{t.text}』（只填槽位、不改一字）"
@@ -311,15 +316,16 @@ def check_paragraphs(paragraphs: list[str], has_system: bool, has_medium: bool,
     seq = [(found[k], k) for k in CLOSING_ORDER if k in found]
     if [k for _, k in sorted(seq)] != [k for _, k in seq]:
         vio.append({"key": "order", "label": "收尾套话顺序", "section": "具体实施方式", "kind": "order",
-                    "message": "收尾顺序错误：应 综上所述 → 第二实施例 → 方法—系统对应 → [存储介质] → 示意性说明 → 结束语",
+                    "message": "收尾顺序错误：应 综上所述 → 第二实施例 → 方法—系统对应 → 示意性说明 → 结束语",
                     "evidence": " → ".join(k for _, k in sorted(seq))})
     return vio
 
 
 def check_claims(claim_lines: list[str]) -> list[dict]:
-    """权利要求书侧：系统权 / 存储介质权整条逐字（编号头剥离后比对；{N} 须 = 系统权编号 − 1）。
+    """权利要求书侧：系统权整条逐字（编号头剥离后比对；{N} 须 = 系统权编号 − 1 = 9）。
 
-    claim_lines = 权利要求书章的非空行（编号头行含正文；计算机设备式权与介质权各为单行）。
+    claim_lines = 权利要求书章的非空行（编号头行含正文）。**存储介质权自 2026-09-11 起不再撰写**
+    （王工口径），出现即 FAIL。
     """
     vio: list[dict] = []
     heads = [(i, int(m.group(1)), m.group(2).strip())
@@ -329,9 +335,14 @@ def check_claims(claim_lines: list[str]) -> list[dict]:
         return vio
     sys_idx = [(num, body) for _, num, body in heads if "包括存储器、处理器" in body
                or re.match(r"^一种[^，。；]{2,40}(?:系统|装置)，", body)]
-    med_idx = [(num, body) for _, num, body in heads if body.startswith("一种计算机可读存储介质")]
+    for num, body in ((n, b) for _, n, b in heads if b.startswith(MEDIUM_CLAIM_PREFIX)):
+        vio.append({"key": "forbidden_medium", "label": "权利要求书·存储介质权（禁写）",
+                    "section": "权利要求书", "kind": "forbidden",
+                    "message": f"权{num} 出现存储介质权——王工 2026-09-11 定「方法权写满九条、最后一个写系统、"
+                               "介质权不要写了」，该条一律不写；方法权不足 9 条时用方法从权补足",
+                    "evidence": body[:80]})
     expect_n = (sys_idx[0][0] - 1) if sys_idx else None
-    for t, hits in ((CLAIM_TEMPLATES[0], sys_idx), (CLAIM_TEMPLATES[1], med_idx)):
+    for t, hits in ((CLAIM_TEMPLATES[0], sys_idx),):
         if not hits:
             continue
         num, body = hits[0]
@@ -397,7 +408,7 @@ def docx_paragraphs(document_xml: str) -> tuple[list[str], dict[int, str]]:
 
 
 def detect_subjects(claims_text: str) -> tuple[bool, bool]:
-    """从权利要求文本判断是否有系统/装置权、存储介质权。"""
+    """从权利要求文本判断是否有系统/装置权、存储介质权（后者仅用于报禁写，非应写项）。"""
     has_system = bool(re.search(r"一种[^，。；]{2,40}(?:系统|装置)，(?:包括|其特征在于)", claims_text))
     has_medium = "一种计算机可读存储介质" in claims_text
     return has_system, has_medium
@@ -409,14 +420,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sh = sub.add_parser("show", help="打印全部模板句原文（槽位留空，供人查看口径；机器校对用 check）")
-    sh.add_argument("--claims", action="store_true", help="连同权利要求书侧两条（系统权/存储介质权）一起打印")
+    sh.add_argument("--claims", action="store_true", help="连同权利要求书侧系统权一条一起打印")
     r = sub.add_parser("render", help="把本案名称填进全部模板句")
     r.add_argument("--method-name", required=True,
                    help="本案方法保护主题：权 1 名称去掉「一种」后的整串，"
                         "= 王工给定案件名称去掉「及系统/及装置」后缀（如「基于红外热成像的埋地供热管网泄漏定位方法」）")
     r.add_argument("--system-name", default=None,
                    help="本案系统/装置保护主题：与方法同词干、末尾「系统」或「装置」（无系统权则不传；check 会校验两名词干一致）")
-    r.add_argument("--no-medium", action="store_true", help="无计算机可读存储介质权")
+
     r.add_argument("--indicative-subject", default="系统", choices=["系统", "装置"])
     c = sub.add_parser("check", help="逐字校验全文稿 md")
     c.add_argument("--md", type=Path, required=True)
@@ -430,12 +441,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{tpl.section}] {tpl.label}  (need={tpl.need}, key={tpl.key})")
             print(tpl.text)
             print()
-        print("（以上为 13 句模板句唯一副本；撰写时用 `render` 填本案名称后整句粘贴，"
-              "校验用 `check`，规则文件只放指针不摘引原文）")
+        print("（以上为全部模板句的唯一副本；撰写时用 `render` 填本案名称后整句粘贴，"
+              "校验用 `check`，规则文件只放指针不摘引原文。介质相关三句自 2026-09-11 起禁写，不在本表）")
         return 0
 
     if args.cmd == "render":
-        for t, s in render(args.method_name, args.system_name, not args.no_medium, args.indicative_subject):
+        for t, s in render(args.method_name, args.system_name, args.indicative_subject):
             print(f"[{t.section}] {t.label}")
             print(s)
             print()
@@ -448,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         claims_text = args.md.read_text(encoding="utf-8")
     has_system, has_medium = detect_subjects(claims_text)
-    vio = check_paragraphs(paras, has_system, has_medium, secs)
+    vio = check_paragraphs(paras, has_system, secs)
     if args.claims_md and args.claims_md.exists():
         cl, _ = md_paragraphs(args.claims_md)
         vio += check_claims(cl)

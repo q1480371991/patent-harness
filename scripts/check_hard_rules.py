@@ -1297,9 +1297,9 @@ def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
     claims_src = claims_text or "\n".join(
         ln for tt in sections if "权利要求书" in tt for ln in lines[sections[tt][0]:sections[tt][1]]
     )
-    has_system, has_medium = boilerplate.detect_subjects(claims_src)
+    has_system, _has_medium = boilerplate.detect_subjects(claims_src)  # 介质权已禁写，仅作兜底提示
     rule_of = {"发明内容": "L6-1", "附图说明": "L7", "具体实施方式": "L8-1", "全文": "L8-1"}
-    for v in boilerplate.check_paragraphs(paras, has_system, has_medium, secs):
+    for v in boilerplate.check_paragraphs(paras, has_system, secs):
         report.add(
             rule_of.get(v["section"], "L8-1"),
             f"{v['section']}(模板句·{v['label'].split('·', 1)[-1]})",
