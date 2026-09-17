@@ -1629,6 +1629,47 @@ class DocxAssetsTest(unittest.TestCase):
         self.assertIn("分节5", res.stdout)  # 样例的图在说明书附图分节
 
 
+class ClaimPronounAndReferentTest(unittest.TestCase):
+    """规则 56（权要「其/该」代指 hard）+ 规则 57（权 1「所述」引用基础 suspect）。
+
+    出处：王工《专利撰写AI自查流程指引（撰写人版）》第 5 步尺度提醒。
+    """
+
+    GOOD = ("## 权利要求书\n\n"
+            "1.一种测试方法，其特征在于，包括：\n"
+            "获取输入数据，对所述输入数据进行滤波处理，得到滤波数据；\n"
+            "根据所述滤波数据确定中间结果。\n\n"
+            "2.根据权利要求1所述的测试方法，其特征在于，所述获取输入数据，对所述输入数据进行滤波处理，"
+            "得到滤波数据，包括：\n读取传感器数据。\n")
+
+    def _run(self, md_text):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            md = Path(td) / "权要稿.md"
+            md.write_text(md_text, encoding="utf-8")
+            res = run_script_allow_fail("check_hard_rules.py", "--md", md, "--stage", "claims-draft", "--json")
+            data = json.loads(res.stdout)
+            hard = [v for v in data["violations"] if "代指" in v["message"]]
+            susp = [s for s in all_suspects(data) if s["suspect_id"] == "S-L1-referent-basis"]
+            return hard, susp
+
+    def test_qidai_is_hard(self):
+        hard, _ = self._run(self.GOOD)
+        self.assertEqual(hard, [])
+        bad, _ = self._run(self.GOOD.replace("根据所述滤波数据确定中间结果。", "根据该滤波数据确定中间结果。"))
+        self.assertEqual(len(bad), 1)
+        bad2, _ = self._run(self.GOOD.replace("根据所述滤波数据确定中间结果。", "对其滤波后确定中间结果。"))
+        self.assertEqual(len(bad2), 1)
+
+    def test_referent_basis_suspect(self):
+        _, susp = self._run(self.GOOD)
+        self.assertEqual(susp, [])
+        _, susp2 = self._run(self.GOOD.replace(
+            "根据所述滤波数据确定中间结果。", "根据所述降噪数据确定中间结果。"))
+        self.assertEqual(len(susp2), 1)
+        self.assertIn("降噪数据", susp2[0]["evidence"])
+
+
 class X9DepQuoteShapeTest(unittest.TestCase):
     """X9：从权引用句形态线索（重复引用 / form③ 误用），复刻 H2609029 定稿轮被王工指出的形态。"""
 

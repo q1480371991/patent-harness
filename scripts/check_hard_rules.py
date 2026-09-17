@@ -1520,6 +1520,74 @@ def check_pronoun_qizhong(lines: list[str], sections: dict, report: Report, stag
                 )
 
 
+# ---------------------------------------------------------------- 规则 56/57: 权要代指与引用基础
+#
+# 出处：王工《专利撰写AI自查流程指引（撰写人版）》第 5 步「尺度提醒」——
+#   ①「指示代词是硬红线：执行步骤里不允许出现'其、该'指代（'其特征在于'等惯用式除外），
+#     一律改为'所述+术语'或重复术语全称」（规则 56，hard）
+#   ②「每个'所述'要有引用基础（前文出现过）……前文出现过的特征，再次出现漏'所述'要补上」
+#     （规则 57 取前者；后者属语义，交 claims-auditor）
+# 标定（七案定稿权要块，2026-09-11）：规则 56 命中 0 处（唯一命中是介质权惯用句「其上存储有计算机程序」，
+# 该权已禁写）；规则 57 限「权 1 特征部分」时七案 0 处，扩到全条权会因系统权写全名/套话固定搭配误报，故只做权 1。
+_QIDAI_RE = re.compile(r"(?<!特)其(?!中|他|余)|(?<!如)(?<!应)该")
+_QIDAI_EXEMPT = ("其特征在于", "其中", "其他", "其余", "其上存储有", "及其", "应该", "如该")
+
+_REFERENT_RE = re.compile(r"(?<!所述)所述([^，。；、：（）]{2,10})")
+
+
+def check_claim_pronoun_qidai(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 56 (1级 hard): 权要内不得用「其/该」代指，一律写「所述〔术语〕」(王工自查指引第 5 步)。"""
+    body, offset = get_section_lines(lines, sections, "权利要求书")
+    if offset < 0:
+        return
+    for i, ln in enumerate(body):
+        s = ln.strip()
+        if not s:
+            continue
+        # 惯用式与固定搭配先挖掉再扫，避免误报
+        probe = s
+        for ex in _QIDAI_EXEMPT:
+            probe = probe.replace(ex, "【】")
+        m = _QIDAI_RE.search(probe)
+        if m:
+            report.add(
+                "L1-1", f"权利要求书 第{offset + i + 1}行", s[:60],
+                f"权要内出现「{m.group(0)}」式代指；执行步骤里不得用「其/该」指代"
+                "（『其特征在于』等惯用式除外），一律改「所述〔术语〕」或重复术语全称"
+                "（王工《撰写AI自查流程指引》第 5 步硬红线）",
+            )
+
+
+def check_claim1_referent_basis(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 57 (suspect): 权 1 特征部分每个「所述X」须有引用基础（前文以非「所述」形态出现过）。"""
+    blocks = extract_claim_blocks(lines, sections)
+    if 1 not in blocks:
+        return
+    start, end = blocks[1]
+    body = "\n".join(lines[start:end])
+    if "其特征在于" not in body:
+        return
+    own = body.split("其特征在于", 1)[1]
+    for m in _REFERENT_RE.finditer(own):
+        noun = m.group(1)
+        found = False
+        for L in (10, 8, 6, 5, 4, 3, 2):
+            probe = noun[:L]
+            if len(probe) < 2:
+                continue
+            if re.search(r"(?<!所述)" + re.escape(probe), own[:m.start()]):
+                found = True
+                break
+        if not found:
+            report.add_suspect(
+                "L1-1", f"权利要求书 权 1 第{start + 1}行起", f"所述{noun}",
+                f"权 1 里的「所述{noun}」在前文找不到首次出现（引用基础）——若确为首次引入应去掉「所述」，"
+                "若是漏写首次出现则补全（王工《撰写AI自查流程指引》第 5 步）",
+                suspect_id="S-L1-referent-basis", section="L1", owner="claims",
+                missing_dimensions=["引用基础"],
+            )
+
+
 # ---------------------------------------------------------------- 规则 48: 有益效果分项句式
 #
 # 立项根因 (H2608165 全文审核v1, 王工批注 9 原话「套话模板，本发明通过xx，这样做怎么xx，
@@ -2616,6 +2684,8 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
         check_claims_preset_budget(lines, sections, report)      # 规则 43 (外置 2.4a)
         check_claim_wording_seven(lines, sections, report)        # 规则 44 (外置 2.6.1)
         check_claim_boilerplate(lines, sections, report)           # 规则 51 (权9/权10 模板句逐字, boilerplate.py)
+        check_claim_pronoun_qidai(lines, sections, report)       # 规则 56 (权要「其/该」代指 hard)
+        check_claim1_referent_basis(lines, sections, report)     # 规则 57 (权 1「所述」引用基础 suspect)
         check_claim1_step_action_density(lines, sections, report)  # 规则 53 (单步子动作密度 suspect)
 
     check_forbidden_words(lines, sections, report, stage)
