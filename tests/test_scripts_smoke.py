@@ -440,8 +440,8 @@ class PatentScriptSmokeTests(unittest.TestCase):
             self.assertEqual(global_text.count(row), 1, row)
 
         self.assertNotIn("方法 ≤7 条", claims_text)
-        # 默认配比示例守卫: 必须与"总数=10"算术闭合。旧文案"方法权通常写到权要 7 左右"
-        # + "权9 系统、权10 存储介质"只有 9 条(漏权8), 已改为方法权到权 8。
+        # 默认配比示例守卫: 必须与"总数=10"算术闭合。演进: 旧文案"方法权到权 7"+"权9 系统+权10 介质"漏权8
+        # → 改"方法权到权 8" → 2026-09-11 王工定「方法权写满权 9 + 权10 系统、不写介质权」。
         self.assertIn("方法权写满权 9", claims_text)
         self.assertNotIn("方法权通常写到权要 7", claims_text)
         self.assertIn("可调整方法从权数量", claims_text)
