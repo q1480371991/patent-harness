@@ -277,6 +277,7 @@ python scripts/check_env.py --json
   ✅ check_cross_block.py 的 X8（从权引导句在说明书逐字复现）PASS（全文稿；权要本轮有改动时重点看）
   ✅ 模板句逐字（boilerplate.py check；系统权整条由规则 51 在权要侧查；介质相关三句为禁写项，出现即 FAIL）PASS
   ✅ 规则 53 单步子动作密度 / 规则 54 采样率·频带 的 suspect 已逐条处置（无则写「无」）
+  ✅ 规则 56 权要「其/该」代指（hard）/ 规则 57 权 1「所述」引用基础（suspect）已核（无违规或无则写「无」）
   ✅ timestamp_guard.py / fingerprint_claims.py --check 守卫 PASS（全文稿/返修）
 
   【权利要求书 L1】（权要稿）/【发明内容 L6】【具体实施方式 L8】（全文稿）
@@ -292,7 +293,7 @@ python scripts/check_env.py --json
 
   【DOCX 验收】
   ✅ docx 通用验证无错误
-  ✅ verify_docx_injection.py 注入机械项 PASS（块/行内 oMath 数、$ 残留、章节标题加粗顶格、13 句模板句逐字、图1 drawing）
+  ✅ verify_docx_injection.py 注入机械项 PASS（块/行内 oMath 数、$ 残留、章节标题加粗顶格、模板句逐字、图1 drawing）
   ✅ omml_formulas.py check 公式健康 PASS（无空壳/无 m:d/无编号残留/无幽灵字体，必要时已 fix-settings）
   ✅ verify_docx_skeleton.py PASS（sectPr=5 / header=13 / headerReference 完整 / 可见页眉符合稿次 / 分节落位 / 标题段格式 / 权要段行距 / 发明名称=给定名称；--invention-name 已传，无「未执行」WARN）
   ✅ check_preset_params.py 预设量八槽 PASS（exit=0；FAIL 项须逐条给"已改"或"判为误报+理由"）

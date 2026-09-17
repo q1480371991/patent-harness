@@ -1271,7 +1271,7 @@ def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
                                stage: str, claims_text: str = "") -> None:
     """规则 47 (1级 hard): 模板句逐字断言 (L6-1 / L7 / L8-1 / G8-2 批注 21; 唯一副本 boilerplate.py).
 
-    覆盖 13 句: 第一方面 / 第二方面 / 第三方面 / 有益效果引入 / 附图说明图1 / 开篇段 /
+    覆盖 11 句: 第一方面 / 第二方面 / 有益效果引入 / 附图说明图1 / 开篇段 /
     集中罗列入口句 / 综上所述骨架 / 第二实施例 / 方法—系统对应 / 存储介质(可选) /
     示意性说明 / 结束语; 另查名称槽位一致与收尾顺序。
     与规则 21 (四锚点按序) 并存: 规则 21 管结构, 本规则管内容逐字。仅 full-draft。
@@ -1308,7 +1308,7 @@ def check_boilerplate_verbatim(lines: list[str], sections: dict, report: Report,
         )
 
 
-# ---------------------------------------------------------------- 规则 51: 权9/权10 模板句逐字
+# ---------------------------------------------------------------- 规则 51: 权10 系统权模板句逐字 + 介质权禁写
 #
 # 立项 (2026-09-10 模板句机械化盘点): 系统权/存储介质权整条都是套话 (L1-1 给了原句), 但此前只有
 # 规则 2b 查「的步骤」、规则 30 查发明内容第二方面骨架, 权要侧整条写法无人逐字核。
@@ -2683,7 +2683,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
         check_no_specific_values_in_claims(lines, sections, report)
         check_claims_preset_budget(lines, sections, report)      # 规则 43 (外置 2.4a)
         check_claim_wording_seven(lines, sections, report)        # 规则 44 (外置 2.6.1)
-        check_claim_boilerplate(lines, sections, report)           # 规则 51 (权9/权10 模板句逐字, boilerplate.py)
+        check_claim_boilerplate(lines, sections, report)           # 规则 51 (权10 系统权逐字 + 介质权禁写, boilerplate.py)
         check_claim_pronoun_qidai(lines, sections, report)       # 规则 56 (权要「其/该」代指 hard)
         check_claim1_referent_basis(lines, sections, report)     # 规则 57 (权 1「所述」引用基础 suspect)
         check_claim1_step_action_density(lines, sections, report)  # 规则 53 (单步子动作密度 suspect)

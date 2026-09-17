@@ -13,7 +13,7 @@ inject_fulltext_docx.py 注入 + insert_figures_docx.py 注图 + pack 之后、�
   - 无 `$` 残留、无裸 LaTeX 源码残留（`\frac`/`\sum`/`\gamma` 等出现在 `<w:t>` 内）
   - 无中西文间空格（汉字与西文数字/字母间不得留空白，W-SPACE）
   - 章节标题齐全（发明内容/附图说明/具体实施方式 各 ≥1 段含 `<w:b/>`，且顶格 firstLine=0）
-  - 模板句逐字一致（13 句：第一/二/三方面、有益效果引入、附图说明图1、开篇段、入口句、综上所述骨架、
+  - 模板句逐字一致（11 句：第一/二方面、有益效果引入、附图说明图1、开篇段、入口句、综上所述骨架、
     第二实施例、方法—系统对应、存储介质(可选)、示意性说明、结束语；唯一副本 boilerplate.py）
   - 图1 已注入（分节2 摘要附图 + 分节5 说明书附图各 ≥1 个 `<w:drawing>`）
 
@@ -130,7 +130,7 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
     has_system, _has_medium = boilerplate.detect_subjects("\n".join(paras))  # 介质权已禁写
     vio = boilerplate.check_paragraphs(paras, has_system, secs)
     results.append((f"模板句逐字（系统权={has_system}）", not vio,
-                    "；".join(f"{v['label']}: {v['evidence'][:90]}" for v in vio) if vio else "13 句全部逐字一致"))
+                    "；".join(f"{v['label']}: {v['evidence'][:90]}" for v in vio) if vio else "模板句全部逐字一致"))
 
     # 6) 图1 注入（分节2 + 分节5 各 ≥1 drawing）—— 仅在 insert_figures 跑过后查
     drawings = len(re.findall(r"<w:drawing>", doc))

@@ -68,6 +68,10 @@ tools: Read, Bash
 - `structure_check_result.extraction_ok == false` 时,报告"结构抽取失败",把 `extraction_errors` 列入最短回修清单。
 - 两个 JSON 任一未传或损坏,报告"输入不完整,机械项/跨块项审计缺失",不假装完成全量审计。
 
+## 机械 suspect 处置（本路专属）
+
+- 逐条处置 `mechanical_check_result.suspect_manifest.global` 中 `suspect_id == "S-G4-qizhong"` 的条目（正文用「通过/将/对/在/由/从/把 + 其中」代指对象，规则 55）：确认该处是否属「回指对象不显式」，是则给改法（写「所述〔对象〕中」）；段首引导词「其中，」合法、不在此列。
+
 ## 豁免项（不报清单，先过一遍再判）
 
 命中下列情形的**不作问题上报**（王工《专利撰写AI自查流程指引》尺度提醒，2026-09-11 吸收；唯一出处 `claims-requirements.md` L1-1「自查／审计的豁免项」条与 `global.md` G6-1 公式必要性条）：

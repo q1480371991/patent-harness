@@ -82,6 +82,7 @@ tools: Read, Bash
 ## 机械 suspect 处置（本路专属）
 
 - 逐条处置 `mechanical_check_result.suspect_manifest.claims` 中 `suspect_id == "S-L1-step-density"` 的条目（权 1 单步子动作密度 >4）：核该分句是否确实把多个子动作串在一步（判定条件后接一串动作即典型）；确认则给出拆步建议（自判定条件之后的第一动作起另起主步骤，上限 6 步），不确认则写明豁免理由。
+- 逐条处置 `mechanical_check_result.suspect_manifest.claims` 中 `suspect_id == "S-L1-referent-basis"` 的条目（权 1 里的「所述X」在前文找不到首次出现，规则 57）：核是真·无引用基础（首次引入应去掉「所述」）还是脚本漏判（X 的首次出现用了别称/在更早分句里）；确认无基础则给出改法。**同时逐条核权要内是否还有「其/该」代指**（规则 56 机械 hard，本路只沿用不重判）。
 
 ## 豁免项（不报清单，先过一遍再判）
 
