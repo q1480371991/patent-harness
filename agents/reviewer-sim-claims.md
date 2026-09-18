@@ -93,7 +93,7 @@ tools: Read, Bash, WebSearch, mcp__tavily-hikari__tavily_search
 
 ## 联网纪律（硬约束）
 
-- **优先 `python <skill根>/scripts/patent_search.py`**（patenthub.cn 专利库直连；token 在环境变量 `PATENT_HUB_TOKEN`，用法见外置经验 8.6 节——`multi` 多候选词检索同类专利、`claims` 查具体专利的权利要求。「行业习惯」判据**以同类真实专利为第一依据**）。其次 `mcp__tavily-hikari__tavily_search`（专利库覆盖不到的行业现状/理论），最后 `WebSearch`。
+- **优先 `python <skill根>/scripts/patent_search.py`**（patenthub.cn 专利库直连；token 在环境变量 `PATENT_HUB_TOKEN`，用法见该脚本 `--help`——`multi` 多候选词检索同类专利、`claims` 查具体专利的权利要求。「行业习惯」判据**以同类真实专利为第一依据**）。其次 `mcp__tavily-hikari__tavily_search`（专利库覆盖不到的行业现状/理论），最后 `WebSearch`。
 - ⚠️ **禁止把交底书原文、权要原文、技术方案细节贴进搜索查询** —— 查询词只能是**抽象后的公开技术术语**（如「四向穿梭车 定位精度 现有技术」「碱减量 表面处理 工艺」）。第三方端点会缓存、索引查询内容。。**检索真实性铁律（1级；`SKILL.md` 检索条，2026-09-11 吸收王工指引）**：①禁止编造专利号与专利字段——只引用真实检索返回，查不全写「未检索到」；②检索为空时换同义词重试，仍为空则如实写明「本次未检索到同类专利」，**不得靠编数据凑结论**；③专利数据与行业/网页数据来源分离、分别标注
 - 检索仅用于 A 组判据 1、2。B 组逐条权要**不需要联网**。
 - `facts_path` 里 step 2.5 已有行业现状检索结果时**优先复用**，只在需要补充新维度时另检索，并在报告注明"复用 facts.md 第 3 节 ① / 本路新检索"。

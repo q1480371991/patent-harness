@@ -106,7 +106,7 @@ tools: Read, Bash, WebSearch, mcp__tavily-hikari__tavily_search
 
 ## 联网纪律（硬约束）
 
-同 `reviewer-sim-claims`：优先 `python <skill根>/scripts/patent_search.py`（patenthub.cn 专利库，行业习惯对照第一依据，token 在环境变量 `PATENT_HUB_TOKEN`，用法见外置经验 8.6 节），其次 `mcp__tavily-hikari__tavily_search`，最后 `WebSearch`；⚠️ **禁止把交底书原文、权要原文、说明书段落贴进查询**，查询词只能是抽象后的公开技术术语；`facts_path` 已有检索结果时优先复用并注明。
+同 `reviewer-sim-claims`：优先 `python <skill根>/scripts/patent_search.py`（patenthub.cn 专利库，行业习惯对照第一依据，token 在环境变量 `PATENT_HUB_TOKEN`，用法见该脚本 `--help`），其次 `mcp__tavily-hikari__tavily_search`，最后 `WebSearch`；⚠️ **禁止把交底书原文、权要原文、说明书段落贴进查询**，查询词只能是抽象后的公开技术术语；`facts_path` 已有检索结果时优先复用并注明。
 
 本路联网仅用于：A 组第 1 项（数值是否合常理的领域量级）、C 组第 2 项（领域常规理论）。其余判据不需联网。
 

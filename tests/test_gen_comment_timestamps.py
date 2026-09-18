@@ -25,6 +25,7 @@ def run_script(*args):
     return subprocess.run(
         [sys.executable, str(SCRIPT), *map(str, args)],
         text=True,
+        encoding="utf-8",  # 脚本入口已 reconfigure UTF-8 (Windows GBK 实测), 两侧契约一致
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )

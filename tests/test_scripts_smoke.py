@@ -1652,6 +1652,45 @@ class GuardScriptsTest(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
 
 
+class TestHarnessIntegrityTest(unittest.TestCase):
+    """测试装置自身的完整性（2026-09-18 教训：标准回归命令从 `pytest tests/` 缩成单文件后，
+    另外 14 个测试静默掉出回归，其中 3 个已坏多日无人知）。
+
+    两道闸：
+    ① **每个 `tests/test_*.py` 都必须真正产出用例** —— 防「文件在、测试没被跑到」；
+    ② **每个 `subprocess.run` 都必须显式声明 `encoding`** —— 脚本侧入口已统一 reconfigure
+       UTF-8，测试侧漏写会用 locale 编码（本机 GBK）解码子进程输出，**静默把中文断言判假**，
+       而不是报错。这类失效没有异常、只有假失败/假通过，必须机械拦。
+    """
+
+    TESTS_DIR = Path(__file__).resolve().parent
+
+    def test_every_test_file_yields_cases(self):
+        def walk(suite, acc):
+            for item in suite:
+                if isinstance(item, unittest.TestSuite):
+                    walk(item, acc)
+                else:
+                    acc.add(item.__class__.__module__.split(".")[-1])
+        produced = set()
+        walk(unittest.TestLoader().discover(str(self.TESTS_DIR), pattern="test_*.py"), produced)
+        on_disk = {p.stem for p in self.TESTS_DIR.glob("test_*.py")}
+        self.assertEqual(on_disk - produced, set(),
+                         f"以下测试文件存在但产不出任何用例：{sorted(on_disk - produced)}")
+
+    def test_subprocess_calls_declare_encoding(self):
+        offenders = []
+        files = sorted(list(self.TESTS_DIR.glob("test_*.py"))
+                       + list((self.TESTS_DIR / "regression").glob("*.py")))
+        for f in files:
+            src = f.read_text(encoding="utf-8")
+            for m in re.finditer(r"subprocess\.run\(", src):
+                if "encoding=" not in src[m.end():m.end() + 300]:
+                    offenders.append(f"{f.name}:{src[:m.start()].count(chr(10)) + 1}")
+        self.assertEqual(offenders, [],
+                         f"以下 subprocess.run 调用未声明 encoding（GBK 下会静默误判中文断言）：{offenders}")
+
+
 class SystemClaimFormTest(unittest.TestCase):
     """系统权形态与位置线索 + 结束语简版放行（2026-09-11 复核补测）。
 
