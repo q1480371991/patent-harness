@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-篇幅页数闸门 (外置口径 8.5, 王工 2026-08-27「整个说明书+附图不超过30页, 这个是法条要求」).
+篇幅页数闸门 (篇幅硬线, 王工 2026-08-27「整个说明书+附图不超过30页, 这个是法条要求」).
 
-与 `check_hard_rules.py` 规则 41 (稿次字数区间, Word 口径、从 md 算) 互为交叉验证:
+与 `check_hard_rules.py` 的 L8-1 稿次字数区间条 (Word 口径、从 md 算) 互为交叉验证:
 字数是**写稿时可控的先行指标**, 页数是**交付件的实际结果**。五案实测约 550-600 CJK
 字 = 1 页, 即 2 万字 ≈ 33-36 页 —— 两条线基本等价, 但页数只能在 DOCX 上量。
 
@@ -25,7 +25,7 @@
   X2607043 定稿 28 / X2607040 定稿 33 / X2607134 定稿 34 / H2608040 定稿 31
   / X2608107 定稿 36 ← 全部与基准表一致; X2608107 我的 2 稿 46 (五案唯一破线)
 ⚠️ 同一份 app.xml 里的 `<Words>` 字段**不可用** —— 实测 X2608107 我的 2 稿实际
-21531 字, Words 写的是 4260。字数一律走 check_hard_rules.py 规则 41 从 md 算。
+21531 字, Words 写的是 4260。字数一律走 check_hard_rules.py 的 L8-1 字数条从 md 算。
 
 用法:
     python scripts/check_page_count.py <交付.docx>
@@ -46,7 +46,7 @@ from pathlib import Path
 
 PAGES_RE = re.compile(r"<Pages>(\d+)</Pages>")
 CJK_PER_PAGE = 575          # 五案实测 550-600 CJK 字/页, 取中值
-DEFAULT_MAX_PAGES = 30      # 外置 8.5 王工口径: 说明书+附图 ≤30 页
+DEFAULT_MAX_PAGES = 30      # 篇幅硬线 (王工口径): 说明书+附图 ≤30 页
 
 
 def read_pages(docx: Path) -> int | None:
@@ -67,7 +67,7 @@ def md_cjk_count(md: Path) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="交付 DOCX 页数闸门 (外置 8.5: ≤30 页)")
+    ap = argparse.ArgumentParser(description="交付 DOCX 页数闸门 (篇幅硬线: ≤30 页)")
     ap.add_argument("docx", help="交付 DOCX 路径")
     ap.add_argument("--md", help="对应 md 基准 (全文稿.md; 传入即开启 Pages 陈旧检测)")
     ap.add_argument("--claims-md", help="权要稿 md (分离式工作流, 与 --md 合并计字数)")
@@ -121,7 +121,7 @@ def main() -> int:
                 print(f"  · {r}", file=sys.stderr)
             print("  → <Pages> 由 Word/WPS 最后一次保存时写入; 脚本注入生成的 DOCX 该字段"
                   "停留在模板旧值。请用 Word/WPS 打开该文件、另存后重跑本脚本。"
-                  "**不得据当前值判达标**(外置根因四补一维: 自证清白式结论是最高风险信号)",
+                  "**不得据当前值判达标**(根因: 自证清白式结论是最高风险信号)",
                   file=sys.stderr)
         elif result["ok"]:
             extra = f" (md {cjk} CJK 字, 估算 {est} 页)" if est else ""
@@ -130,7 +130,7 @@ def main() -> int:
         else:
             print(f"[check_page_count] FAIL  {pages} 页 > 上限 {a.max}  {docx.name}",
                   file=sys.stderr)
-            print("  → 外置 8.5 (王工 2026-08-27「整个说明书+附图不超过30页, 这个是法条要求」)。",
+            print("  → 篇幅硬线 (王工 2026-08-27「整个说明书+附图不超过30页, 这个是法条要求」)。",
                   file=sys.stderr)
             print("  → ⚠️ 先判根因是「讲得太细」还是「对象太多」: X2608107 实测按 X14 顺序"
                   "删满 2777 字后 46→36 页仍超线, 证明**删示例救不回来**。真正的杠杆是"

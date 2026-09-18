@@ -1633,11 +1633,13 @@ class DocxAssetsTest(unittest.TestCase):
 
 
 class GuardScriptsTest(unittest.TestCase):
-    """三个「平时不跑」的守卫纳入常规回归（2026-09-11 教训：评分摘录守卫坏了无人知）。
+    """四个「平时不跑」的守卫纳入常规回归（2026-09-11 教训：评分摘录守卫坏了无人知）。
 
     - verify_rule_anchors.py   契约里的 sed 锚点是否仍命中、区间是否非空
     - verify_scoring_excerpts.py  scoring.md 与四份按路摘录的编号分派是否一致
     - rules_budget.py --check  各阶段规则读取量是否超基线 10%
+    - verify_w_index.py        W-INDEX.md 每行的「定义文件/章节/编号在场」是否与规则文件一致
+      （2026-09-19 两路复核实测：该表 30 行中 12 行指错、5 行是幻影编号，且无守卫无人知）
     """
 
     def test_rule_anchors_guard(self):
@@ -1653,6 +1655,11 @@ class GuardScriptsTest(unittest.TestCase):
     def test_rules_budget_guard(self):
         res = run_script_allow_fail("rules_budget.py", "--check")
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
+    def test_w_index_guard(self):
+        res = run_script_allow_fail("verify_w_index.py", "--json")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertRegex(res.stdout, r'"failures"\s*:\s*0')
 
 
 class TestHarnessIntegrityTest(unittest.TestCase):

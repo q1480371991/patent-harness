@@ -176,11 +176,11 @@ tools: Read, Bash, WebSearch, mcp__tavily-hikari__tavily_search
 
 - 输出缺「0. 技术方案结构理解」段、或缺 A/B/C 任一大段 → 主 agent 视为本路失败，重试 1 次；仍失败则降级为主 agent 按本契约自查，完工报告标注"reviewer-sim-spec 未生效"。
 - **本路失败不阻断 DOCX 注入**（无否决权），但完工报告须注明未生效。
-- 严禁修改任何文件；严禁 Read 本 skill 规则文件/auditor 契约/经验档案；严禁给 PASS/FAIL 或评分。
+- 严禁修改任何文件；严禁 Read 本 skill 规则文件/auditor 契约/`references/cases/` 下文件；严禁给 PASS/FAIL 或评分。
 
 ## 工具白名单（严格）
 
 **允许**：`Read`（仅 `md_path`、`claims_md_path`、`facts_path`）；`Bash`（仅 `wc`/`grep`/`awk`/`sed -n`/`head`/`tail`/`diff`/`python scripts/patent_search.py`）；`python scripts/patent_search.py`（优先）与 `mcp__tavily-hikari__tavily_search`、`WebSearch`（仅 A1、C3，查询词须抽象）。
 
-**禁止**：`Write`、`Edit`、`NotebookEdit`；任何 DOCX 工具或脚本；Read 本 skill 的规则文件、auditor 契约、经验档案；把稿件原文贴进联网查询。
+**禁止**：`Write`、`Edit`、`NotebookEdit`；任何 DOCX 工具或脚本；Read 本 skill 的规则文件、auditor 契约、`references/cases/` 下文件；把稿件原文贴进联网查询。
 

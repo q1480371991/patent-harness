@@ -566,7 +566,7 @@ def check_no_specific_values_in_claims(lines: list[str], sections: dict, report:
                 break
 
 
-# 规则 43 量词表唯一出处: 权要内「预设对象」名称的收尾量词 (外置口径 2.4a).
+# 规则 43 量词表唯一出处: 权要内「预设对象」名称的收尾量词 (claims-requirements.md L1-1「预设对象总量 ≤5」).
 #
 # ⚠️ **前缀必须贪婪 `{0,8}`, 不能用惰性 `{0,8}?`** —— 这是本规则实测踩到的坑
 # (五案回归实测, 2026-08-28): 惰性前缀会让**位置更靠前的短量词**优先命中, 把长名字
@@ -606,7 +606,7 @@ _PRESET_BUDGET_MAX = 5
 
 
 def check_claims_preset_budget(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 43 (1级 hard): 权要内「预设对象」distinct 总量 ≤5 (外置口径 2.4a, 王工 2026-08-21).
+    """规则 43 (1级 hard): 权要内「预设对象」distinct 总量 ≤5 (claims-requirements.md L1-1, 王工 2026-08-21).
 
     王工原话: 「预设的东西也不能用太多, 虽然没有明确规定数量, 但整个权要里面最好
     不超过 4-5 个吧, 不然显得整个方案像空中楼阁, 而且也会导致说明书要用大量篇幅
@@ -615,9 +615,9 @@ def check_claims_preset_budget(lines: list[str], sections: dict, report: Report)
 
     **数 distinct 对象, 不数出现次数** —— 同一对象被多条权要引用只算 1 个。
 
-    ★ 与外置 8.2 第②条的分歧 (本脚本有意不采纳, 已报用户): 8.2 建议
-    `预设××模型／网络` 不计入本预算 (理由是它走 A11 模型九项)。本规则**照计入** ——
-    A11/八槽管的是"每个对象要解释到什么程度"(槽位表选哪张), 本规则管的是"一共有
+    ★ 与「模型类另走模型展开清单、不计入本预算」这一主张的分歧 (本脚本有意不采纳, 已报用户): 该主张
+    建议 `预设××模型／网络` 不计入本预算 (理由是它走模型四要素与四维度测度)。本规则**照计入** ——
+    模型展开清单/阈值槽位管的是"每个对象要解释到什么程度"(槽位表选哪张), 本规则管的是"一共有
     几个对象"(总量), 两者不同维; 且王工原话是"预设的东西"不设例外, H2608165 我的
     1 稿也是把 `预设姿态分类模型` 计入后得 4 个。
 
@@ -649,7 +649,7 @@ def check_claims_preset_budget(lines: list[str], sections: dict, report: Report)
             "L1-1", "权利要求书",
             f"distinct 预设对象 {n} 个: {listing}",
             f"权要内「预设」对象 distinct {n} 个, 超上限 {_PRESET_BUDGET_MAX} "
-            "(外置口径 2.4a, 王工 2026-08-21「整个权要里面最好不超过 4-5 个」)。"
+            "(claims-requirements.md L1-1, 王工 2026-08-21「整个权要里面最好不超过 4-5 个」)。"
             "四条消解通路: ①基础档步骤整条不写从权(写从权=引进预设对象); "
             "②基准/初值类改实测(`预设初始××基准`→`在××时刻采集的初始××基准`); "
             "③隐含参数不点名(采样周期/窗口/权重); ④同一映射的相邻两步合并。"
@@ -666,7 +666,7 @@ def check_claims_preset_budget(lines: list[str], sections: dict, report: Report)
         )
 
 
-# 规则 44 模式表唯一出处: 权要措辞七条中「机械可查」的四项 (外置口径 2.6.1,
+# 规则 44 模式表唯一出处: 权要措辞七条中「机械可查」的四项 (claims-requirements.md L1-1「权要措辞紧凑七条」,
 # X2607134 王工点名"权要的表述是最要学习的"; 该案 1 稿→定稿字级 diff 实测清零).
 # 七条中 ⑤不为中间量命名 / ⑥所述只跨句回指 / ⑦篇幅守恒属判断题, 由 claims-auditor
 # 语义判 (契约第 12 项), 不进本规则。
@@ -686,9 +686,9 @@ _CLAIM_WORDING_PATTERNS = (
 
 
 def check_claim_wording_seven(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 44 (1级 hard): 权要措辞七条的四项机械项 (外置口径 2.6.1, X2607134).
+    """规则 44 (1级 hard): 权要措辞七条的四项机械项 (claims-requirements.md L1-1 措辞紧凑七条, X2607134).
 
-    ★ **只扫权利要求书章节内**, 不扫技术领域/背景技术 —— 2.6.1 的证据来自
+    ★ **只扫权利要求书章节内**, 不扫技术领域/背景技术 —— 措辞七条的证据来自
     X2607134 **权利要求书** 1 稿→定稿的字级 diff, 适用范围是权要本体。背景技术
     是叙述性文本, 其中的 `，并` 承接同一主语的连续动作, 删除后语义断裂
     (H2608165 权要 1 稿实测: 背景技术段 2「读取该标识对应的坐标，并以该坐标校正
@@ -711,7 +711,7 @@ def check_claim_wording_seven(lines: list[str], sections: dict, report: Report) 
                 report.add(
                     "L1-1", f"权利要求书 第{offset + i + 1}行",
                     f"命中「{m.group(0)}」: {s[:60]}",
-                    f"权要措辞七条(2.6.1, X2607134 王工口径): {advice}",
+                    f"权要措辞七条(L1-1, X2607134 王工口径): {advice}",
                 )
 
 
@@ -1378,7 +1378,7 @@ def check_benefit_count_and_length(lines: list[str], sections: dict, report: Rep
 # ---------------------------------------------------------------- 规则 53: 权 1 单步子动作密度
 #
 # 立项 (王工 2026-09-10 看 H2609029 Visio 图口头: 「最后一步太臃肿」, 指示自「当关联度大于阈值」
-# 起另起第 6 步): 外置经验 2.6.2 早有「创新档拆 2–3 个显式子步骤(有上限)」、X12「引导句只覆盖
+# 起另起第 6 步): claims-requirements.md L1-1 早有「创新档拆 2–3 个显式子步骤(有上限)」、X12「引导句只覆盖
 # 1 个动作」, 但落笔时没人数——原 S15 一步串 7 个动作 127 字。机械闸门此前只查主步骤**数量**
 # (规则 1b), 不查单步**密度**。
 # 计数法 (七案定稿标定, 2026-09-11): 去掉「当…时」判定条件后按「，；」切分, 「得到/输出/作为」
@@ -1417,7 +1417,7 @@ def claim1_step_action_density(step: str) -> int:
 
 
 def check_claim1_step_action_density(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 53 (suspect S-L1-step-density): 权 1 单步子动作 ≥5 出线索, 建议拆步 (L1-1 / 外置 2.6.2)。"""
+    """规则 53 (suspect S-L1-step-density): 权 1 单步子动作 ≥5 出线索, 建议拆步 (claims-requirements.md L1-1「上位程度分档/单动作步骤」)。"""
     blocks = extract_claim_blocks(lines, sections)
     if 1 not in blocks:
         return
@@ -1430,7 +1430,7 @@ def check_claim1_step_action_density(lines: list[str], sections: dict, report: R
                 "L1-1", f"权利要求书 权 1 第 {k} 分句 (第{start + 1 + k}行)",
                 f"子动作 {n} 个 / {len(step)} 字: {step[:60]}…",
                 f"权 1 第 {k} 分句串了约 {n} 个子动作 (六案定稿单步 1–4; H2609029 被王工判「太臃肿」的末步为 6), "
-                "建议自判定条件之后的第一动作起拆为新主步骤 (上限 6 步), 不得为守步数把多个动作塞进一步 (外置经验 2.6.2)",
+                "建议自判定条件之后的第一动作起拆为新主步骤 (上限 6 步), 不得为守步数把多个动作塞进一步 (claims-requirements.md L1-1)",
                 suspect_id="S-L1-step-density", section="L1", owner="claims",
                 missing_dimensions=["拆步"],
             )
@@ -1595,7 +1595,7 @@ def check_claim1_referent_basis(lines: list[str], sections: dict, report: Report
             )
 
 
-# ---------------------------------------------------------------- 规则 48: 有益效果分项句式
+# ---------------------------------------------------------------- 规则 45: 有益效果分项句式
 #
 # 立项根因 (H2608165 全文审核v1, 王工批注 9 原话「套话模板，本发明通过xx，这样做怎么xx，
 # 实现xx效果，不要改模板」): 既有规则只管"相比于现有技术 + 恰好 3 项 + 全角括号数字"
@@ -1618,7 +1618,7 @@ _BENEFIT_OK_HEAD = re.compile(r"^(?:本发明|通过|采用)")
 
 def check_benefit_item_pattern(lines: list[str], sections: dict, report: Report,
                                stage: str) -> None:
-    """规则 48 (1级 hard): 有益效果分项须按模板句式起句 (L6-1; 王工审核v1 批注 9).
+    """规则 45 (1级 hard): 有益效果分项须按模板句式起句 (L6-1; 王工审核v1 批注 9).
 
     模板句式『（N）本发明通过〔技术方案〕对〔作用对象〕，〔推导过程〕，实现〔有益效果〕。』
     判据 (宽口径, 五案零误报): 每条以"本发明"/"通过"/"采用"起句。以技术特征名直接起句
@@ -2688,8 +2688,8 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
         check_dependent_claim_reference(lines, sections, report)
         check_no_formula_in_claims(lines, sections, report)
         check_no_specific_values_in_claims(lines, sections, report)
-        check_claims_preset_budget(lines, sections, report)      # 规则 43 (外置 2.4a)
-        check_claim_wording_seven(lines, sections, report)        # 规则 44 (外置 2.6.1)
+        check_claims_preset_budget(lines, sections, report)      # 规则 43 (claims-requirements L1-1)
+        check_claim_wording_seven(lines, sections, report)        # 规则 44 (claims-requirements L1-1 措辞七条)
         check_claim_boilerplate(lines, sections, report)           # 规则 51 (权10 系统权逐字 + 介质权禁写, boilerplate.py)
         check_claim_pronoun_qidai(lines, sections, report)       # 规则 56 (权要「其/该」代指 hard)
         check_claim1_referent_basis(lines, sections, report)     # 规则 57 (权 1「所述」引用基础 suspect)

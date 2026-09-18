@@ -174,7 +174,7 @@ tools: Read, Bash, WebSearch, mcp__tavily-hikari__tavily_search
 
 **禁止**：
 - `Write`、`Edit`、`NotebookEdit`；任何 DOCX 相关工具或脚本；
-- `Read` 本 skill 的规则文件、auditor 契约、经验档案（**本路的独立性由此保证**）；
+- `Read` 本 skill 的规则文件、auditor 契约、`references/cases/` 下的案例与复盘文件（**本路的独立性由此保证**）；
 - 把交底书/权要原文贴进联网查询。
 
 违反白名单等同越权，主 agent 会拒绝报告并要求重跑。
