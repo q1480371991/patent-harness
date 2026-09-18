@@ -160,7 +160,7 @@ python scripts/check_env.py --json
 
 **完整返修工作流（审核稿到手 XML 实测三件事、返修意见读取、留痕注入、权要联动回写、校验项、学习闭环）的唯一出处 = `references/rules/revision-docx.md`**，进入返修阶段必读该文件，本节不复述判据。若返修改动了权利要求书内容，注入并校验完成后把最新权要同步回写 `docs/权要稿.md`，保证后续全文阶段的 md 基准不陈旧。
 
-**学习闭环（每次返修收尾，跨阶段义务、不随本节外置）**：先过升格三闸（判据唯一出处 `references/rules/revision.md` 学习闭环）——三进四不进 → 升格前去重检索 → 规则节清单容量上限；三闸结论回标 experience 条目的升格状态，**不得为凑完整度强行升格**。过闸后把可迁移的写作规律按主题补入**对应阶段规则文件**（返修纪律进 `revision.md`、权要表达进 `claims-requirements.md`、全文公开充分进 `implementation.md`、模板/XML 进 `docx-template.md`、附图进 `figures.md`），`rules.md` 仅在新增阶段索引或冲突原则时更新；具体案例只进 `references/cases/`，先给用户看 diff 再并入，本案技术对象名/参数值/附图名不进通用规则。
+**学习闭环（每次返修收尾，跨阶段义务、不随本节外置）**：先过升格三闸（判据唯一出处 `references/rules/revision.md` 学习闭环）——三进四不进 → 升格前去重检索 → 规则节清单容量上限；三闸结论回标**该案复盘文档**（`references/cases/lxl/<案号>-…复盘与下案提效清单.md`）的升格状态，**不得为凑完整度强行升格**。过闸后把可迁移的写作规律按主题补入**对应阶段规则文件**（返修纪律进 `revision.md`、权要表达进 `claims-requirements.md`、全文公开充分进 `implementation.md`、模板/XML 进 `docx-template.md`、附图进 `figures.md`），`rules.md` 仅在新增阶段索引或冲突原则时更新；具体案例只进 `references/cases/`，先给用户看 diff 再并入，本案技术对象名/参数值/附图名不进通用规则。
 
 批注与硬性规则、交底书或可实施性冲突时的处理，唯一出处是 `rules.md` 冲突处理与 `references/rules/revision.md` G9。
 

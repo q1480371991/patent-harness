@@ -16,11 +16,11 @@
 
 | 阶段 | 必读核心 | 触发式按需（命中才读） | 禁止默认读取 |
 |---|---|---|---|
-| 权要一稿 | `global.md`、`claims-requirements.md`、`claims-field-background.md`、`scoring.md`、`docx-template.md` | `docx-scripts.md`（写 DOCX/查脚本参数时） | `abstract-figures.md`、`invention-content.md`、`implementation.md`、`figures.md`、`revision.md`、`cases/experience/*`、`cases/lxl/*`、往案定稿与复盘（读取纪律见下） |
+| 权要一稿 | `global.md`、`claims-requirements.md`、`claims-field-background.md`、`scoring.md`、`docx-template.md` | `docx-scripts.md`（写 DOCX/查脚本参数时） | `abstract-figures.md`、`invention-content.md`、`implementation.md`、`figures.md`、`revision.md`、`cases/lxl/*`（单案复盘与新案复盘草稿）、往案定稿与历史稿（读取纪律见下） |
 | 权要二稿/三稿 | `global.md`、`claims-requirements.md`、`claims-field-background.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`docx-template.md` | `revision.md` A4-0 触发块（删除类/算法类/序号类）；`cases/INDEX.md`（挂回复批注、清痕等） | 未被批注涉及的全文块规则 |
-| 全文一稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块只读体检用，唯一出处 `implementation.md`「阶段映射与权要冻结」节；仅权要已单独定稿的工作流适用）；`docx-scripts.md`（写 DOCX/查脚本参数时） | `claims-requirements.md`、`claims-field-background.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动；`cases/experience/*`、`cases/lxl/*`、往案定稿与复盘（读取纪律见下） |
+| 全文一稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块只读体检用，唯一出处 `implementation.md`「阶段映射与权要冻结」节；仅权要已单独定稿的工作流适用）；`docx-scripts.md`（写 DOCX/查脚本参数时） | `claims-requirements.md`、`claims-field-background.md` 其余内容（权要已冻结，仅用户明确要求改权要时读）、`revision.md`，除非存在批注或权要联动；`cases/lxl/*`（单案复盘与新案复盘草稿）、往案定稿与历史稿（读取纪律见下） |
 | 全文二稿/三稿 | `global.md`、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`revision.md`（G9+通用返修+A4-1核心）、`figures.md`、`docx-template.md` | `revision.md` A4-0 触发块；`cases/INDEX.md`；`claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块体检）；`docx-scripts.md`（写 DOCX/查脚本参数时） | `claims-requirements.md`、`claims-field-background.md` 其余内容，除非批注涉及权要联动 |
-| 直写全文稿（有经验撰写者，用户指令"直接写完全文稿"触发） | `global.md`、`claims-requirements.md`、`claims-field-background.md`（**全量，不冻结**）、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `revision.md`（仅当存在批注）；`cases/INDEX.md`；`docx-scripts.md`（写 DOCX/查脚本参数时） | `cases/experience/*`、`cases/lxl/*`、往案定稿与复盘（读取纪律见下） |
+| 直写全文稿（有经验撰写者，用户指令"直接写完全文稿"触发） | `global.md`、`claims-requirements.md`、`claims-field-background.md`（**全量，不冻结**）、`abstract-figures.md`、`invention-content.md`、`implementation.md`、`scoring.md`、`figures.md`、`docx-template.md` | `revision.md`（仅当存在批注）；`cases/INDEX.md`；`docx-scripts.md`（写 DOCX/查脚本参数时） | `cases/lxl/*`（单案复盘与新案复盘草稿）、往案定稿与历史稿（读取纪律见下） |
 | Word 批注返修 | `global.md`、`revision.md`（G9+通用返修+A4-1核心）、**`revision-docx.md`（留痕返修执行细则，含审核稿到手 XML 实测三件事）**、`docx-template.md`、`scoring.md`（触发返修定向审查闸门时必读，合并计分口径），并按批注内容读 `claims-requirements.md`/`claims-field-background.md`/`abstract-figures.md`/`invention-content.md`/`implementation.md`/`figures.md` | `revision.md` A4-0 触发块（按批注命中）；`cases/INDEX.md`（按操作命中）；`claims-requirements.md` L1 / `claims-field-background.md` L2/L3 一级规则（冻结块体检） | 未被批注涉及且无必要联动的内容块规则 |
 | DOCX 格式修复 / 模板写入 / XML 验证 | `global.md`、`docx-template.md`、**`docx-scripts.md`（脚本参数与语义）**，并读当前稿次对应规则 | `cases/INDEX.md`（批注挂载、清痕、schema 顺序等执行陷阱） | 与格式无关且未涉当前稿次的规则 |
 | 附图生成/替换 | `global.md`、`figures.md`，如需全文一致性再读 `claims-requirements.md`、`claims-field-background.md` 和 `abstract-figures.md`、`invention-content.md`、`implementation.md` | — | `revision.md`，除非存在批注返修 |
@@ -31,8 +31,8 @@
 
 **★ 第五路 `reviewer-sim` 的读取纪律（与本表其余各路相反）**：`agents/reviewer-sim-claims.md` 与 `agents/reviewer-sim-spec.md` **不读本表任何规则文件** —— 它以审核人自用审查提示词为唯一判据，契约明文禁止其 Read `references/rules/`、`agents/`、`references/cases/`。这不是遗漏而是设计：一旦它读了我们的规则，就成了"用我们的标准审我们的稿"，与其存在理由（提供不共享规则库假设的第二意见）相悖。主 agent 编排时**不传任何 `*_rules_path`**。
 
-**经验档案与案例文件读取纪律**：`references/cases/experience/<撰写者>.md` 与 `references/cases/lxl/`（单案复盘全文）**均不在任何撰写/返修阶段读取**（其可迁移条目均已按学习闭环升格进对应规则文件，日常撰写按规则文件执行即可）。**撰写/返修过程中不得以历史定稿的句式或分句粒度作撰写依据**——粒度、句式、解释深度的判据全部在 `references/rules/` 内（如权要粒度见 `claims-requirements.md` L1-1/L1-2，说明书段落粒度见 `implementation.md` L8-1，模板句见 `scripts/boilerplate.py`）；历史定稿只作格式基准（段落 XML／分节结构），不作句式依据（唯一出处 `docx-template.md` G8-0a 优先级条）。
-**唯一例外——用户明确要求参考**：当且仅当用户明确说「参考一下之前某案怎么写的」「这个我不知道怎么做」之类时，才按用户指定的案号/文件去读对应内容；读完**只回答用户问的那一点**，不把该案的句式或粒度扩散成通用依据。除此外仅在整理 skill、升级归纳沉淀经验时读取。
+**案例文件读取纪律**：`references/cases/lxl/`（单案复盘与新案复盘草稿）**不在任何撰写/返修阶段读取**（其可迁移条目均已按学习闭环升格进 `references/rules/`，日常撰写按规则文件执行即可）。**撰写/返修过程中不得以历史定稿的句式或分句粒度作撰写依据**——粒度、句式、解释深度的判据全部在 `references/rules/` 内（如权要粒度见 `claims-requirements.md` L1-1/L1-2，说明书段落粒度见 `implementation.md` L8-1，模板句见 `scripts/boilerplate.py`）；历史定稿只作格式基准（段落 XML／分节结构），不作句式依据（唯一出处 `docx-template.md` G8-0a 优先级条）。
+**唯一例外——用户明确要求参考**：当且仅当用户明确说「参考一下之前某案怎么写的」「这个我不知道怎么做」之类时，才按用户指定的案号/文件去读对应内容；读完**只回答用户问的那一点**，不把该案的句式或粒度扩散成通用依据。此外仅在**复盘与沉淀**（写好该案复盘文档 `references/cases/lxl/<案号>-…复盘与下案提效清单.md`，再整合进 `references/rules/`）与整理 skill 时读取。
 
 ## 交底书阅读时机
 

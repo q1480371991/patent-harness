@@ -1,4 +1,4 @@
-"""批1 回归：五案权要稿 预设对象 distinct 实测（对照外置 2.4a 水位表）。"""
+"""批1 回归：五案权要稿 预设对象 distinct 实测（基准值即下方 EXPECT）。"""
 import sys, glob, os
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts"))
@@ -19,7 +19,7 @@ for case in ["X2607040", "X2607043", "X2607134", "H2608040", "X2608107", "H26081
         name = "预设" + _PRESET_TAIL_VERB_RE.sub("", m.group(1))
         objs[name] = objs.get(name, 0) + 1
     exp = EXPECT.get(case)
-    tag = "" if exp is None else f"  (外置水位表记: {exp})"
+    tag = "" if exp is None else f"  (基准: {exp})"
     print(f"=== {case}  distinct={len(objs)}  原始「预设」出现={sec.count('预设')}{tag}")
     for k, v in sorted(objs.items()):
         print(f"      {k} x{v}")
