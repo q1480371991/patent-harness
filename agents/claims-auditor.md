@@ -24,7 +24,7 @@ tools: Read, Bash
 | `claims_rules_path` | `references/rules/claims-requirements.md` 的绝对路径。**不整篇 Read**,用 `sed -n '/^## L1\. /,/^<!-- EOF sentinel: claims-requirements -->/p' <claims_rules_path>` 定向提取并**只执行其中 L1 节**(L1-1 / L1-2 / L1-3),其余节不在本路范围。 |
 | `claims_format_standard_path` | `references/cases/claims-format-standard.md` 的绝对路径。自行 Read。 |
 | `triggered_rule_notes` | 主 agent 已判断命中的触发式规则清单;无则写"无"。 |
-| `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单。传入即进入增量复核模式:上轮失败项与改动块所涉条目定点复核,其余上轮 PASS 且不涉改动块的条目沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |
+| `reaudit_context` | **可选,仅重审轮传入**:上轮本路报告的失败项 + 主 agent 列出的本轮改动块清单（**每处须附自查证据：①代入／复算 ②下游回查**；证据缺失即视为未改完，主 agent 不得送审——`SKILL.md`「审查闸门通用规则·回修重审」为该项唯一出处）。传入即进入增量复核模式:上轮失败项与改动块所涉条目定点复核,其余上轮 PASS 且不涉改动块的条目沿用上轮结论并标注"(沿用上轮)"(须逐条列出编号,不得静默省略);缺改动块清单时回退全量并在范围声明注明。首轮不传。 |
 
 **规则读取纪律**:规则文件一律按上表给定的 `sed -n` 标题区间定向提取,禁止整篇 Read(`claims_format_standard_path` 为格式范例文件,不属规则节选,仍整篇 Read);提取结果为空即按"输入不完整"报告,不得静默跳过。所执行节内引用的节外条目,出处在本契约点名的规则文件内时按需追加 `sed -n` 标题区间提取,出处在未传入文件内时维持指针语义(沿用脚本结论或既有判定),不自行读取。
 
