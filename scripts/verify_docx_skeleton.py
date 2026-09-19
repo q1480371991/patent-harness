@@ -65,8 +65,21 @@ def _has_graphic(p: str) -> bool:
     return any(k in p for k in ("<w:drawing", "<w:object", "<w:pict", "<v:imagedata"))
 
 
+def _has_math(p: str) -> bool:
+    """段落含 OMML 公式（块级 <m:oMathPara> 或行内 <m:oMath>）。
+
+    ★ 2026-09-19 修闸门（H2609100 实测）：`_is_blank` 原先只认 <w:t> 与图形，
+    而公式段承载的是 <m:t>（OMML 有自己的命名空间与文本元素），于是**每一个块公式段
+    都被误判成「无文本无图的空段」**，在干净稿上直接报 FAIL「分节4·无空段（4 个）」。
+    该案 4 处块公式 → 恰好 4 个假空段。这是闸门缺陷不是稿件缺陷——按「闸门与套话冲突时
+    修闸门不删段」的既定纪律，此处给 `_is_blank` 补上公式豁免，不得为过闸门去删公式段。
+    """
+    return ("<m:oMathPara" in p) or ("<m:oMath" in p)
+
+
 def _is_blank(p: str) -> bool:
-    return not _para_text(p) and not _has_graphic(p)
+    return not _para_text(p) and not _has_graphic(p) and not _has_math(p)
+
 
 
 def _split_sections(doc: str) -> list[list[str]]:

@@ -52,6 +52,27 @@ BASE = 'https://www.patenthub.cn/api'
 V = '1'
 
 
+# patenthub 官方错误码表（https://www.patenthub.cn/api/interface.html#code），逐字对齐、勿自造简写。
+# ★ 教训（2026-09-19）：此表原先只收 5 个码，202（非法token）落空 → 兜底词 "未知" 与后面的
+#   `path=` 直接拼接，打印成「未知 path=/s」，读起来像服务器在抱怨接口路径，实际是 token 失效。
+#   故：①收全官方码表；②错误码含义与请求路径**分行**打印，不得拼接成一句话。
+CODES = {
+    200: '响应成功', 201: 'token为空', 202: '非法token',
+    203: '响应异常', 204: 'ip被拒绝访问', 205: '参数值为空',
+    206: '没有找到对应数据', 207: '该接口当天访问次数已经用尽',
+    208: '没有访问权限', 209: '版本号为空', 210: '参数错误',
+    211: '该等级接口当年专利总数量已经用尽', 212: '分析维度为空',
+    213: '分析维度不存在', 214: 'TOKEN类型错误',
+    215: '异常访问，被终止，请查看接口规范！', 216: '获取年费数据异常！',
+    217: '访问说明书附图数量超过专利总量的3倍限制',
+    218: '特指按年付费情况下，搜索、引用、相似接口总调用量超过了每日调用量的100倍',
+}
+# 鉴权类错误码的处置提示（这几码改请求参数无用，只能换 token / 查账号状态）
+_AUTH_CODES = {201, 202, 208, 214}
+_AUTH_MSG = ('请核对 PATENT_HUB_TOKEN（环境变量或 --token）；无效或过期需到 '
+             'https://www.patenthub.cn/api/open 重新申请')
+
+
 def _get(path: str, params: dict) -> dict:
     """GET 并统一处理 patenthub 错误码。"""
     r = requests.get(BASE + path, params=params, timeout=30)
@@ -59,12 +80,10 @@ def _get(path: str, params: dict) -> dict:
     data = r.json()
     if not data.get('success', False):
         code = data.get('code')
-        hints = {
-            206: '没有找到对应数据',
-            207: '调用量用尽', 211: '总量用尽',
-            208: '权限不足', 215: '限流，30 秒后重试',
-        }
-        print(f'API 错误 code={code}: {hints.get(code, "未知")} path={path}', file=sys.stderr)
+        print(f'API 错误 code={code}（{CODES.get(code, "官方文档未收录的错误码")}）', file=sys.stderr)
+        if code in _AUTH_CODES:
+            print(f'  处置：{_AUTH_MSG}', file=sys.stderr)
+        print(f'  请求路径：{path}（仅供排查，不是报错原因）', file=sys.stderr)
         sys.exit(1)
     return data
 
