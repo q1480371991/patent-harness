@@ -523,6 +523,47 @@ def inject_claims(unpacked_dir: Path, claim_paras: list[str], head_paras: list[s
 
 # ---------------------------------------------------------------- 主流程
 
+def _prune_orphan_comments(unpacked_dir: Path, stats: dict) -> int:
+    """剪除**孤儿批注**：comments.xml 中存在、但 document.xml 里已无锚点的批注。
+
+    ★ 2026-09-19 加（H2609100 实测）：模板的 `......` 占位套话段上**挂着批注**
+    （模板自带 2 条，作者与内容均属另一案）；注入时 `_drop_placeholder` 把该段整段删掉，
+    却没同步清理 `comments.xml`，于是交付稿里留下**无锚点的悬浮批注**——Word 打开时
+    显示为没有指向的批注气泡，既属 G8-2 的案例性残留，也让审核人看到莫名其妙的批注。
+    修法口径与 verify_docx_skeleton 的空段条一致：**清残留、不保留占位段**。
+    本函数在两种注入（全文四章 / 权要三章）都跑完之后统一收尾，故放在 main 末尾。
+    """
+    doc_path = unpacked_dir / "word" / "document.xml"
+    cmt_path = unpacked_dir / "word" / "comments.xml"
+    if not cmt_path.exists():
+        return 0
+    doc = doc_path.read_text(encoding="utf-8")
+    live = set(re.findall(r'<w:commentRangeStart w:id="(\d+)"', doc))
+    cmt = cmt_path.read_text(encoding="utf-8")
+    removed = 0
+
+    def _drop(m: re.Match) -> str:
+        nonlocal removed
+        if m.group(1) in live:
+            return m.group(0)
+        removed += 1
+        return ""
+
+    cmt = re.sub(r'<w:comment w:id="(\d+)".*?</w:comment>', _drop, cmt, flags=re.S)
+    if removed:
+        cmt_path.write_text(cmt, encoding="utf-8", newline="")
+        # 同步剪除 commentsExtended：其条目按 paraId 关联，无法在删批注后逐条对齐，
+        # 整体置空最安全（该部件本身可选，Word 缺它不是错误；留错配反而会报损坏）。
+        ext_path = unpacked_dir / "word" / "commentsExtended.xml"
+        if ext_path.exists():
+            e = ext_path.read_text(encoding="utf-8")
+            e = re.sub(r'<w15:commentsEx\b([^>]*)>.*?</w15:commentsEx>',
+                       r'<w15:commentsEx\1/>', e, flags=re.S)
+            ext_path.write_text(e, encoding="utf-8", newline="")
+    stats["orphan_comments_removed"] = removed
+    return removed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("unpacked", type=Path, help="docx skill 的 unpack 目录")
@@ -564,6 +605,7 @@ def main(argv: list[str] | None = None) -> int:
         "claims_blank_removed": 0,
         "spec_head_paragraphs": 0,
         "sectpr_kept": 0,
+        "orphan_comments_removed": 0,
         "fallback": False,
     }
     fallback = False
@@ -614,6 +656,10 @@ def main(argv: list[str] | None = None) -> int:
               + (f" · 权要稿模式清分节4 占位 {stats['placeholders_removed']}+空段 {stats['blank_paras_removed']}"
                  if args.md is None else "")
               + f" · sectPr={stats['sectpr_kept']}")
+
+    n_orphan = _prune_orphan_comments(args.unpacked, stats)
+    if n_orphan:
+        print(f"OK\t清孤儿批注 · 剪除 {n_orphan} 条（无锚点批注：模板占位段被删后残留，见 G8-2）")
 
     if fallback:
         return 3
