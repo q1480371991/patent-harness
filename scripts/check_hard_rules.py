@@ -1535,6 +1535,47 @@ def check_pronoun_qizhong(lines: list[str], sections: dict, report: Report, stag
                 )
 
 
+# ---------------------------------------------------------------- 规则 58: 「其/该」纯代词代指
+#
+# 出处：`global.md` G4-1「不要使用"其""此""该"等**指代不明**的代词」。
+#
+# ★ 覆盖缺口（2026-09-19，H2609100 实测）：本条落地前，**说明书的「其/该/此」三方皆无覆盖**——
+#   规则 56（「其/该」代指，hard）的扫描范围是 `get_section_lines(..., "权利要求书")`，
+#   **只扫权利要求书章节**；规则 55 只抓「其中」一种形态（`(?:通过|将|对|在|由|从|把)其中`）。
+#   该案背景技术在 `权要稿.md` 的「背景技术」章节内（不是「权利要求书」章节），
+#   于是「该方式先采集…」（跨段回指段 1 的「寿命评估方式」）与全文稿 4 处「其与／其为」
+#   **全部静默通过**，由用户通读全文才被发现——与规则 49 词表漏收「确定方式为：」同类。
+#
+# 判据取**窄带高精度**：只抓两类几乎必为纯代词的形态，**不抓**「该节点／该矩阵／该区域」
+#   这类「该＋明确名词」的合法限定词用法——后者是中文专利说明书的标准高频写法，
+#   本案全文稿 99 处「该/其」命中里 95 处属此类，若一并上报即为大面积误报。
+#   ① `其` 后直接接介词/助动词（其与／其为／其被…）→ 后面没有名词，必是纯代词；
+#   ② `该` 后接**通用抽象名词**（该方式／该方法／该过程…）→ 最易跨段回指、最易指代不明。
+# 与规则 56 不重叠：本条跳过「权利要求书」章节（该章由规则 56 以 hard 终判）。
+_QIDAI_BARE_RE = re.compile(r"(?<!特征)其(与|为|即|乃|被|使|让|由|从|把|将)")
+_QIDAI_VAGUE_RE = re.compile(r"该(方式|方法|过程|方案|步骤|情况|措施|做法|手段|思路|策略|途径|装置)")
+
+
+def check_bare_pronoun(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 58 (suspect): 「其/该」纯代词代指、指代不明 (G4-1；覆盖说明书各块)."""
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        if "权利要求书" in label:
+            continue  # 该章由规则 56 以 hard 终判，不重复上报
+        for i in range(start, end):
+            ln = lines[i]
+            if not ln.strip():
+                continue
+            for pat, dim in ((_QIDAI_BARE_RE, "「其」后不接名词，为纯代词代指，应写「所述〔对象〕」"),
+                             (_QIDAI_VAGUE_RE, "「该+通用名词」易跨段回指，应写「所述〔对象〕」或点名对象")):
+                if pat.search(ln):
+                    report.add_suspect(
+                        "G4-1", f"{label} 第{i + 1}行", ln.strip()[:60], dim,
+                        suspect_id="S-G4-bare-pronoun", section="G4", owner="global",
+                        missing_dimensions=["回指显式化"],
+                    )
+                    break
+
+
 # ---------------------------------------------------------------- 规则 56/57: 权要代指与引用基础
 #
 # 出处：王工《专利撰写AI自查流程指引（撰写人版）》第 5 步「尺度提醒」——
@@ -2771,6 +2812,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_function_noun_first_definition(lines, sections, report, stage, claims_text)  # W55
     check_long_parenthetical(lines, sections, report, stage)          # 规则 50 (suspect, 批注 20)
     check_pronoun_qizhong(lines, sections, report, stage)             # 规则 55 (「其中」代指, H2609029)
+    check_bare_pronoun(lines, sections, report, stage)                # 规则 58 (「其/该」纯代词, H2609100)
     # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
     check_impl_para_lines(lines, sections, report, stage)
 
