@@ -1949,10 +1949,15 @@ class InjectFulltextSmokeTest(unittest.TestCase):
             doc = (unpacked / "word" / "document.xml").read_text(encoding="utf-8")
             # 骨架未损
             self.assertEqual(len(re.findall(r"<w:sectPr[ >]", doc)), 5)
-            # 块公式编译（1 条 LaTeX 独立成段）
-            self.assertEqual(len(re.findall(r"<m:oMathPara\b", doc)), 1)
+            # 块公式编译（1 条 LaTeX 独立成段）——2026-09-21 起块公式是
+            # 「居中段落 + 行内 oMath + 段末正文标点」，不再用 oMathPara（见 G8-3 与
+            # inject_fulltext_docx.render_block_formula_xml 的说明）
+            _paras = re.findall(r"<w:p\b(?:(?!</w:p>).)*?</w:p>", doc, re.S)
+            _blk = [p for p in _paras if 'w:jc w:val="center"' in p and "<m:oMath" in p]
+            self.assertEqual(len(_blk), 1)
+            self.assertEqual(len(re.findall(r"<m:oMathPara\b", doc)), 0)
             # 行内 $...$ 实例数对账（$ 数必为偶数）
-            om_inline = len(re.findall(r"<m:oMath\b", doc)) - len(re.findall(r"<m:oMathPara\b", doc))
+            om_inline = len(re.findall(r"<m:oMath\b", doc)) - len(_blk)
             md_text = md.read_text(encoding="utf-8")
             self.assertEqual(om_inline, md_text.count("$") // 2)
             # 无 $ 残留、无裸 LaTeX
@@ -1976,7 +1981,7 @@ class InjectFulltextSmokeTest(unittest.TestCase):
                 "verify_docx_injection.py", out, "--md", md,
             )
             # 公式/骨架/标题/模板句项应 PASS；图1 drawing 项预期 FAIL（本测试未注图）
-            self.assertIn("[PASS] 块公式 oMathPara=1", result.stdout)
+            self.assertIn("[PASS] 块公式(居中段)=1", result.stdout)
             self.assertIn("[PASS] 行内 oMath=", result.stdout)
             self.assertIn("[PASS] sectPr=5", result.stdout)
             self.assertIn("[PASS] $残留=0", result.stdout)

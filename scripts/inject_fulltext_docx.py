@@ -275,21 +275,34 @@ def render_heading_xml(title: str) -> str:
 
 def render_block_formula_xml(para_xml: str, latex: str, fallback: bool,
                              trail: str = "") -> str:
-    """块公式段：pandoc 可用取整段 OMML（不加 jc/pStyle，G8-3）；否则回退纯 LaTeX 文本。
+    """块公式段 → **居中段落 + 行内 oMath + 段末标点 run**。
 
-    `trail`（公式行末标点）一律作为**公式框外**的正文 run 接在段末，不并入 OMML：
-    并入会让电子申请客户端转档后公式处无标点可断句（批注 8）。
+    ★ 为什么不沿用 oMathPara（2026-09-21，H2609100 实测）：
+      两条要求在 `m:oMathPara` 下**无法同时满足**——
+      ① `global.md` G6-1 要求公式段末追加 1 个标点，且王工审核v1 批注 8 明确
+         「标点在公式框之外，不要放到框内，不然转档之后公式这里还是没有标点」
+         → 标点必须是**正文文本 run**；
+      ② `omml_formulas.py` docstring 同源警告：「**不得做成公式后的独立 run，
+         否则 WPS/Word 把整段降级成线性文本**」。
+      实测路径：注入产物里 oMathPara 与居中都在（pack 后 grep 仍在），
+      **用户用 Word 打开另存后整段公式被降级为行内公式** —— 界面上表现为
+      「不居中 + 公式后面跟着个逗号」，正是用户反馈的现象。
+    改用「居中段落 + 行内 `<m:oMath>`」后，居中由 `w:jc` 承担、标点是普通 run，
+    两条要求同时满足，且不依赖 oMathPara 的存续。G8-3「块公式不加 w:jc」针对的是
+    oMathPara 段（jc 会与 oMathParaPr 冲突），本条不用 oMathPara，故不适用。
     """
     if fallback:
         return f'<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/>' \
                f'<w:ind w:firstLine="0" w:firstLineChars="0"/>{_FALLBACK_MATH_RPR}</w:pPr>' \
                f'<w:r>{_FALLBACK_MATH_RPR}<w:t xml:space="preserve">' \
                f'{escape(latex + trail)}</w:t></w:r></w:p>'
-    if trail:
-        idx = para_xml.rfind("</w:p>")
-        if idx != -1:
-            return para_xml[:idx] + _text_run(trail) + para_xml[idx:]
-    return para_xml  # gen 已剥 pStyle；不加 w:jc
+    inner = re.search(r"<m:oMath\b.*?</m:oMath>", para_xml, re.S)
+    if not inner:
+        return para_xml            # 取不到内层公式就原样返回，不静默丢公式
+    ppr = ('<w:pPr><w:spacing w:line="360" w:lineRule="auto"/>'
+           '<w:ind w:firstLine="0" w:firstLineChars="0"/>'
+           '<w:jc w:val="center"/></w:pPr>')
+    return f'<w:p>{ppr}{inner.group(0)}{_text_run(trail) if trail else ""}</w:p>'
 
 
 def render_paragraph_xml(text: str, inline_table: dict, fallback: bool) -> str:

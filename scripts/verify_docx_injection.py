@@ -65,17 +65,22 @@ def check(docx_path: Path, md_path: Path, fallback: bool,
     results: list[tuple[str, bool, str]] = []
 
     expect_block, expect_inline = _expect_md_counts(md_path)
-    omp = len(re.findall(r"<m:oMathPara\b", doc))
+    # 块公式 = 「居中段落 + 行内 oMath」（2026-09-21 起不再用 oMathPara：见
+    # inject_fulltext_docx.render_block_formula_xml 的说明——oMathPara 撑不住
+    # 段末的正文标点 run，Word 另存会把整段降级成行内；改由 w:jc 承担居中）。
+    block_paras = re.findall(r"<w:p\b(?:(?!</w:p>).)*?</w:p>", doc, re.S)
+    om_block = sum(1 for p in block_paras
+                   if 'w:jc w:val="center"' in p and "<m:oMath" in p)
     om_total = len(re.findall(r"<m:oMath\b", doc))
-    om_inline = om_total - omp
+    om_inline = om_total - om_block
 
     # 1) 公式数对账（回退模式只查无 $ 残留）
     if fallback:
         results.append(("公式(回退模式)", "$" not in all_t,
                         f"$ 残留数={all_t.count('$')}（回退模式应=0）"))
     else:
-        results.append((f"块公式 oMathPara={omp}", omp == expect_block,
-                        f"期望 {expect_block}，实际 {omp}"))
+        results.append((f"块公式(居中段)={om_block}", om_block == expect_block,
+                        f"期望 {expect_block}（居中段落 + 行内 oMath + 段末标点），实际 {om_block}"))
         results.append((f"行内 oMath={om_inline}", om_inline == expect_inline,
                         f"期望 {expect_inline}，实际 {om_inline}"))
 
