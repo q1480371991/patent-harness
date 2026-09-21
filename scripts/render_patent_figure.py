@@ -265,16 +265,17 @@ def render_png(clauses: list[str], output: Path) -> None:
 def render_label_md(clauses: list[str]) -> str:
     """生成「图1内容-供 Visio 手画」md。
 
-    ★ 与成品 PNG **同一 clauses、同一 `wrap_label`**（2026-09-21 加）：
-      H2609100 实测过两份产物各写各的折行——手画稿由临时脚本按定长切、PNG 由本脚本
-      按行首禁则切，同一句在两处断点不同，用户照手画稿画出来的图与成品图不一致。
-      折行逻辑只留本脚本这一份。
+    ★ 节点文字**不预折行**（2026-09-21 用户两次追问后定）：
+      用户是整段复制进 Visio，Visio 按自己的框宽折行。md 里预先插硬换行，粘过去就连断行
+      一起带进 Visio，等于替用户定了排版——用户原话「你乱换行干什么」。
+      与 PNG 的关系：**同一 clauses**（节点文字逐字一致），但**不共用折行**——
+      PNG 的框内折行由 `wrap_label` 负责，是成品图自己的事。
     """
     n = len(clauses)
     out: list[str] = [
         "# 图1 内容（供 Visio 手画用）",
         "",
-        "> 本文件由 `render_patent_figure.py --label-md` 生成，与成品 PNG **同一数据源、同一折行**。",
+        "> 本文件由 `render_patent_figure.py --label-md` 生成，与成品 PNG **同一数据源**（节点文字逐字一致）。",
         "> 节点文字＝权利要求 1 分句**逐字**（去句末标点），画图时请逐字照抄，不要改写、不要增减字。",
         f"> 节点数固定为 {n} 个（S11–S1{n}）。",
         "> **权 1 分句一旦改动，必须重跑本脚本同时重出 PNG 与本文件。**",
@@ -286,7 +287,11 @@ def render_label_md(clauses: list[str]) -> str:
         "- 矩形之间为**单线单向箭头**，方向自上而下",
         "- 黑白、宋体、300 DPI",
         "",
-        f"## 节点文字（每框一段，按每行 {WRAP} 字、**优先断在标点之后**折行）",
+        f"## 节点文字（每框**一段连续文本，不预折行**）",
+        "",
+        "> 直接整段复制进 Visio，**由 Visio 按你的框宽自行折行**。",
+        "> 本文档刻意不在文字里插硬换行——预折行会把断行带进 Visio，等于替你定了排版。",
+        f"> 下节『版式』里的「每行 {WRAP} 字」只是脚本 PNG 的框内排法，供参考，**不必照抄**。",
         "",
     ]
     for i, clause in enumerate(clauses):
@@ -295,7 +300,7 @@ def render_label_md(clauses: list[str]) -> str:
         out.append(f"### S1{1 + i}（{han} 汉字）")
         out.append("")
         out.append("```")
-        out.extend(wrap_label(text))
+        out.append(text)
         out.append("```")
         out.append("")
     return "\n".join(out) + "\n"
@@ -323,7 +328,7 @@ def main() -> int:
     if args.label_md:
         args.label_md.write_text(render_label_md(clauses), encoding="utf-8")
         print(f"{args.label_md}")
-        print("OK\t图1 手画稿：节点文字与折行由本脚本同一数据源产出")
+        print("OK\t图1 手画稿：节点文字与本脚本同源（**不预折行**，粘进 Visio 由用户框宽自行折行）")
     return 0
 
 

@@ -24,6 +24,8 @@
 
   **★ 成品图不进 DOCX，只留位置（2026-09-21 用户口径，现行流程）**：脚本生成的 `figure-1.png` 只作**折行与版式基准**，供用户照画；DOCX 侧用 `--slot-only` 在分节 2 留**居中空段**、分节 5 留**空段 +「图1」图题段**，**不写 media/relationship/drawing**。用户用 Visio 画好后自行把图插进这两个位置。理由：成品图的字体、线宽、框宽由用户的 Visio 决定，脚本 PNG 注进去反而是要替换的中间物。
 
+  **★ 手画稿（`--label-md`）的节点文字不预折行**：用户是整段复制进 Visio，**Visio 按自己的框宽折行**。md 里预先插硬换行，粘过去会连断行一起带进 Visio，等于替用户定了排版（用户两次追问「你乱换行干什么」）。手画稿只给连续整段，折行交给 Visio；PNG 的框内折行由脚本自己的 `wrap_label` 负责，两者**同 clauses、不同折行**。
+
   - 配套：`run_gates.py` 默认按「用户手绘」口径给 `verify_docx_skeleton.py` 与 `verify_docx_injection.py` 传 `--user-figures`，两处图 1 断言改为「位置已留 +「图1」图题在场、drawing=0」，报 WARN 不判 FAIL。旧流程（脚本注图）传 `run_gates.py --script-figures`。
 
   自动完成：分节 2（摘要附图）居中嵌入图 1（默认宽 16.0cm）；分节 5（说明书附图）嵌入图 1 并确保其后有"图1"图题段（默认宽 12.3cm）；media/relationship/Content-Type 注册；两处已有图片时为**替换语义**（权要变更后重新生成、重新注入即完成附图更新）。分节 5 的其他既有附图不触碰。
