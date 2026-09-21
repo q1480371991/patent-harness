@@ -202,7 +202,7 @@ def _line_spacing_ok(p: str) -> bool:
 
 
 def check(docx_path, stage, expect_sectpr, expect_headers,
-          reference_docx=None, invention_name=None):
+          reference_docx=None, invention_name=None, user_figures=False):
     results = []  # (level, name, ok, detail)  level: FAIL/WARN/INFO
 
     try:
@@ -304,7 +304,8 @@ def check(docx_path, stage, expect_sectpr, expect_headers,
 
     # 8)-11) 分节落位 / 章节标题段 / 权要段行距 / 发明名称=给定名称（G8-0、G8-0b、G1-1）
     if sectpr == 5:
-        check_section_layout(doc, stage, invention_name, trace_total, results, styles)
+        check_section_layout(doc, stage, invention_name, trace_total, results, styles,
+                             user_figures)
     else:
         results.append(("WARN", "分节落位·校验未执行", False,
                         f"sectPr 数量 {sectpr} ≠ 5，无法按分节切分"))
@@ -338,7 +339,7 @@ def check(docx_path, stage, expect_sectpr, expect_headers,
 
 
 def check_section_layout(doc: str, stage: str, invention_name, trace_total: int, results,
-                         styles_xml: str = "") -> None:
+                         styles_xml: str = "", user_figures: bool = False) -> None:
     """G8-0 分节落位 + G8-0b 标题段格式 + 权要段行距 + 发明名称=给定名称。"""
     secs = _split_sections(doc)
     if len(secs) != 5:
@@ -364,7 +365,13 @@ def check_section_layout(doc: str, stage: str, invention_name, trace_total: int,
     g2 = any(_has_graphic(p) for p in s2)
     t2 = [p for p in _body(s2) if _para_text(p)]
     if full:
-        results.append(("FAIL", "分节2·摘要附图有图", g2, "全文稿分节2 应嵌入图 1" if not g2 else ""))
+        if user_figures:
+            # --user-figures：分节2 只留居中的空段作图片位，待用户插入 Visio 成品图。
+            results.append(("WARN", "分节2·摘要附图留位（用户手绘）", True,
+                            "位置已留（居中空段），摘要附图待用户插入"))
+        else:
+            results.append(("FAIL", "分节2·摘要附图有图", g2,
+                            "全文稿分节2 应嵌入图 1" if not g2 else ""))
     else:
         results.append(("FAIL", "分节2·权要稿应留空", not g2 and not t2,
                         "权要稿分节2 出现图/文" if (g2 or t2) else ""))
@@ -450,8 +457,15 @@ def check_section_layout(doc: str, stage: str, invention_name, trace_total: int,
     cap5 = any(re.fullmatch(r"图\s*1\s*[。．.]?", _para_text(p)) for p in s5)
     t5 = [p for p in _body(s5) if _para_text(p)]
     if full:
-        results.append(("FAIL", "分节5·说明书附图有图+「图1」图题", g5 and cap5,
-                        ("无图 " if not g5 else "") + ("缺「图1」图题段" if not cap5 else "")))
+        if user_figures:
+            # --user-figures：成品图由用户自绘后自行插入，本稿只留位置——
+            # 该节应「空 + 有『图1』图题」，不得判 FAIL（2026-09-21 用户口径）。
+            results.append(("WARN", "分节5·说明书附图留位（用户手绘）+「图1」图题", cap5,
+                            "缺「图1」图题段" if not cap5
+                            else "位置已留，drawing 待用户插入 Visio 成品图"))
+        else:
+            results.append(("FAIL", "分节5·说明书附图有图+「图1」图题", g5 and cap5,
+                            ("无图 " if not g5 else "") + ("缺「图1」图题段" if not cap5 else "")))
     else:
         results.append(("FAIL", "分节5·权要稿应留空", not g5 and not t5,
                         "权要稿分节5 出现图/文" if (g5 or t5) else ""))
@@ -651,6 +665,8 @@ if __name__ == "__main__":
                     help="发明名称段六属性期望值改从该基准稿提取（缺省用内置常量，见 TITLE_EXPECTED）")
     ap.add_argument("--invention-name", default=None,
                     help="王工给定的案件名称原样：定位发明名称段并校验分节4 首段与之逐字一致；缺省该项报 WARN 未执行")
+    ap.add_argument("--user-figures", action="store_true",
+                    help="成品图由用户自绘后自行插入：分节5 只核「留位 + 「图1」图题」，不要求在场图片")
     args = ap.parse_args()
     sys.exit(check(args.docx, args.stage, args.expect_sectpr, args.expect_headers,
-                   args.reference_docx, args.invention_name))
+                   args.reference_docx, args.invention_name, args.user_figures))

@@ -135,14 +135,16 @@ def _mk_gates():
         Gate(
             key="skeleton", name="verify_docx_skeleton (骨架/落位/格式)", phase="full",
             argv=lambda c: [c["docx"], "--stage", "全文"]
-            + (["--invention-name", c["invention_name"]] if c.get("invention_name") else []),
+            + (["--invention-name", c["invention_name"]] if c.get("invention_name") else [])
+            + (["--user-figures"] if c["user_figures"] else []),
             needs=("docx",),
             count_re=None,
             note_re=re.compile(r"^结果[:：]\s*([^\n]*)", re.M),
         ),
         Gate(
             key="injection", name="verify_docx_injection (注入机械项)", phase="full",
-            argv=lambda c: [c["docx"], "--md", c["fulltext"]],
+            argv=lambda c: [c["docx"], "--md", c["fulltext"]]
+            + (["--user-figures"] if c["user_figures"] else []),
             needs=("docx", "fulltext"),
             count_re=None,
             note_re=re.compile(r"^结果[:：]\s*([^\n]*)", re.M),
@@ -224,6 +226,9 @@ def main():
                     help="王工给定发明名称全称（传给需校验题名的闸门）")
     ap.add_argument("--docx", default=None, help="交付 DOCX（默认自动发现）")
     ap.add_argument("--phase", choices=["auto", "claims", "full"], default="auto")
+    ap.add_argument("--script-figures", action="store_true",
+                    help="旧流程：成品图由脚本注入 DOCX，则要求 drawing≥2。"
+                         "默认（不传）为现行流程——图片由用户自绘后自行插入，本稿只留位置")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
 
@@ -235,6 +240,7 @@ def main():
         "fulltext": str(docs / "全文稿.md") if (docs / "全文稿.md").is_file() else None,
         "invention_name": a.invention_name,
         "docx": None,
+        "user_figures": not a.script_figures,
     }
     if a.docx:
         ctx["docx"] = str(Path(a.docx).resolve())

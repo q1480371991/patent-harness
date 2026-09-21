@@ -151,6 +151,9 @@ def main() -> int:
     parser.add_argument("--abstract-width-cm", type=float, default=16.0)
     parser.add_argument("--spec-width-cm", type=float, default=12.3)
     parser.add_argument("--max-height-cm", type=float, default=22.0)
+    parser.add_argument("--slot-only", action="store_true",
+                        help="只留图片位置（分节2 居中空段、分节5 空段＋「图1」图题），"
+                             "不注入任何图片——用户自绘（Visio）后自行插入")
     args = parser.parse_args()
 
     if not args.png.exists():
@@ -212,16 +215,22 @@ def main() -> int:
             f"分节5：替换既有图1（{target.name}），尺寸 {spec_cx}x{spec_cy} EMU"
         )
     else:
-        rid, media_name = shared_rid()
-        doc_pr = next_doc_pr_id(doc)
-        new_content = (
-            image_paragraph(rid, doc_pr, spec_cx, spec_cy, "图1")
-            + caption_paragraph("图1")
-        )
-        doc = doc[:line_start] + new_content + doc[line_start:]
-        actions.append(
-            f"分节5：插入图1（{media_name}, {rid}）+ 图题段，尺寸 {spec_cx}x{spec_cy} EMU"
-        )
+        if args.slot_only:
+            # 只留位置：不注册 media、不写 drawing，只补「图1」图题段，
+            # 图片由用户自绘后自行插入（2026-09-21 用户口径）。
+            doc = (doc[:line_start] + caption_paragraph("图1") + doc[line_start:])
+            actions.append("分节5：留图片位置 + 图题段「图1」（未注入图片，待用户插入）")
+        else:
+            rid, media_name = shared_rid()
+            doc_pr = next_doc_pr_id(doc)
+            new_content = (
+                image_paragraph(rid, doc_pr, spec_cx, spec_cy, "图1")
+                + caption_paragraph("图1")
+            )
+            doc = doc[:line_start] + new_content + doc[line_start:]
+            actions.append(
+                f"分节5：插入图1（{media_name}, {rid}）+ 图题段，尺寸 {spec_cx}x{spec_cy} EMU"
+            )
 
     # ---- 分节2（摘要附图） ----
     sect_positions = [m.start() for m in re.finditer(r"<w:sectPr>", doc)]
@@ -262,12 +271,15 @@ def main() -> int:
             paragraph = (paragraph[:anchor] + '<w:jc w:val="center"/>'
                          + paragraph[anchor:])
             actions.append("分节2：补 <w:jc center>")
-        doc_pr = next_doc_pr_id(doc)
-        run = drawing_xml(rid, doc_pr, abstract_cx, abstract_cy, "图1")
-        paragraph = paragraph.replace("</w:p>", run + "</w:p>")
-        actions.append(
-            f"分节2：插入摘要附图（{media_name}, {rid}），尺寸 {abstract_cx}x{abstract_cy} EMU"
-        )
+        if args.slot_only:
+            actions.append("分节2：留图片位置（居中空段，未注入图片，待用户插入）")
+        else:
+            doc_pr = next_doc_pr_id(doc)
+            run = drawing_xml(rid, doc_pr, abstract_cx, abstract_cy, "图1")
+            paragraph = paragraph.replace("</w:p>", run + "</w:p>")
+            actions.append(
+                f"分节2：插入摘要附图（{media_name}, {rid}），尺寸 {abstract_cx}x{abstract_cy} EMU"
+            )
     doc = doc[:p2_start] + paragraph + doc[p2_end:]
 
     doc_path.write_text(doc, encoding="utf-8")

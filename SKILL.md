@@ -299,7 +299,8 @@ python scripts/check_env.py --json
   【DOCX 验收】
   ✅ run_gates.py 总跑表已贴入（全部门闸列全，含"未执行"项及原因，无静默缺项——**只写"已跑"不给表 = 未检查**）
   ✅ docx 通用验证无错误
-  ✅ verify_docx_injection.py 注入机械项 PASS（块/行内 oMath 数、$ 残留、章节标题加粗顶格、模板句逐字、图1 drawing）
+  ✅ verify_docx_injection.py 注入机械项 PASS（块/行内 oMath 数、$ 残留、章节标题加粗顶格、模板句逐字、图1 留位与「图1」图题——现行流程成品图由用户 Visio 自绘后插入，传 `--user-figures`，drawing=0 属预期）
+  ✅ verify_docx_skeleton.py 分节2/分节5 图位与图题（同上，`--user-figures` 下两项为 WARN「位置已留，待用户插入」）
   ✅ omml_formulas.py check 公式健康 PASS（无空壳/无 m:d/无编号残留/无幽灵字体，必要时已 fix-settings）
   ✅ verify_docx_skeleton.py PASS（sectPr=5 / header=13 / headerReference 完整 / 可见页眉符合稿次 / 分节落位 / 标题段格式 / 权要段行距 / 发明名称=给定名称；--invention-name 已传，无「未执行」WARN）
   ✅ check_preset_params.py 预设量八槽 PASS（exit=0；FAIL 项须逐条给"已改"或"判为误报+理由"）

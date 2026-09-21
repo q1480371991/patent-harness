@@ -57,7 +57,8 @@ def _expect_md_counts(md_path: Path) -> tuple[int, int]:
     return len(block_list), inline_instances
 
 
-def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, bool, str]]:
+def check(docx_path: Path, md_path: Path, fallback: bool,
+          user_figures: bool = False) -> list[tuple[str, bool, str]]:
     """返回 [(项名, ok, 明细)]。"""
     doc = _read_docx(docx_path)
     all_t = _all_text(doc)
@@ -132,10 +133,21 @@ def check(docx_path: Path, md_path: Path, fallback: bool) -> list[tuple[str, boo
     results.append((f"模板句逐字（系统权={has_system}）", not vio,
                     "；".join(f"{v['label']}: {v['evidence'][:90]}" for v in vio) if vio else "模板句全部逐字一致"))
 
-    # 6) 图1 注入（分节2 + 分节5 各 ≥1 drawing）—— 仅在 insert_figures 跑过后查
+    # 6) 图1（分节2 摘要附图 + 分节5 说明书附图 各 ≥1 drawing）。
+    #    --user-figures：成品图由用户自绘后插入，本稿只留位置，故期望 drawing=0；
+    #    此时改核「分节5 的『图1』图题段在场」——证明位置确实留出来了，不是漏注。
     drawings = len(re.findall(r"<w:drawing>", doc))
-    results.append((f"图1 drawing={drawings}", drawings >= 2,
-                    f"期望 ≥2（摘要附图+说明书附图），实际 {drawings}"))
+    if user_figures:
+        has_cap = bool(re.search(r"<w:t[^>]*>\s*图1\s*</w:t>", doc))
+        results.append((f"图1 留位（用户手绘）· drawing={drawings}",
+                        drawings == 0 and has_cap,
+                        "OK：位置已留 +「图1」图题在场，成品图待用户插入"
+                        if (drawings == 0 and has_cap)
+                        else f"期望 drawing=0 且图题在场；实际 drawing={drawings}、"
+                             f"图题{'在' if has_cap else '缺'}"))
+    else:
+        results.append((f"图1 drawing={drawings}", drawings >= 2,
+                        f"期望 ≥2（摘要附图+说明书附图），实际 {drawings}"))
 
     return results
 
@@ -146,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--md", type=Path, required=True, help="注入用的全文稿.md（对账期望数）")
     ap.add_argument("--fallback", action="store_true",
                     help="pandoc 缺失回退模式：放宽公式数断言为仅查无 $ 残留")
+    ap.add_argument("--user-figures", action="store_true",
+                    help="成品图由用户自绘后自行插入：图 1 断言改为「留位（drawing=0）+ 图题在场」")
     args = ap.parse_args(argv)
 
     if not args.docx.exists():
@@ -155,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] md 不存在：{args.md}")
         return 2
 
-    results = check(args.docx, args.md, args.fallback)
+    results = check(args.docx, args.md, args.fallback, args.user_figures)
     print(f"== 全文稿注入校验: {args.docx} ==")
     n_fail = 0
     for name, ok, detail in results:

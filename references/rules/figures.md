@@ -19,8 +19,12 @@
 - 注入交付 DOCX 用注入脚本（在 docx skill 的 unpack 目录上运行，之后照常 pack）：
 
   ```bash
-  python scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png
+  python scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png --slot-only
   ```
+
+  **★ 成品图不进 DOCX，只留位置（2026-09-21 用户口径，现行流程）**：脚本生成的 `figure-1.png` 只作**折行与版式基准**，供用户照画；DOCX 侧用 `--slot-only` 在分节 2 留**居中空段**、分节 5 留**空段 +「图1」图题段**，**不写 media/relationship/drawing**。用户用 Visio 画好后自行把图插进这两个位置。理由：成品图的字体、线宽、框宽由用户的 Visio 决定，脚本 PNG 注进去反而是要替换的中间物。
+
+  - 配套：`run_gates.py` 默认按「用户手绘」口径给 `verify_docx_skeleton.py` 与 `verify_docx_injection.py` 传 `--user-figures`，两处图 1 断言改为「位置已留 +「图1」图题在场、drawing=0」，报 WARN 不判 FAIL。旧流程（脚本注图）传 `run_gates.py --script-figures`。
 
   自动完成：分节 2（摘要附图）居中嵌入图 1（默认宽 16.0cm）；分节 5（说明书附图）嵌入图 1 并确保其后有"图1"图题段（默认宽 12.3cm）；media/relationship/Content-Type 注册；两处已有图片时为**替换语义**（权要变更后重新生成、重新注入即完成附图更新）。分节 5 的其他既有附图不触碰。
 - 无方法独立权要的案件：渲染脚本会因提取不到方法分句而报错停；此时按 `abstract-figures.md` L5 由用户自备代表主要保护主题的附图 PNG，仍用 insert_figures_docx.py 注入。
