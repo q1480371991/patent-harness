@@ -215,7 +215,7 @@ python scripts/check_env.py --json
 9. **闸门通过 → 直接写入 DOCX**（不等待用户确认/Enter）：确认已显式调用官方 `document-skills:docx`（即 docx）skill（首次进入执行层时调用一次即可，后续 step 复用）。**交付文件名命名规则**：`<案件号>-全文N稿-<作者>-<发明题目全称>.docx`（唯一出处 G1）。**缺元数据时的留空规则**（本 step 不追问、不停顿）：①**作者**未提供时，文件名作者位写 `待补`（如 `待补-全文1稿-待补-…docx`，案件号也缺则前缀整段省略或同样写 `待补`），完工后由用户自行改名；②**发明题名**未提供时，从权 1 保护主题自动提取作为文件名题名位（如"一种基于边缘计算的喷胶机自适应控制方法及系统"），但 `check_hard_rules.py --invention-name` 的正式题名**不得用自动提取值冒充**（G8-0b 信源纪律：正式题名须案件元数据确认；提取值仅用于文件名占位），此时该脚本传空、题名校验报 `S-W35-name-input-missing` suspect、记入待补清单。**所有留空/占位项一律记入完工报告「待补清单」**，由用户在收稿后补齐（含：案件号、正式发明题名全称、作者署名）。
 10. 由 `document-skills:docx` 执行层把最新已审权要 DOCX 前向拷贝为 `案件号-全文N稿-作者-发明题目全称.docx`（命名唯一出处 G1）。
 11. 由 `docx` 执行层采用 unpack → edit XML → pack：**直接在 step 10 前向拷贝出的 `案件号-全文N稿-作者-发明题目全称.docx` 上就地操作**——**不得改用空白模板另存**（模板内没有本案权利要求书/技术领域/背景技术，权要三章正是靠 step 10 的前向拷贝带过来的；用模板会交出一份权要三章为模板占位内容的废稿）。随后跑 `python scripts/inject_fulltext_docx.py <unpack目录> --md <案件文件夹>/docs/全文稿.md`（默认一次性注入摘要+发明内容+附图说明+具体实施方式四章，可选 `--block` 分块调试），把全文稿就地注入分节1（摘要）与分节4（L6–L8）。骨架保护与分节落位唯一出处是 `docx-template.md` G8-0/G8-0b/G8-1；权要三章（权利要求书/技术领域/背景技术）由 step 10 前向拷贝保留，不在本脚本范围。正文注入完成后、最终 pack 前，运行 `python scripts/insert_figures_docx.py <unpack目录> --png <案件文件夹>/docs/figures/figure-1.png` 把图 1 注入分节 2（摘要附图）与分节 5（说明书附图，含"图1"图题），再 pack。pack 后跑 `python scripts/verify_docx_injection.py <案件文件夹>/案件号-全文N稿-作者-发明题目全称.docx --md <案件文件夹>/docs/全文稿.md` + `python scripts/omml_formulas.py check <docx>`（必要时 `fix-settings`）+ `python scripts/verify_docx_skeleton.py <docx> --stage 全文 --invention-name "<正式题名，同 check_hard_rules --invention-name>"` 三件套收尾验收。
-12. 报告完工前，先由 `docx` 执行层做通用 DOCX 验证，**再跑两个篇幅/公开充分闸门**——`python scripts/check_preset_params.py <案件文件夹>/docs/全文稿.md`（说明书预设量八槽点数；FAIL 先按脚本 docstring 的校准要点判是否误报，再决定改稿）与 `python scripts/check_page_count.py <案件文件夹>/<交付文件名>.docx --md <案件文件夹>/docs/全文稿.md --claims-md <案件文件夹>/docs/权要稿.md`（≤30 页；**报 STALE 时须用 Word/WPS 打开另存后重跑，不得据当前值判达标**），两者的 exit code 与 FAIL 明细一并写入完工报告校验清单；再由 `patent` 核对 `verify_docx_skeleton.py --stage 全文 --invention-name <给定名称>` 报告（G8-0 逐分节落位、G8-0b 发明名称六属性与五个章节标题格式、权要段行距、发明名称=给定名称均已机械化，任一 FAIL 回修重跑）与 G8-1 脚本未覆盖项；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`（快照留档，命名见 G1）；完工报告按“完工报告”的**校验清单**格式逐规则打 ✅/❌/➖。
+12. 报告完工前，**机械闸门统一走总跑**：`python scripts/run_gates.py <案件文件夹> --invention-name “<王工给定名称>”`——它按**固定清单**一次跑完全部机械闸门（权要+全文 hard_rules、跨块、对齐、指纹自锁、预设量、时序、页数、骨架、注入），输出一张表（闸门/结论/退出码/计数/备注），跑不了的**显式标「未执行」并给原因、以退出码 2 逼补**，不静默跳过。**该表即完工报告校验清单的底稿，逐行抄入**；清单只此一处，**不得凭记忆手挑脚本**（H2609100 全文1稿就是这样漏掉 `check_preset_params` 与 `check_page_count` 的：审查报告的闸门表只有 5 个脚本，既没跑、也没人发现少了）。表内 FAIL 项逐条按脚本 docstring 的校准要点给「已改（写改后原文）」或「判为误报（贴原文与位置）」。随后由 `docx` 执行层做通用 DOCX 验证；**页数报 STALE 时须用 Word/WPS 打开另存后重跑，不得据当前值判达标**；再由 `patent` 核对 G8-1 脚本未覆盖项；验收通过后，把 `docs/全文稿.md` 复制为 `docs/history/全文1稿.md`（快照留档，命名见 G1）；完工报告按”完工报告”的**校验清单**格式逐规则打 ✅/❌/➖。
 
 ## 直写全文稿（有经验撰写者）
 
@@ -297,6 +297,7 @@ python scripts/check_env.py --json
   …
 
   【DOCX 验收】
+  ✅ run_gates.py 总跑表已贴入（全部门闸列全，含"未执行"项及原因，无静默缺项——**只写"已跑"不给表 = 未检查**）
   ✅ docx 通用验证无错误
   ✅ verify_docx_injection.py 注入机械项 PASS（块/行内 oMath 数、$ 残留、章节标题加粗顶格、模板句逐字、图1 drawing）
   ✅ omml_formulas.py check 公式健康 PASS（无空壳/无 m:d/无编号残留/无幽灵字体，必要时已 fix-settings）

@@ -18,6 +18,7 @@
 
 辅助脚本：
 
+- `scripts/run_gates.py <案件文件夹> [--invention-name "<给定名称>"] [--docx <交付.docx>] [--phase auto|claims|full] [--json]`：**机械闸门总跑**（收尾唯一入口，SKILL.md 完工 step 12）。按固定清单一次跑完 10 个机械闸门——`check_hard_rules`(权要+全文)、`check_cross_block`、`verify_claims_alignment`、`fingerprint_claims --check`、`check_preset_params`、`timestamp_guard`、`check_page_count`、`verify_docx_skeleton`、`verify_docx_injection`——输出一张表（闸门/结论/退出码/计数/备注）+ 汇总行。**退出码：0 = 全跑全过；1 = 有 FAIL；2 = 无 FAIL 但有「未执行」**（缺输入的闸门显式列原因、不静默跳过；1 稿就是这样无声漏掉 preset 与 page_count 的）。表即完工报告校验清单底稿，逐行抄入；有 FAIL 时同时打印「逐条处置」要求。**为什么要有它**：闸门清单原先只写在 SKILL.md 一段话里、靠人记，漏跑没有对照物 ——「漏跑」由此从"记不记得"变成"表里少一行"。
 - `scripts/disclosure_docx_to_md.py --input <案件文件夹>/docs/交底书.docx --output <案件文件夹>/docs/交底书.md`（**损坏部件容错**：交底书含无扩展名/零字节的 docProps 部件时自动剥离其在 [Content_Types]/rels 的登记后重试，原文件只读——H2609029 交底书实测 python-docx 直接崩溃）
 - `scripts/render_patent_figure.py --claims-md <权要稿.md> --output <案件文件夹>/docs/figures/figure-1.png`：从权要 1 分号分句自动生成图 1（摘要附图 = 方法主流程图）PNG；节点文字逐字一致由构造保证，规则见 `figures.md` L9。
 - `scripts/insert_figures_docx.py <unpack目录> --png <figure-1.png>`：把图 1 注入分节 2（摘要附图）与分节 5（说明书附图 + "图1"图题），自动注册 media/relationship/Content-Type；两处已有图片时为替换语义。
