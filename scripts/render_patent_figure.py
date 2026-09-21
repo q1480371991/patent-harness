@@ -86,20 +86,73 @@ def extract_claim_clauses(claims_md: Path, claim_number: int) -> list[str]:
     return clauses
 
 
+# 折行优先断点：这些标点之后是自然断点
+BREAK_AFTER = set("，、；：,;")
+# 超宽片段（整段无标点）的次级断点：连接词之后。见 wrap_label 的 ②
+CONNECTORS = set("与及和并")
+# 次级断点（双字，断在**其后**）：常见动作词尾。中文无词边界，这是排版启发式——
+# 漏收只会让某一行断点不够漂亮，**不影响正确性**（节点文字始终是分句逐字）。
+BREAK_AFTER_WORDS = ("得到", "进行", "提取", "根据", "更新", "判定", "构建", "确定",
+                     "生成", "计算", "识别", "重构", "分离", "累加", "折减", "插值")
+
+
 def wrap_label(label: str) -> list[str]:
-    """按每行 WRAP 字折行；行首禁则字符上提至上一行行尾（该行最多超宽 1-2 字）。"""
+    """按每行 WRAP 字折行，**优先断在标点之后**。
+
+    ★ 为什么不能硬数 WRAP 字就切（2026-09-21，H2609100 用户当场指出「你怎么乱换行」）：
+      `label[index:index + WRAP]` 这种定长切法会把术语从中间劈开——该案实测切出
+      「通过有／限元分析」（把整个案子的关键词「有限元分析」一分为二）、
+      「材料属／性数据」「三维温／度梯度分布矩阵」「蠕变损／伤演化计算」「弹／塑变形张量」。
+      中文没有词间空格，**唯一的天然断点就是标点**，所以折行必须先按句读切段、再贪心装行；
+      单个片段本身超过 WRAP（罕见）时才退化为定长硬切。
+    行首禁则（`LINE_START_FORBIDDEN`）作为兜底保留：片段起点本就是标点后一位，
+    正常不触发；触发时把该字上提至上一行行尾。
+    """
     lines: list[str] = []
     for paragraph in str(label).splitlines() or [""]:
         if not paragraph:
             lines.append("")
             continue
-        index, length = 0, len(paragraph)
-        while index < length:
-            cut = min(index + WRAP, length)
-            while cut < length and paragraph[cut] in LINE_START_FORBIDDEN:
-                cut += 1
-            lines.append(paragraph[index:cut])
-            index = cut
+        # ① 按标点切成片段（标点留在片段末尾）
+        segs, buf = [], ""
+        for ch in paragraph:
+            buf += ch
+            if ch in BREAK_AFTER:
+                segs.append(buf)
+                buf = ""
+        if buf:
+            segs.append(buf)
+        # ② 贪心装行
+        cur = ""
+        for seg in segs:
+            while len(seg) > WRAP:          # 单片段超宽：退化为硬折，但先找连接词
+                if cur:
+                    lines.append(cur)
+                    cur = ""
+                # 在 [len-WRAP, WRAP] 内取**最右**的次级断点，保证折后两段都 ≤WRAP；
+                # 找不到才定长硬切（如「…分布矩阵提／取目标应力集中区域」把动词劈开）。
+                cut = 0
+                for k in range(max(1, len(seg) - WRAP), WRAP + 1):
+                    if seg[k - 1] in CONNECTORS or seg[max(0, k - 2):k] in BREAK_AFTER_WORDS:
+                        cut = k
+                lines.append(seg[:cut or WRAP])
+                seg = seg[cut or WRAP:]
+            if len(cur) + len(seg) <= WRAP:
+                cur += seg
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = seg
+        if cur:
+            lines.append(cur)
+        # ③ 行首禁则兜底
+        fixed: list[str] = []
+        for ln in lines:
+            while ln and ln[0] in LINE_START_FORBIDDEN and fixed:
+                fixed[-1] += ln[0]
+                ln = ln[1:]
+            fixed.append(ln)
+        lines = fixed
     return lines or [""]
 
 
@@ -209,12 +262,54 @@ def render_png(clauses: list[str], output: Path) -> None:
     image.save(output, format="PNG", dpi=(300, 300))
 
 
+def render_label_md(clauses: list[str]) -> str:
+    """生成「图1内容-供 Visio 手画」md。
+
+    ★ 与成品 PNG **同一 clauses、同一 `wrap_label`**（2026-09-21 加）：
+      H2609100 实测过两份产物各写各的折行——手画稿由临时脚本按定长切、PNG 由本脚本
+      按行首禁则切，同一句在两处断点不同，用户照手画稿画出来的图与成品图不一致。
+      折行逻辑只留本脚本这一份。
+    """
+    n = len(clauses)
+    out: list[str] = [
+        "# 图1 内容（供 Visio 手画用）",
+        "",
+        "> 本文件由 `render_patent_figure.py --label-md` 生成，与成品 PNG **同一数据源、同一折行**。",
+        "> 节点文字＝权利要求 1 分句**逐字**（去句末标点），画图时请逐字照抄，不要改写、不要增减字。",
+        f"> 节点数固定为 {n} 个（S11–S1{n}）。",
+        "> **权 1 分句一旦改动，必须重跑本脚本同时重出 PNG 与本文件。**",
+        "",
+        "## 版式（脚本 PNG 已按此版式定稿，用户审核过，勿调）",
+        "",
+        f"- 纵向单列、自上而下：S11 在最上，S1{n} 在最下",
+        f"- 每个节点为一个矩形框；编号 `S11`…`S1{n}` **以水平引出线标注在矩形右侧外部**，不写在矩形内",
+        "- 矩形之间为**单线单向箭头**，方向自上而下",
+        "- 黑白、宋体、300 DPI",
+        "",
+        f"## 节点文字（每框一段，按每行 {WRAP} 字、**优先断在标点之后**折行）",
+        "",
+    ]
+    for i, clause in enumerate(clauses):
+        text = strip_tail_punct(clause)
+        han = sum(1 for c in text if "一" <= c <= "鿿")
+        out.append(f"### S1{1 + i}（{han} 汉字）")
+        out.append("")
+        out.append("```")
+        out.extend(wrap_label(text))
+        out.append("```")
+        out.append("")
+    return "\n".join(out) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--claims-md", type=Path, required=True, help="权要稿.md 路径")
     parser.add_argument("--output", type=Path, required=True, help="输出 PNG 路径")
     parser.add_argument("--claim-number", type=int, default=1,
                         help="方法独立权要编号（默认 1）")
+    parser.add_argument("--label-md", type=Path, default=None,
+                        help="同时输出「图1内容-供 Visio 手画」md（与 PNG 同一 clauses + 同一 wrap_label，"
+                             "杜绝手画稿与成品图折行不一致）")
     args = parser.parse_args()
 
     clauses = extract_claim_clauses(args.claims_md, args.claim_number)
@@ -225,6 +320,10 @@ def main() -> int:
     print(f"{args.output}")
     print(f"OK\t图1：{len(clauses)} 个节点（S11–S1{len(clauses)}），"
           f"节点文字=权要{args.claim_number}分句逐字")
+    if args.label_md:
+        args.label_md.write_text(render_label_md(clauses), encoding="utf-8")
+        print(f"{args.label_md}")
+        print("OK\t图1 手画稿：节点文字与折行由本脚本同一数据源产出")
     return 0
 
 
