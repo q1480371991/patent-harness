@@ -286,7 +286,7 @@ python scripts/check_env.py --json
   ✅ timestamp_guard.py / fingerprint_claims.py --check 守卫 PASS（全文稿/返修）
 
   【权利要求书 L1】（权要稿）/【发明内容 L6】【具体实施方式 L8】（全文稿）
-  ✅ L1-1 权 1 ≤400 字
+  ✅ L1-1 权 1 ≤600 字
   ✅ L1-1 从权依附关系两轨平权（2 级质量项；轨 A 逐句对应型全拉平与轨 B 分支＋局部链条型均合格，多元化门槛仅轨 B 适用，见 `claims-requirements.md` L1-1）
   ✅ L6-1 发明内容逐条权要覆盖
   ➖ L6-2 系统从权效果对应（本案无系统从权）

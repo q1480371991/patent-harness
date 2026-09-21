@@ -74,6 +74,12 @@ FULL_DRAFT_FORBIDDEN_QUANTIFIERS = ["若干个", "多个"]
 # 权要 1 主步骤硬上限 (L1-1; 规则 1b)。王工 2026-09-10 H2609029 口径「最多 6 步」。
 CLAIM1_MAX_MAIN_STEPS = 6
 
+# 权要 1 中文字数硬上限 (L1-1; 规则 1)。上限史: 400 → 2026-09-21 按王工 H2609100 口径
+# 「权1最多不超过600」放宽为 600——该案王工要求两个创造性分句在权 1 内各写出子步骤
+# (「创造性步骤 3-4 行左右」), 400 字放不下; 放宽的是**上限**, 仍以「说清楚」为先,
+# 不为凑字数灌水。
+CLAIM1_MAX_CHARS = 600
+
 # 收尾装置/系统示意性说明段锚点 (docx-template.md G8-2 模板固定套话)
 # 「需要说明的是，以上所描述的…实施例仅仅是示意性的，其中所述作为分离部件说明的
 # 单元可以是或者也可以不是物理上分开的，…分布到多个网络单元上。…」
@@ -305,7 +311,7 @@ def extract_claim_blocks(lines: list[str], sections: dict) -> dict[int, tuple[in
 
 
 def check_claim1_length(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 1: 权要 1 中文字数 <= 400 (L1-1, claims-format-standard)."""
+    """规则 1: 权要 1 中文字数 <= 600 (L1-1, claims-format-standard)."""
     blocks = extract_claim_blocks(lines, sections)
     if 1 not in blocks:
         report.add("L1-1", "权利要求书", "-", "未找到权要 1")
@@ -313,11 +319,11 @@ def check_claim1_length(lines: list[str], sections: dict, report: Report) -> Non
     start, end = blocks[1]
     text = "\n".join(lines[start:end])
     n = count_chinese(text)
-    if n > 400:
+    if n > CLAIM1_MAX_CHARS:
         report.add(
             "L1-1", f"权利要求书 第{start + 1}行起",
             f"权要 1 中文字数 = {n}",
-            f"权要 1 中文字数超限 (>{400}, 实际 {n})",
+            f"权要 1 中文字数超限 (>{CLAIM1_MAX_CHARS}, 实际 {n})",
         )
 
 
@@ -1576,6 +1582,35 @@ def check_bare_pronoun(lines: list[str], sections: dict, report: Report, stage: 
                     break
 
 
+# ---------------------------------------------------------------- 规则 59: 权要编号与正文之间的空白
+#
+# 出处：王工 H2609100 审核v1 批注 0「权要编号与正文之间不要留空格，每个都有」。
+#
+# ★ 覆盖缺口（2026-09-21，H2609100 实测）：格式标准 `claims-format-standard.md` 第 9 行
+#   早就写对了——「权要编号开头单独成段，例如"**1.一种**……方法，其特征在于，包括："」，
+#   落笔时却写成「1. 一种」，**违反已写明的标准**（A 类）。更关键的是**没有闸门**：
+#   `extract_claim_blocks` 的抽取正则 `^\s*(\d+)\s*\.` 是**容错**的（允许编号周围空白），
+#   带空格的编号照样被正确识别、后续所有检查照跑、五轮闸门没有一处能看见这个空格，
+#   直到王工肉眼看到。规则写对而无闸门 = 静默通过，本条把它机械化。
+# 判据（窄带）：编号行「数字 + 点号」之后若紧跟空白（半角空格/制表符/全角空格）即违规；
+#   编号行前的行首缩进不管（另有段落格式闸门负责）。
+_CLAIM_NUM_WS_RE = re.compile(r"^\s*\d+\s*[.．][ \t　]")
+
+
+def check_claim_number_spacing(lines: list[str], sections: dict, report: Report) -> None:
+    """规则 59 (hard): 权要编号与正文之间不留空白 (L1-1; 王工 H2609100 审核v1 批注 0)."""
+    body, offset = get_section_lines(lines, sections, "权利要求书")
+    if offset < 0:
+        return
+    for i, ln in enumerate(body):
+        if _CLAIM_NUM_WS_RE.match(ln):
+            report.add(
+                "L1-1", f"权利要求书 第{offset + i + 1}行",
+                ln.strip()[:40],
+                "权要编号与正文之间不得留空白，应写「1.一种…」（claims-format-standard 第 9 行）",
+            )
+
+
 # ---------------------------------------------------------------- 规则 56/57: 权要代指与引用基础
 #
 # 出处：王工《专利撰写AI自查流程指引（撰写人版）》第 5 步「尺度提醒」——
@@ -2813,6 +2848,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_long_parenthetical(lines, sections, report, stage)          # 规则 50 (suspect, 批注 20)
     check_pronoun_qizhong(lines, sections, report, stage)             # 规则 55 (「其中」代指, H2609029)
     check_bare_pronoun(lines, sections, report, stage)                # 规则 58 (「其/该」纯代词, H2609100)
+    check_claim_number_spacing(lines, sections, report)               # 规则 59 (权要编号后空白, H2609100)
     # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
     check_impl_para_lines(lines, sections, report, stage)
 

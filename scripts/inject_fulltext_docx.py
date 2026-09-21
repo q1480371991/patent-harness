@@ -120,16 +120,28 @@ SECTION_TITLES = ("说明书摘要", "摘要附图", "发明内容", "附图说�
 # 发明内容/附图说明/具体实施方式 → 分节4（末个 sectPr 段前追加，并删模板 ...... 占位套话）。
 _BLOCK_FORMULA_RE = re.compile(r"^[A-Za-z\\]")
 _INLINE_RE = re.compile(r"\$([^$\n]+)\$")
+# 块公式段末的中文/半角标点：`global.md` G6-1 要求公式段后追加 1 个标点，但该标点必须
+# 落在公式框**外**——整行交给 pandoc 会把它并进 OMML，转档后公式处就没有可断句的标点了
+# （王工 H2609100 审核v1 批注 8）。故解析时剥出，渲染时作为框外正文 run 接在 oMathPara 之后。
+_TRAIL_PUNCT = "，；。：,;."
 
 
 # ---------------------------------------------------------------- md 解析
 
+def split_trailing_punct(line: str) -> tuple[str, str]:
+    """剥出块公式行末尾的标点，返回 (纯 LaTeX, 框外标点)。"""
+    if line and line[-1] in _TRAIL_PUNCT:
+        return line[:-1], line[-1]
+    return line, ""
+
+
 def parse_fulltext_md(md_path: Path) -> list[dict]:
-    """全文稿 md → Block 列表。Block = {kind, text, latex?, section}。
+    """全文稿 md → Block 列表。Block = {kind, text, latex?, trail?, section}。
 
     策略：每行各自成段（契合 v2 基线：md 单换行分隔的子步骤各自一个 <w:p>）。
     空行仅作可读分隔、不产出；front-matter 跳过；`## ` 切章节标题；块公式启发式 =
     行首 [A-Za-z\\] + 含 \\命令 + 无 $；其余为正文段。「摘要附图」章节正文跳过。
+    块公式行末的标点剥入 trail，只把纯 LaTeX 交给 pandoc（见 `_TRAIL_PUNCT`）。
     """
     raw = md_path.read_text(encoding="utf-8")
     # 剥 YAML front-matter（--- ... ---）
@@ -153,8 +165,9 @@ def parse_fulltext_md(md_path: Path) -> list[dict]:
         if section == "摘要附图":
             continue
         if _BLOCK_FORMULA_RE.match(stripped) and "\\" in stripped and "$" not in stripped:
-            blocks.append({"kind": "block_formula", "text": stripped, "latex": stripped,
-                           "section": section})
+            latex, trail = split_trailing_punct(stripped)
+            blocks.append({"kind": "block_formula", "text": stripped, "latex": latex,
+                           "trail": trail, "section": section})
         else:
             blocks.append({"kind": "paragraph", "text": stripped, "section": section})
     return blocks
@@ -260,12 +273,22 @@ def render_heading_xml(title: str) -> str:
     return f'<w:p>{_HEADING_PPR}{_text_run(title, _SONG_BOLD)}</w:p>'
 
 
-def render_block_formula_xml(para_xml: str, latex: str, fallback: bool) -> str:
-    """块公式段：pandoc 可用取整段 OMML（不加 jc/pStyle，G8-3）；否则回退纯 LaTeX 文本。"""
+def render_block_formula_xml(para_xml: str, latex: str, fallback: bool,
+                             trail: str = "") -> str:
+    """块公式段：pandoc 可用取整段 OMML（不加 jc/pStyle，G8-3）；否则回退纯 LaTeX 文本。
+
+    `trail`（公式行末标点）一律作为**公式框外**的正文 run 接在段末，不并入 OMML：
+    并入会让电子申请客户端转档后公式处无标点可断句（批注 8）。
+    """
     if fallback:
         return f'<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/>' \
                f'<w:ind w:firstLine="0" w:firstLineChars="0"/>{_FALLBACK_MATH_RPR}</w:pPr>' \
-               f'<w:r>{_FALLBACK_MATH_RPR}<w:t xml:space="preserve">{escape(latex)}</w:t></w:r></w:p>'
+               f'<w:r>{_FALLBACK_MATH_RPR}<w:t xml:space="preserve">' \
+               f'{escape(latex + trail)}</w:t></w:r></w:p>'
+    if trail:
+        idx = para_xml.rfind("</w:p>")
+        if idx != -1:
+            return para_xml[:idx] + _text_run(trail) + para_xml[idx:]
     return para_xml  # gen 已剥 pStyle；不加 w:jc
 
 
@@ -298,7 +321,7 @@ def render_blocks(blocks: list[dict], block_table: dict, inline_table: dict,
             out.append(render_heading_xml(b["text"]))
         elif b["kind"] == "block_formula":
             out.append(render_block_formula_xml(
-                block_table.get(b["latex"], ""), b["latex"], fallback))
+                block_table.get(b["latex"], ""), b["latex"], fallback, b.get("trail", "")))
         else:
             out.append(render_paragraph_xml(b["text"], inline_table, fallback))
     return out
