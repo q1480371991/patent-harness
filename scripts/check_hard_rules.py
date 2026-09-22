@@ -1657,6 +1657,43 @@ def check_unconventional_symbols(lines: list[str], sections: dict, report: Repor
                 )
 
 
+# ---------------------------------------------------------------- 规则 61: 数学表达的文字化写法（suspect）
+#
+# 出处：王工 H2609100 审核v2 提醒 3「**指数形式用公式框插入，手打的后面转档有可能会
+#   识别不出来**」+ 批注 4（把曲率句改写掉）。
+#
+# 该案曲率句原文：「…的绝对值与「1加一阶导数平方」的3/2次方的比值」——「3/2次方」
+#   是**手打的分数指数**，与 Unicode 上下标同源（都属"本该是公式却写成了文字"），
+#   转档后可能识别不出来。审核v2 王工改成文字叙述后仍留着「3/2次方」，经用户确认
+#   **这是漏改、不是认可**，故仍需机械兜住。
+#
+# 级别 **suspect**：词表虽属封闭集（中文里表示指数/根式的词就那么几个），但正文里
+#   引用既有公式名（如"高斯求积"）或描述既有结论时可能合法出现，判 FAIL 风险高于收益；
+#   出线索交 impl-auditor 逐条判。**只收指数与根式**——「除以/乘以」这类纯叙述词不收，
+#   否则大范围误报（王工自己认可的文字叙述里就有"除以"）。
+_MATH_WORD_RE = re.compile(r"次方|次幂|开方|开根|根号|平方根|立方根|分之[一二三四五六七八九十\d]+")
+
+
+def check_math_wording(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 61 (suspect): 数学表达用文字手打（应写 $…$ 公式，转档可能识别不出来）."""
+    if stage != "full-draft":
+        return
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        if "权利要求书" in label:
+            continue
+        for i in range(start, end):
+            line = re.sub(r"\$[^$\n]*\$", "", lines[i])   # 剥掉行内公式再判
+            m = _MATH_WORD_RE.search(line)
+            if m:
+                report.add_suspect(
+                    "G6-1", f"{label} 第{i + 1}行", line.strip()[:60],
+                    f"出现文字化的数学表达「{m.group(0)}」——应写成 $…$ 公式"
+                    f"（手打形式转档可能识别不出来；王工 H2609100 审核v2 提醒 3）",
+                    suspect_id="S-G6-1-math-wording", section="G6", owner="impl",
+                    missing_dimensions=["数学表达公式化"],
+                )
+
+
 # ---------------------------------------------------------------- 规则 59: 权要编号与正文之间的空白
 #
 # 出处：王工 H2609100 审核v1 批注 0「权要编号与正文之间不要留空格，每个都有」。
@@ -2960,6 +2997,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_bare_pronoun(lines, sections, report, stage)                # 规则 58 (「其/该」纯代词, H2609100)
     check_claim_number_spacing(lines, sections, report)               # 规则 59 (权要编号后空白, H2609100)
     check_unconventional_symbols(lines, sections, report, stage)      # 规则 60 (非常规符号白名单, H2609100)
+    check_math_wording(lines, sections, report, stage)                # 规则 61 (数学表达文字化, H2609100)
     # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
     check_impl_para_lines(lines, sections, report, stage)
 
