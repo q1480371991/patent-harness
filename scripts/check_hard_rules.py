@@ -976,26 +976,47 @@ def check_include_lead_not_inline(lines: list[str], sections: dict, report: Repo
                 )
 
 
-# G6-1 Unicode 下标字符集 (冒充公式下标; 上标 ²³ 在单位 m² 合法故不纳入, 保零误报)
+# G6-1 Unicode 上/下标字符集。
+# ★ 2026-09-22 改（H2609100 全文复盘）：原实现**只收下标**，注释还明写着
+#   「上标 ²³ 在单位 m² 合法故不纳入, 保零误报」——于是该案 10 处手打上标
+#   （2.1×10⁸、6×10⁻¹⁷、1.0×10⁻⁴ …）**一次都没响**，五轮审查加第五路全过，
+#   直到王工肉眼看到并亲自删改。**这不是漏收一个字符，是把整类上标排除在外**。
+#   按「不打地鼠」口径改为**收全部上下标 + 单一白名单豁免**，不再逐个补形态：
+#   合法的只有「长度单位后的 ²/³」（m²、km²、cm³…），那是中文出版物的通行写法；
+#   除此之外的 Unicode 上下标一律视为「冒充公式」，改写成 $…$ 行内 LaTeX。
 UNICODE_SUBSCRIPTS = set("₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₒₓₕₖₗₘₙₚₛₜᵢⱼ")
+UNICODE_SUPERSCRIPTS = set("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ")
+UNICODE_SUBSUP = UNICODE_SUBSCRIPTS | UNICODE_SUPERSCRIPTS
+# 白名单：长度单位结尾（m / km / cm / dm / mm / μm / nm）
+_LEN_UNIT_TAIL = re.compile(r"(?:[kcdμn]?m)$")
 
 
 def check_unicode_subscript_abuse(lines: list[str], sections: dict, report: Report, stage: str) -> None:
-    """规则 19: 禁用 Unicode 下标字符冒充公式符号下标 (G6-1).
+    """规则 19: 禁用 Unicode 上/下标字符冒充公式 (G6-1).
 
-    如 s₁、Σ₁、xᵢ 里的 ₁/ᵢ——WPS 渲染成全角、上下标不叠放, 等同未编译公式=公开不充分.
-    公式符号一律写 $…$ 行内 LaTeX (注入转原生 <m:oMath>). 仅查下标: 上标 ²³ 等在单位
-    (m²) 合法, 不纳入以保零误报. 仅扫说明书正文 (full-draft).
+    如 s₁、Σ₁、xᵢ（下标）与 2.1×10⁸、6×10⁻¹⁷（上标）——WPS 渲染成全角、上下标不叠放，
+    等同未编译公式＝公开不充分；且手打的上标与公式对象里的格式不一致，**转档可能识别不出来**
+    （王工 H2609100 审核v2 批注 2 + 提醒 3 原话）。公式符号一律写 `$…$` 行内 LaTeX。
+    **白名单**：长度单位后的 ²/³（m²、km²、cm³…）属中文出版物通行写法，不报。
+    仅扫说明书正文 (full-draft)。
     """
     if stage != "full-draft":
         return
     for label, start, end in _get_scan_ranges(lines, sections, stage):
         for i in range(start, end):
-            hit = sorted({ch for ch in lines[i] if ch in UNICODE_SUBSCRIPTS})
-            if hit:
+            line = lines[i]
+            hits: list[str] = []
+            for pos, ch in enumerate(line):
+                if ch not in UNICODE_SUBSUP:
+                    continue
+                if ch in "²³" and _LEN_UNIT_TAIL.search(line[:pos]):
+                    continue                      # 白名单：长度单位的平方/立方
+                hits.append(ch)
+            if hits:
                 report.add(
-                    "G6-1", f"{label} 第{i + 1}行", lines[i].strip()[:60],
-                    f"出现 Unicode 下标字符 {''.join(hit)} 冒充公式下标; 应写 $…$ 行内 LaTeX",
+                    "G6-1", f"{label} 第{i + 1}行", line.strip()[:60],
+                    f"出现 Unicode 上/下标字符 {''.join(sorted(set(hits)))} 冒充公式；"
+                    f"应写 $…$ 行内 LaTeX（手打的形式转档可能识别不出来）",
                 )
 
 
@@ -1582,6 +1603,60 @@ def check_bare_pronoun(lines: list[str], sections: dict, report: Report, stage: 
                     break
 
 
+# ---------------------------------------------------------------- 规则 60: 中文正文的非常规符号（白名单法）
+#
+# 出处：`global.md` G5-1「**破折号与其他特殊符号全文不用**」（王工 H2608165 批注 5）。
+#
+# ★ 为什么用白名单而不是词表（2026-09-22，H2609100 全文复盘）：
+#   规则 48 只机械化了**破折号**，「其他特殊符号」一直没有词表——于是该案曲率句里的
+#   `「1加一阶导数平方」` 全程漏网，王工审核v2 批注 4 亲手指出「「」不是中文文稿的标准标点」。
+#   **给规则 48 补一个「还有哪些符号」的词表就是打地鼠**：下次来个 `→`、`≈`、`§`
+#   照样漏。改为**白名单法**——中文正文只允许一批常规字符，**白名单外的一切符号出线索**，
+#   新符号不需要再补名单。
+#
+# 级别：**suspect 不是 FAIL**。理由同「闸门松紧原则」：白名单不可能穷尽（单位符号、
+#   专业记号各有惯例），判 FAIL 会大面积误报并把闸门信誉耗尽。出线索交 auditor 逐条判。
+#   上报时给出**该行全部越界字符的原文片段**，让判定有据。
+# 范围：仅说明书正文（full-draft）。权利要求书的法定体例标点不受 G5-1 约束（该条扫描边界）。
+_CN_PUNCT_OK = set("，。、；：？！（）《》“”‘’")   # 中文正文的标准标点（含引号）
+_OTHER_OK = set(" \t%°×·.,/-+")          # 数值/单位/型号里合法
+_MICRO = "μ"                              # 微米等单位的词头
+_GREEK_OK = set("μΩ")                     # 工程单位里通行的两个希腊字母
+_ALLOWED_EXTRA = _CN_PUNCT_OK | _OTHER_OK | _GREEK_OK | {_MICRO}
+
+
+def check_unconventional_symbols(lines: list[str], sections: dict, report: Report, stage: str) -> None:
+    """规则 60 (suspect): 中文正文出现白名单外的非常规符号 (G5-1；仅说明书).
+
+    ⚠️ 扫描前必须**剔除公式承载部分**：块公式行（行首 [A-Za-z\\] + 含 \\ + 无 $）整行跳过，
+    行内 `$…$` 先剥掉再扫。否则 LaTeX 的 `\\ { } _ ^` 会被当成"非常规符号"，本案实测
+    未剔除时一次报 17 处（应为 1 处）——**闸门误报洪水比漏报更快耗掉信誉**。
+    """
+    if stage != "full-draft":
+        return
+    for label, start, end in _get_scan_ranges(lines, sections, stage):
+        if "权利要求书" in label:
+            continue                    # 法定体例标点不受 G5-1 约束
+        for i in range(start, end):
+            line = lines[i]
+            s = line.strip()
+            if s and s[0].isascii() and ("\\" in s) and "$" not in s:
+                continue                # 块公式行（同 inject 的 _BLOCK_FORMULA_RE 口径）
+            line = re.sub(r"\$[^$\n]*\$", "", line)     # 剥掉行内公式再扫
+            bad = sorted({ch for ch in line
+                          if not (ch.isalnum() or ch in _ALLOWED_EXTRA
+                                  or ch in UNICODE_SUBSUP      # 上下标归规则 19，不重复报
+                                  or "一" <= ch <= "鿿")})
+            if bad:
+                report.add_suspect(
+                    "G5-1", f"{label} 第{i + 1}行", line.strip()[:60],
+                    f"出现白名单外的符号 {''.join(bad)}；G5-1「破折号与其他特殊符号全文不用」，"
+                    f"应改写为文字表述或用 $…$ 公式承载",
+                    suspect_id="S-G5-1-symbol", section="G5", owner="global",
+                    missing_dimensions=["非常规符号改述"],
+                )
+
+
 # ---------------------------------------------------------------- 规则 59: 权要编号与正文之间的空白
 #
 # 出处：王工 H2609100 审核v1 批注 0「权要编号与正文之间不要留空格，每个都有」。
@@ -1623,7 +1698,13 @@ def check_claim_number_spacing(lines: list[str], sections: dict, report: Report)
 _QIDAI_RE = re.compile(r"(?<!特)其(?!中|他|余)|(?<!如)(?<!应)该")
 _QIDAI_EXEMPT = ("其特征在于", "其中", "其他", "其余", "其上存储有", "及其", "应该", "如该")
 
-_REFERENT_RE = re.compile(r"(?<!所述)所述([^，。；、：（）]{2,10})")
+# 抽取「所述」后面的名词短语。★ 2026-09-22 改：原式 `[^，。；、：（）]{2,10}` 会**贪婪吞掉
+# 后面 10 个字**，把紧跟的下一个「所述」一起吃掉——H2609100 权 9 里「获取所述蠕变孔洞密度
+# 与所述孔洞平均直径」被抽成一个整体，**「所述孔洞平均直径」根本没被单独看到**，
+# 于是那条真缺陷（王工审核v2 批注 0/1）漏报。改为「2–8 字且内部不得再出现『所述』」。
+_REFERENT_RE = re.compile(r"(?<!所述)所述((?:(?!所述)[^，。；、：（）]){2,8})")
+# 套话部件名：由权要模板句给出（系统权三件套），不参与引用基础判定
+_REFERENT_EXEMPT_NOUNS = {"存储器", "处理器", "计算机程序", "程序", "方法", "系统", "装置", "存储器上"}
 
 
 def check_claim_pronoun_qidai(lines: list[str], sections: dict, report: Report) -> None:
@@ -1650,33 +1731,62 @@ def check_claim_pronoun_qidai(lines: list[str], sections: dict, report: Report) 
 
 
 def check_claim1_referent_basis(lines: list[str], sections: dict, report: Report) -> None:
-    """规则 57 (suspect): 权 1 特征部分每个「所述X」须有引用基础（前文以非「所述」形态出现过）。"""
+    """规则 57 (suspect): 每条权的「所述X」须有引用基础（更早位置以非「所述」形态出现过）。
+
+    ★ 2026-09-22 扩面（H2609100 全文复盘）：原实现**只查权 1**，注释理由是「限权 1 时
+      七案 0 处；扩到全条权会因系统权写全名与套话固定搭配误报，故不做」。但该案的问题
+      恰恰出在**权 9**——按审核v1 批注 5 改写「获取」时把范围写窄了（只取蠕变孔洞密度），
+      于是第 4 子步骤的「所述孔洞平均直径」在权要里**从没出现过**，失去先行词；
+      王工审核v2 批注 0/1 亲手指出。**为躲误报把范围收在权 1，等于把整片从权让给人工。**
+      改为「全条权 + 定点豁免」——豁免套话固定搭配与系统权独有写法，而不是整条不查。
+
+    引用基础池 = 权 1 全文 + 本条权「其特征在于」之前的引导句 + 本条特征部分中该处之前。
+    """
     blocks = extract_claim_blocks(lines, sections)
     if 1 not in blocks:
         return
-    start, end = blocks[1]
-    body = "\n".join(lines[start:end])
-    if "其特征在于" not in body:
-        return
-    own = body.split("其特征在于", 1)[1]
-    for m in _REFERENT_RE.finditer(own):
-        noun = m.group(1)
-        found = False
-        for L in (10, 8, 6, 5, 4, 3, 2):
-            probe = noun[:L]
-            if len(probe) < 2:
+    # 权 1 全文作为所有从权的共用基础池
+    s1, e1 = blocks[1]
+    c1_text = "\n".join(lines[s1:e1])
+    c1_own = c1_text.split("其特征在于", 1)[1] if "其特征在于" in c1_text else c1_text
+    for num, (start, end) in sorted(blocks.items()):
+        body = "\n".join(lines[start:end])
+        if "其特征在于" not in body:
+            continue
+        lead, own = body.split("其特征在于", 1)
+        # 从权的 own 以引导句的句首「所述」开头（「…其特征在于，所述根据所述××…」），
+        # 剥掉它，否则 _REFERENT_RE 会把它当成一个指代（H2609100 实测：捕获出
+        # 「根据所述微观劣化特征」，正是引导句本身的内容）。
+        own = re.sub(r"^[，,、\s]*所述", "", own)
+        # 豁免：系统/装置独权的套话固定搭配（整条跳过）——本项只管方法权
+        if "存储器、处理器及存储在" in body:
+            continue
+        # 豁免：套话部件名（复用「所述」但实体由模板给出）
+        for m in _REFERENT_RE.finditer(own):
+            noun = m.group(1)
+            if noun in _REFERENT_EXEMPT_NOUNS:
                 continue
-            if re.search(r"(?<!所述)" + re.escape(probe), own[:m.start()]):
-                found = True
-                break
-        if not found:
-            report.add_suspect(
-                "L1-1", f"权利要求书 权 1 第{start + 1}行起", f"所述{noun}",
-                f"权 1 里的「所述{noun}」在前文找不到首次出现（引用基础）——若确为首次引入应去掉「所述」，"
-                "若是漏写首次出现则补全（王工《撰写AI自查流程指引》第 5 步）",
-                suspect_id="S-L1-referent-basis", section="L1", owner="claims",
-                missing_dimensions=["引用基础"],
-            )
+            pool = (c1_own if num != 1 else "") + lead + own[:m.start()]
+            found = False
+            # probe 逐级缩短用于容错，但**下限不得低于 4 字**（2026-09-22 改）：
+            # 原下限 2 字会把「孔洞平均直径」降成「孔洞」、再由同句的「蠕变孔洞密度」满足，
+            # 于是 H2609100 权 9 的「所述孔洞平均直径」漏报（王工审核v2 批注 0/1 即此）。
+            for L in (10, 8, 6, 5, 4):
+                probe = noun[:L]
+                if len(probe) < 2:
+                    continue
+                if re.search(r"(?<!所述)" + re.escape(probe), pool):
+                    found = True
+                    break
+            if not found:
+                report.add_suspect(
+                    "L1-1", f"权利要求书 权 {num} 第{start + 1}行起", f"所述{noun}",
+                    f"权 {num} 里的「所述{noun}」找不到首次出现（引用基础）——若确为首次引入应去掉「所述」，"
+                    "若是漏写首次出现则补全（王工《撰写AI自查流程指引》第 5 步；"
+                    "H2609100 权 9「所述孔洞平均直径」即此类，审核v2 批注 0/1）",
+                    suspect_id="S-L1-referent-basis", section="L1", owner="claims",
+                    missing_dimensions=["引用基础"],
+                )
 
 
 # ---------------------------------------------------------------- 规则 45: 有益效果分项句式
@@ -2849,6 +2959,7 @@ def run_checks(md_path: Path, stage: str, claims_md: Path | None = None,
     check_pronoun_qizhong(lines, sections, report, stage)             # 规则 55 (「其中」代指, H2609029)
     check_bare_pronoun(lines, sections, report, stage)                # 规则 58 (「其/该」纯代词, H2609100)
     check_claim_number_spacing(lines, sections, report)               # 规则 59 (权要编号后空白, H2609100)
+    check_unconventional_symbols(lines, sections, report, stage)      # 规则 60 (非常规符号白名单, H2609100)
     # 规则 42 (1级 hard): 解释段段落行数上限 (L8-1) —— 确定性可判, 不交 auditor
     check_impl_para_lines(lines, sections, report, stage)
 

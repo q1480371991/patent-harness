@@ -43,6 +43,7 @@ subagent 判定, 本脚本不越权.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import re
 import sys
@@ -226,57 +227,73 @@ def check_x7_dep_quote_verbatim(structure: dict, violations: list[dict]) -> None
 
 
 def check_x8_dep_lead_in_spec(structure: dict, violations: list[dict]) -> None:
-    """X8: 从权引导句在具体实施方式逐字复现 (L8-1 展开话术; 权要→说明书第二层联动).
+    """X8: 说明书的从权衔接句必须与权要逐字对应 (L8-1 权要→说明书第二层联动).
 
-    引导句 = 从权 preamble「其特征在于，」之后到「包括：」的整段 (含句首「所述」),
-    form③ 为「在所述〔步骤〕之后/之前，所述方法还包括：」。合法复现形态二选一:
-      ① 展开段入口句「在步骤Sxx中，〔权1分句〕，包括：」—— 引用句去「所述」后逐字 == 权1分句
-         (该从权直接展开在主步骤入口之下, 不另起衔接句);
-      ② 衔接句「在一种实施方式中，〔引导句〕」逐字 (含「所述」与「，包括：」/「所述方法还包括：」)。
-    两者皆无 = 该从权在说明书里没有对应的展开入口, 或入口仍是返修前旧文案 → FAIL。
+    ★ 2026-09-22 改为**反向遍历**（H2609100 全文复盘）：
+      旧实现是「正向」的——遍历每条从权去说明书里找它的复现。但说明书里的
+      「在一种实施方式中，〔引导句〕」衔接句**并不与从权一一对应**（该案 8 条从权只有
+      3 条写了衔接句，其余展开在「在步骤Sxx中，…」入口句之下），于是必须靠
+      「猜哪条衔接句属于哪条从权」——用相似度阈值两头不讨好：0.6 放过真缺陷
+      （差一个「所述」），0.35 误报 4 条。**阈值本身就是打地鼠。**
+      改为反向：**遍历说明书的每一条衔接句，要求它逐字命中「某条权的引导句」或
+      「权 1 的某个分句」**。对应关系由文本本身给出，不再需要阈值。
+      - 该案 3 条衔接句：S11 那条逐字命中权 3、S15 那条逐字命中权 8 ✓；
+        第 127 行「所述根据服役时间数据与…」比权 5 少一个「所述」→ 报，并给出差异。
+      - 说明书多写了一条权要里没有的衔接句 → 同样报（说明书不得有独有内容）。
+
+    比对口径：去尾部「，包括：」/「，所述方法还包括：」后**逐字相等**（含句首「所述」）。
     """
     claims = structure.get("claims") or {}
     spec_lines = structure.get("impl_lines") or []
     if not spec_lines:
         return
+    conn_prefix = "在一种实施方式中，"
+    if not any(ln.strip().startswith(conn_prefix) for ln in spec_lines):
+        return
 
-    def _lead_key(s: str) -> str:
-        """归一化引导句: 去尾部「,包括:」与句首「所述」, 用于集合比对。"""
-        s = re.sub(r"[，,]?包括[：:]?\s*$", "", (s or "").strip())
-        return s[len("所述"):] if s.startswith("所述") else s
+    def _tail_trim(s: str) -> str:
+        """取「，包括：」之前的引导部分——**在第一个锚点处切断**，不是只去尾部。
 
-    # 说明书侧两种合法复现形态
-    entry_re = re.compile(r"^在步骤S\d+中，(.+)，包括：$")
-    entries = {_lead_key(m.group(1)) for ln in spec_lines for m in [entry_re.match(ln.strip())] if m}
-    leads = {_lead_key(ln.strip()[len("在一种实施方式中，"):]) for ln in spec_lines
-             if ln.strip().startswith("在一种实施方式中，")}
-    quote_re = re.compile(r"其特征在于，(.*?)，?包括[：:]")
+        衔接句在 md 里可能与其他内容同处一行（fixture 与部分稿件即如此），
+        只对 `$` 锚定去尾会留下「，包括：对…；确定…」整串，导致合法句判不中。
+        """
+        return re.split(r"[，,]?(?:包括|所述方法还包括)[：:]", (s or "").strip(), 1)[0].strip()
+
+    # 权要侧基准池 = 权 1 的各个分句 + 每条从权的引导句
+    pool: list[str] = []
     for it in claims.get("items", []):
-        if not it.get("dependent"):
-            continue
+        if it.get("num") == 1:
+            pool.extend(_tail_trim(c) for c in (it.get("steps") or []))
         flat = it.get("flat") or ""
-        m = quote_re.search(flat)
-        if not m:
-            continue  # 无「包括：」锚点的从权 (单句限定型) 不在本检范围
-        lead = m.group(1)
-        key = _lead_key(lead)
-        # 从权引用句可以是权1分句的「连续半句」(X7 许可), 故除整句命中外, 引导句整体
-        # 逐字出现在说明书某行内也算复现 (避免把合法半句引用误判为未同步)。
-        if not key or (key in entries) or (key in leads) or any(key in ln for ln in spec_lines):
+        m = re.search(r"其特征在于，(.*?)[，,]?(?:包括|所述方法还包括)[：:]", flat)
+        if m:
+            pool.append(_tail_trim(m.group(1)))
+    pool = [x for x in pool if x]
+
+    for ln in spec_lines:
+        s = ln.strip()
+        if not s.startswith(conn_prefix):
             continue
-        head = key[:12]
-        stale = next((ln.strip() for ln in spec_lines
-                      if head and head in ln and (ln.strip().startswith("在一种实施方式中，")
-                                                  or ln.strip().startswith("在步骤S"))), None)
+        body = _tail_trim(s[len(conn_prefix):])
+        if not body or body in pool:
+            continue
+        near = difflib.get_close_matches(body, pool, n=1, cutoff=0.0)
+        diff = ""
+        if near:
+            ops = [f"[{body[i1:i2] or '∅'}→{near[0][j1:j2] or '∅'}]"
+                   for tag, i1, i2, j1, j2
+                   in difflib.SequenceMatcher(None, body, near[0]).get_opcodes()
+                   if tag != "equal"]
+            diff = "; 与最接近的权要语句差异（说明书→权要）: " + " ".join(ops)[:180]
         violations.append({
             "rule_id": "L8-1",
             "check": "X8",
-            "location": f"权要 {it['num']} → 具体实施方式",
-            "evidence": (f"引导句='{lead[:50]}…'" if len(lead) > 50 else f"引导句='{lead}'")
-                        + (f"; 说明书疑似旧文案='{stale[:50]}…'" if stale else "; 说明书中未见相近文案"),
-            "message": f"权要 {it['num']} 的引导句未在具体实施方式逐字复现 (须为「在一种实施方式中，{lead[:20]}…」衔接句, "
-                       "或该从权直接展开在对应「在步骤Sxx中，…，包括：」入口之下)。权要改动后须同步说明书三层: "
-                       "主步骤框架句(X6)/从权引导句(本项)/摘要+综上所述串述(auditor)",
+            "location": f"具体实施方式「{conn_prefix}…」衔接句",
+            "evidence": f"衔接句引导部分='{body[:50]}…'" if len(body) > 50 else f"衔接句引导部分='{body}'",
+            "message": "说明书的「在一种实施方式中，…」衔接句未与权要逐字对应——"
+                       "须逐字等于某条权的引导句或权 1 的某个分句（含句首「所述」）。"
+                       "权要改动后说明书三层须同步：主步骤框架句(X6)／从权引导句(本项)／"
+                       "摘要+综上所述串述(auditor)。" + diff,
         })
 
 

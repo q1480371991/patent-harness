@@ -1565,7 +1565,7 @@ class CrossBlockX8Test(unittest.TestCase):
             "确定所述中间结果。\n\n", self.SPEC_STALE_S12)
         hits = self._run(spec)
         self.assertEqual(len(hits), 1)
-        self.assertIn("权要 2", hits[0]["location"])
+        self.assertIn("衔接句", hits[0]["location"])   # 反向遍历：location 指向说明书衔接句
 
 
 class BoilerplateRule53Test(unittest.TestCase):
