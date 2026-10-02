@@ -12,7 +12,10 @@ import sys, os, subprocess, json
 sys.stdout.reconfigure(encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "..", "..", "scripts", "check_hard_rules.py")
-BASE = r"（本地案卷目录）"
+BASE = os.environ.get("PATENT_CASES_DIR", "")
+if not BASE:
+    print("未设置 PATENT_CASES_DIR 环境变量，跳过——本回归装置需指向本地案卷目录")
+    sys.exit(0)
 NAME = "一种基于多传感器融合多向穿梭车高精度定位方法及系统"
 
 CASES = [

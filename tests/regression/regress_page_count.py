@@ -7,7 +7,10 @@ import sys, os, glob, subprocess
 sys.stdout.reconfigure(encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "..", "..", "scripts", "check_page_count.py")
-BASE = r"（本地案卷目录）"
+BASE = os.environ.get("PATENT_CASES_DIR", "")
+if not BASE:
+    print("未设置 PATENT_CASES_DIR 环境变量，跳过——本回归装置需指向本地案卷目录")
+    sys.exit(0)
 
 EXPECT = {  # 五案定稿实测页数（本表即基准）
     "定稿-审核v3-梁旭林-全文三稿-X2607043": 28,
