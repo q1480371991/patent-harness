@@ -1624,12 +1624,11 @@ class Rule54NumericTest(unittest.TestCase):
 class DocxAssetsTest(unittest.TestCase):
     """docx_assets.py：交付稿用户手工资产的查看（只读冒烟）。"""
 
-    def test_list_on_reference_sample(self):
-        ref = SKILL_DIR / "assets" / "docx" / "参考-申请文件样例-王工2026-09.docx"
+    def test_list_on_bundled_template(self):
+        ref = SKILL_DIR / "assets" / "docx" / "专利撰写模板.docx"
         res = run_script_allow_fail("docx_assets.py", "list", ref)
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("media:", res.stdout)
-        self.assertIn("分节5", res.stdout)  # 样例的图在说明书附图分节
 
 
 class GuardScriptsTest(unittest.TestCase):
