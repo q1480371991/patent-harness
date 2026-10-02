@@ -11,7 +11,7 @@
 [![Gates](https://img.shields.io/badge/pre--delivery%20gates-11-blue)]()
 [![License](https://img.shields.io/badge/license-Internal-lightgrey)]()
 
-[为什么是 Harness](#为什么是-harness-而不是-skill) ·
+[它是什么](#它是什么) ·
 [工作流](#工作流) ·
 [核心机制](#核心机制) ·
 [快速开始](#快速开始) ·
@@ -22,9 +22,9 @@
 
 ---
 
-## 为什么是 Harness 而不是 Skill
+## 它是什么
 
-本项目**不自带 LLM 运行时**。它跑在 Claude Code / Pi 这类 **Host Harness** 之上，自己实现的是**领域编排层**。
+一个跑在现有 Agent 运行时之上的**领域编排层**——不自带 LLM 循环，专注做规则路由、确定性闸门、多路审计编排与经验回流。
 
 ```mermaid
 flowchart TB
@@ -36,7 +36,7 @@ flowchart TB
     style P fill:#fff9db,stroke:#f08c00
 ```
 
-编排层与领域规则库是**分离**的：换一个专业领域，置换的是规则库与模板资产，编排骨架不变。
+编排层与领域规则库**分离**：换一个专业领域，置换的是规则库与模板资产，编排骨架不变。
 
 ---
 
